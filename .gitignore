@@ -1,0 +1,20 @@
+# build output
+dist/
+*.tgz
+
+# ReScript artifacts (in-source output + build cache)
+*.bs.js
+*.bs.js.map
+.bsb.lock
+# ReScript writes its build cache to lib/ (lib/bs, lib/ocaml). Published output goes to dist/.
+lib/
+
+# tooling
+node_modules/
+.yarn/
+.DS_Store
+
+# merchant-server secrets (never committed). The React Native app has no .env by design:
+# nothing secret belongs on a device, so example/ must never gain one either.
+example-server/.env
+example/.env

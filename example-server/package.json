@@ -1,0 +1,13 @@
+{
+  "name": "hyperswitch-vault-example-server",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Stand-in merchant backend for the example app. Holds the secret API key; the React Native app never does.",
+  "type": "module",
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "scripts": {
+    "start": "node merchant-server.mjs"
+  }
+}

@@ -1,0 +1,34 @@
+/*
+ * The React Native Gradle plugin is located through NODE resolution rather than a fixed relative
+ * path.
+ *
+ * The template ships `includeBuild("../node_modules/@react-native/gradle-plugin")`, which assumes
+ * every dependency sits in the app's own node_modules. This example is a yarn workspace of the
+ * library, so yarn hoists `@react-native/gradle-plugin` to the WORKSPACE ROOT and that path does not
+ * exist — the build fails during settings evaluation with
+ * "Included build '.../example/node_modules/@react-native/gradle-plugin' does not exist".
+ *
+ * `node --print require.resolve(...)` walks the same node_modules chain the JavaScript side walks,
+ * so it finds the package wherever the package manager put it: hoisted to the workspace root here,
+ * or in example/node_modules in a plain non-workspace checkout. Nothing else in the Android build
+ * needs changing — `react-native` itself is NOT hoisted, so the plugin's own defaults
+ * (../../node_modules/react-native) still resolve.
+ */
+pluginManagement {
+    def reactNativeGradlePlugin = new File(
+        providers.exec {
+            workingDir(settingsDir)
+            commandLine("node", "--print", "require.resolve('@react-native/gradle-plugin/package.json')")
+        }.standardOutput.asText.get().trim()
+    ).getParentFile().getAbsolutePath()
+
+    /* Reused by the includeBuild at the bottom of this file. */
+    gradle.ext.reactNativeGradlePlugin = reactNativeGradlePlugin
+
+    includeBuild(reactNativeGradlePlugin)
+}
+plugins { id("com.facebook.react.settings") }
+extensions.configure(com.facebook.react.ReactSettingsExtension){ ex -> ex.autolinkLibrariesFromCommand() }
+rootProject.name = 'HyperswitchVaultExample'
+include ':app'
+includeBuild(gradle.ext.reactNativeGradlePlugin)

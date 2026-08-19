@@ -1,0 +1,62 @@
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+linkage = ENV['USE_FRAMEWORKS']
+if linkage != nil
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage.to_sym
+end
+
+target 'HyperswitchVaultExample' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+  post_install do |installer|
+    # https://github.com/facebook/react-native/blob/main/packages/react-native/scripts/react_native_pods.rb#L197-L202
+    react_native_post_install(
+      installer,
+      config[:reactNativePath],
+      :mac_catalyst_enabled => false,
+      # :ccache_enabled => true
+    )
+
+    # Build the `fmt` pod as C++17.
+    #
+    # React Native 0.79 pins fmt 11.0.2, whose FMT_STRING/consteval path does not compile with the
+    # Clang shipped in Xcode 26. The single failing file is Pods/fmt/src/format.cc:
+    #
+    #   format-inl.h:59: error: call to consteval function
+    #   'fmt::basic_format_string<...>::basic_format_string<FMT_COMPILE_STRING, 0>'
+    #   is not a constant expression
+    #   base.h:779: note: subexpression not valid in a constant expression
+    #     format_str_.remove_prefix(detail::to_unsigned(it - begin()));
+    #
+    # fmt turns consteval off by its own supported route when the language standard is below C++20
+    # (base.h: `FMT_CPLUSPLUS < 201709L` -> `FMT_USE_CONSTEVAL 0`), so building just this pod as
+    # C++17 avoids the broken path without patching vendored sources, without upgrading fmt away
+    # from the version React Native pins, and without touching any other target — every other pod,
+    # including all of ReactCommon, keeps C++20. fmt 11 supports C++11 and up.
+    #
+    # This is an upstream toolchain incompatibility, not something this example or the vault library
+    # introduces: hyperswitch-client-core pins the same fmt 11.0.2 and fails the same way here.
+    # Remove this hook once React Native ships a fmt that compiles under Xcode 26.
+    installer.pods_project.targets.each do |target|
+      next unless target.name == 'fmt'
+      target.build_configurations.each do |config|
+        config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++17'
+      end
+    end
+  end
+end
