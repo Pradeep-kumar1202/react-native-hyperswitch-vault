@@ -57,7 +57,7 @@ type Phase =
   | {kind: 'idle'}
   | {kind: 'starting'}
   | {kind: 'collecting'; session: MerchantSession}
-  | {kind: 'done'; last4: string; token: string};
+  | {kind: 'done'; token: string};
 
 export function CustomLayoutCheckout() {
   const formRef = useRef<HyperswitchVaultFormHandle>(null);
@@ -94,7 +94,7 @@ export function CustomLayoutCheckout() {
       return;
     }
     if (result.status === 'success') {
-      setPhase({kind: 'done', last4: result.card.last4Digits, token: result.token});
+      setPhase({kind: 'done', token: result.token});
     } else {
       setError(result.error.message);
     }
@@ -103,7 +103,6 @@ export function CustomLayoutCheckout() {
   if (phase.kind === 'done') {
     return (
       <Success
-        last4={phase.last4}
         token={phase.token}
         onDone={() => {
           setPlate('');
@@ -252,7 +251,7 @@ function Chip({label, onPress}: {label: string; onPress: () => void}) {
   );
 }
 
-function Success({last4, token, onDone}: {last4: string; token: string; onDone: () => void}) {
+function Success({token, onDone}: {token: string; onDone: () => void}) {
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -260,7 +259,7 @@ function Success({last4, token, onDone}: {last4: string; token: string; onDone: 
           <Text style={styles.successTick}>✓</Text>
         </View>
         <Text style={styles.successTitle}>Auto-pay is on</Text>
-        <Text style={styles.successSub}>•••• {last4} · drive out without stopping</Text>
+        <Text style={styles.successSub}>Drive out without stopping</Text>
 
         <View style={styles.tokenBox}>
           <Text style={styles.tokenLabel}>payment_method token — demo only</Text>

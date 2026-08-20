@@ -329,13 +329,11 @@ No provider SDK, no native module, no Pod install, no Codegen.
 |---|---|---|---|
 | react | peer | `>=19.0.0 <20.0.0` | 19.0.0 |
 | react-native | peer | `>=0.79.0 <0.80.0` | 0.79.7 |
-| react-final-form | **optional** peer | `^7.0.0` | 7.0.0 — only for `/embedded` |
-| final-form | **optional** peer | `^5.0.0` | 5.0.0 — only for `/embedded` |
 
-For the Quick Start above you install **only this package**: the root entry has react-final-form
-bundled in. The two optional peers exist for the `/embedded` entry, whose whole purpose is to use
-the host's instance — see below. Node `>=18.18.0`, verified on 18.20.8. A TypeScript app also needs
-`@types/react`, which every React Native TypeScript project already has.
+For the Quick Start above you install **only this package**. It has **no form library at all**:
+the card fields are controlled views, the standalone entries keep their state in an internal
+reducer, and hyperswitch-client-core keeps its own `react-final-form` and passes values in through
+`/embedded`. Nothing about a form library is shared between the two repositories.
 
 ## Advanced exports
 
@@ -343,30 +341,27 @@ Most integrations need only the Quick Start above.
 
 - `@juspay-tech/react-native-hyperswitch-vault/vault` — `confirmPaymentMethodSession`, the bare
   transport, if you have your own card UI. Free of React and React Native.
-- `@juspay-tech/react-native-hyperswitch-vault/embedded` — `EmbeddedCardElement`, for a host that
-  already owns a react-final-form `<Form>` (used by hyperswitch-client-core).
+- `@juspay-tech/react-native-hyperswitch-vault/embedded` — the controlled card fields, for a host
+  that owns its own card state and form library (used by hyperswitch-client-core).
 
 The default standalone form deliberately excludes card scanning and the co-badged network picker:
 both need host-provided capabilities that would force a native module or a viewport-aware popover.
 
-### Why the entries are packaged differently
+### Why the entries are packaged the way they are
 
-react-final-form connects `<Form>` to `useField` through a React context that lives in the module
-instance. **Two copies means two contexts**, and the second one does not degrade quietly —
-react-final-form's own guard throws `useField must be used inside of a <Form> component`.
+The package contains **no form library**. Its card fields are controlled views: the owner holds the
+values and passes them in, together with the resolved errors and the change callbacks.
 
-The two entries need opposite things, so they are built by two Rollup configurations:
+- the **root** entry owns its state in an internal reducer, so a merchant installs one package and
+  configures no form library;
+- **`/embedded`** is rendered by hyperswitch-client-core, which keeps its own `react-final-form`,
+  performs every field registration itself and feeds the values in.
 
-- the **root** entry owns its `<Form>` and its fields, so react-final-form is bundled in and a
-  merchant installs one package;
-- **`/embedded`** renders into the host's `<Form>`, so react-final-form stays external and resolves
-  the host's instance.
-
-The package declares **no runtime `dependencies`**, which is what makes a nested copy impossible to
-install. `yarn verify:consumers` proves all of this against the packed tarball with three fixtures:
-a standalone consumer with no react-final-form present, an embedded consumer whose `<Form>` and
-`useField` resolve to one instance, and a deliberately nested copy demonstrating that the failure is
-loud.
+Because nothing about a form library crosses the package boundary, there is no module-identity
+hazard to manage and one Rollup configuration builds all three entries. The package declares **no
+runtime `dependencies`**. `yarn verify:consumers` proves this against the packed tarball: no entry
+imports or bundles a form library, the package declares none, `/embedded` loads and constructs with
+none installed, and hyperswitch-client-core still declares its own.
 
 ## Development
 
@@ -430,5 +425,5 @@ Note `yarn pack` force-includes README/LICENSE files at any depth, which pulled
 `shared-code/README.md` into the archive; the negative `!shared-code/**` entries in the `files`
 allowlist suppress that and must not be removed.
 
-The root entry statically bundles react-final-form, final-form and a few `@babel/runtime` helpers;
+The root entry statically bundles a few `@babel/runtime` helpers;
 their MIT notices ship in `THIRD-PARTY-NOTICES.md`.

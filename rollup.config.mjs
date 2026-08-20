@@ -20,29 +20,11 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
  * are inlined so the merchant never has to install ReScript.
  *
  *
- * REACT FINAL FORM MODULE IDENTITY — the reason this file exports TWO configurations.
- *
- *   react-final-form connects <Form> to useField through a React context that lives in the module
- *   instance. Two copies of the package means two contexts, and a field from copy B inside a form
- *   from copy A does not "degrade": react-final-form's own useForm() guard throws
- *   "useField must be used inside of a <Form> component".
- *
- *   The two entries have opposite requirements:
- *
- *     - `<package>/embedded` renders INTO the host's <Form> (hyperswitch-client-core owns it).
- *       react-final-form MUST stay external so the host's instance is the one that resolves. If it
- *       were bundled, the embedded card form could never register.
- *
- *     - the root entry OWNS its <Form> and its fields. Nothing outside the bundle needs to share
- *       that context, so react-final-form is bundled IN — which is what lets a merchant install
- *       exactly one package and nothing else.
- *
- *   Rollup applies `external` per configuration, not per entry, so the two entries are built by two
- *   configurations. Neither `dependencies` nor a peer install can then introduce a second copy for
- *   the standalone merchant, and the embedded consumer has no nested copy to resolve because this
- *   package declares react-final-form only as an OPTIONAL PEER — it never installs one of its own.
- *   `scripts/verify-consumers.mjs` proves all of this against the packed tarball.
- *
+ * NO FORM LIBRARY. The card fields are fully controlled: hyperswitch-client-core keeps its own
+ * react-final-form and passes values and callbacks in, and the standalone entries use an internal
+ * reducer. This file therefore builds ONE configuration — the two-configuration split existed only
+ * to bundle react-final-form for the root entry while keeping it external for `/embedded`, and
+ * there is nothing left to split on.
  *
  * Dual-package layout: dist/esm/*.js and dist/cjs/*.js, each with its own package.json "type"
  * marker written by scripts/emit-package-type.mjs.
@@ -58,7 +40,7 @@ import { nodeResolve } from '@rollup/plugin-node-resolve';
 /* Always external: the host application's own React / React Native must be the only instances. */
 const hostRuntime = ['react', 'react/jsx-runtime', 'react-native'];
 
-const reactFinalForm = ['react-final-form', 'final-form'];
+
 
 const plugins = [nodeResolve({ extensions: ['.js', '.mjs'] })];
 
@@ -96,30 +78,20 @@ const outputs = (chunkPrefix) => [
 
 export default [
   /*
-   * Host-facing entries. `embedded` and `vault` share one chunk graph, so the compiled sdk-utils
-   * card validation they have in common is hoisted into a single shared chunk rather than inlined
-   * twice.
+   * ONE configuration for all three entries. They share a chunk graph, so the compiled sdk-utils
+   * card validation common to them is hoisted into a single shared chunk instead of being inlined
+   * three times. Nothing needs a per-entry `external` rule any more: the only reason that ever
+   * existed was react-final-form module identity, and no entry depends on a form library.
    */
   {
     input: {
+      index: 'src/standalone-entry.mjs',
       embedded: 'src/embedded-entry.mjs',
       vault: 'src/vault-entry.mjs',
     },
-    external: (id) => [...hostRuntime, ...reactFinalForm].includes(id) || isImageAsset(id),
-    plugins,
-    treeshake,
-    output: outputs('shared'),
-  },
-
-  /*
-   * Standalone merchant entry. react-final-form and final-form are bundled, so this is the only
-   * configuration whose output may contain them.
-   */
-  {
-    input: { index: 'src/standalone-entry.mjs' },
     external: (id) => hostRuntime.includes(id) || isImageAsset(id),
     plugins,
     treeshake,
-    output: outputs('standalone'),
+    output: outputs('shared'),
   },
 ];

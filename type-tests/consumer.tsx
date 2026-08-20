@@ -59,12 +59,20 @@ export function narrows(result: VaultSubmitResult): string {
   switch (result.status) {
     case 'success': {
       const token: string = result.token;
-      const last4: string = result.card.last4Digits;
-      /* binNumber is optional — the vault returns card_isin: null for some schemes. */
-      const bin: string | undefined = result.card.binNumber;
+      /* TOKEN ONLY: masked card metadata is not part of the public success result. */
+      // @ts-expect-error - `card` does not exist on a standalone success result
+      result.card;
+      // @ts-expect-error - no PAN accessor exists
+      result.cardNumber;
+      // @ts-expect-error - no last4 accessor exists
+      result.last4Digits;
+      // @ts-expect-error - no expiry accessor exists
+      result.expiryMonth;
+      const onlyToken: string = result.token;
+      void onlyToken;
       // @ts-expect-error - a success carries no error
       void result.error;
-      return `${token}${last4}${bin ?? ''}`;
+      return token;
     }
     case 'validation_error':
     case 'not_ready':

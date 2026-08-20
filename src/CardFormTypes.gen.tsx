@@ -61,3 +61,23 @@ export type cardFieldSelection = {
   readonly cardCvcPath: (undefined | string); 
   readonly cardNetworkPath: (undefined | string)
 };
+
+export type cardFieldValues = {
+  readonly cardNumber: string; 
+  readonly expiryDisplay: string; 
+  readonly cvc: string; 
+  readonly brand: string
+};
+
+export type cardFieldErrors = {
+  readonly cardNumber?: string; 
+  readonly expiry?: string; 
+  readonly cvc?: string; 
+  readonly network?: string
+};
+
+export type cardFieldOk = {
+  readonly cardNumber: boolean; 
+  readonly expiry: boolean; 
+  readonly cvc: boolean
+};

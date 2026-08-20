@@ -1405,7 +1405,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@babel/runtime@npm:^7.10.0, @babel/runtime@npm:^7.15.4, @babel/runtime@npm:^7.25.0":
+"@babel/runtime@npm:^7.25.0":
   version: 7.29.7
   resolution: "@babel/runtime@npm:7.29.7"
   checksum: bc311855c6dbf5356030979584ca0f8b6cee39fe058175b02e85a73e246fc76ae30248b0d40e70c2652101faeb43279468ed2d086a670673eb9783c1fee1df2b
@@ -1906,25 +1906,16 @@ __metadata:
     "@rescript/react": 0.13.1
     "@rollup/plugin-node-resolve": ^15.3.0
     "@types/react": 19.0.0
-    final-form: 5.0.0
     react: 19.0.0
     react-dom: 19.0.0
-    react-final-form: 7.0.0
     react-native: 0.79.7
     rescript: 11.1.4
     rescript-react-native: 0.77.4
     rollup: ^4.24.0
     typescript: ^5.6.0
   peerDependencies:
-    final-form: ^5.0.0
     react: ">=19.0.0 <20.0.0"
-    react-final-form: ^7.0.0
     react-native: ">=0.79.0 <0.80.0"
-  peerDependenciesMeta:
-    final-form:
-      optional: true
-    react-final-form:
-      optional: true
   languageName: unknown
   linkType: soft
 
@@ -4939,15 +4930,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"final-form@npm:5.0.0":
-  version: 5.0.0
-  resolution: "final-form@npm:5.0.0"
-  dependencies:
-    "@babel/runtime": ^7.10.0
-  checksum: 25d197b4615411641a6faffbd6da21bfda483f4288404ec98131f5c779b3449b216dc61b08f9562a318efb3e81a5c7334ee62b5a6b36075a5c5b2d715d8e41f6
-  languageName: node
-  linkType: hard
-
 "finalhandler@npm:1.1.2":
   version: 1.1.2
   resolution: "finalhandler@npm:1.1.2"
@@ -7656,18 +7638,6 @@ __metadata:
   peerDependencies:
     react: ^19.0.0
   checksum: 009cc6e575263a0d1906f9dd4aa6532d2d3d0d71e4c2b7777c8fe4de585fa06b5b77cdc2e0fbaa2f3a4a5e5d3305c189ba152153f358ee7da4d9d9ba5d3a8975
-  languageName: node
-  linkType: hard
-
-"react-final-form@npm:7.0.0":
-  version: 7.0.0
-  resolution: "react-final-form@npm:7.0.0"
-  dependencies:
-    "@babel/runtime": ^7.15.4
-  peerDependencies:
-    final-form: ^5.0.0
-    react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
-  checksum: bf9982ad5c17927bc2100f4b979dc93c0539fd208c078a7ee3f72237cbf7e81be5466fd72c3e0472a3d87776a7b3a086f61bc879381082004393e16b86e115fd
   languageName: node
   linkType: hard
 

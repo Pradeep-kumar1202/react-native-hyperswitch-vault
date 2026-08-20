@@ -587,6 +587,121 @@ describe('focus behaviour', () => {
   });
 });
 
+/* ── Approved correction: canonical expiry survives remount ──────────────── */
+
+describe('expiry is canonical in the controller', () => {
+  /*
+   * INTENTIONAL BEHAVIOUR CHANGE (approved). The visible "MM / YY" string used to live in the
+   * expiry widget's own React state, so unmounting and remounting the widget cleared the display
+   * while the month and year survived — the two could disagree. The display now lives in the
+   * controller's reducer beside the month and year, so it cannot diverge.
+   */
+  it('keeps the displayed expiry across an unmount and remount, and clears it on reset', async () => {
+    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const states: CardFormState[] = [];
+    const Harness = ({showExpiry}: {showExpiry: boolean}) => (
+      <HyperswitchVaultFormProvider
+        ref={ref}
+        session={sessionWith('pms_fake_0001')}
+        environment="sandbox"
+        onStateChange={state => states.push(state)}>
+        <CardNumberWidget />
+        {showExpiry ? <CardExpiryWidget /> : null}
+        <CardCVCWidget />
+      </HyperswitchVaultFormProvider>
+    );
+
+    let tree!: Renderer;
+    await ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(<Harness showExpiry={true} />);
+    });
+    mounted.push(tree);
+
+    await type(tree, 'CardNumberInputTestId', CARD_NUMBER);
+    await type(tree, 'ExpiryInputTestId', EXPIRY);
+    await type(tree, 'CVCInputTestId', CVC);
+    const typedExpiry = input(tree, 'ExpiryInputTestId').props.value;
+    expect(typedExpiry).not.toBe('');
+    expect(last(states).complete).toBe(true);
+
+    /* 2. unmount -> the widget is gone, so the form is not complete */
+    await ReactTestRenderer.act(() => {
+      tree.update(<Harness showExpiry={false} />);
+    });
+    expect(last(states).complete).toBe(false);
+    expect(last(states).expiryValid).toBe(false);
+
+    /* 3-4. remount -> the display matches the canonical value again, and validity agrees */
+    await ReactTestRenderer.act(() => {
+      tree.update(<Harness showExpiry={true} />);
+    });
+    expect(input(tree, 'ExpiryInputTestId').props.value).toBe(typedExpiry);
+    expect(last(states).expiryValid).toBe(true);
+    expect(last(states).complete).toBe(true);
+
+    /* 5. reset clears the canonical values AND the visible display together */
+    await ReactTestRenderer.act(() => {
+      ref.current!.reset();
+    });
+    expect(input(tree, 'ExpiryInputTestId').props.value).toBe('');
+    expect(input(tree, 'CardNumberInputTestId').props.value).toBe('');
+    expect(input(tree, 'CVCInputTestId').props.value).toBe('');
+    expect(last(states).expiryValid).toBe(false);
+  });
+
+  it('a replaced session cannot restore a stale expiry display', async () => {
+    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const Harness = ({sessionId}: {sessionId: string}) => (
+      <HyperswitchVaultFormProvider
+        ref={ref}
+        session={sessionWith(sessionId)}
+        environment="sandbox">
+        <CardNumberWidget />
+        <CardExpiryWidget />
+        <CardCVCWidget />
+      </HyperswitchVaultFormProvider>
+    );
+
+    let tree!: Renderer;
+    await ReactTestRenderer.act(() => {
+      tree = ReactTestRenderer.create(<Harness sessionId="pms_fake_0001" />);
+    });
+    mounted.push(tree);
+
+    await type(tree, 'ExpiryInputTestId', EXPIRY);
+    expect(input(tree, 'ExpiryInputTestId').props.value).not.toBe('');
+
+    await ReactTestRenderer.act(() => {
+      tree.update(<Harness sessionId="pms_fake_0002" />);
+    });
+    await ReactTestRenderer.act(() => {
+      ref.current!.reset();
+    });
+
+    /* Nothing may bring the previous session's expiry back onto the screen. */
+    expect(input(tree, 'ExpiryInputTestId').props.value).toBe('');
+  });
+});
+
+/* ── Preserved defect D4: the CVC auto-blur must stay unreachable ────────── */
+
+describe('preserved behaviour', () => {
+  /*
+   * The pre-refactor code computed a "CVC is valid and at max length" transition and blurred a ref
+   * that was never attached, so the auto-blur has never run. The react-final-form removal made that
+   * transition explicit (`CardFieldLogic` reports it as `blurField`), so this asserts no consumer
+   * started acting on it. Activating it is a product decision that has not been taken.
+   */
+  it('does NOT blur the CVC field when a complete, valid CVC is typed', async () => {
+    const {tree} = await mountHarness();
+
+    await type(tree, 'CardNumberInputTestId', CARD_NUMBER); // Visa -> 3-digit CVC
+    await type(tree, 'CVCInputTestId', CVC);
+
+    expect(blurCallsOn(tree, 'CVCInputTestId')).toBe(0);
+  });
+});
+
 /* ── 13: per-widget errors ───────────────────────────────────────────────── */
 
 describe('per-widget validation errors', () => {

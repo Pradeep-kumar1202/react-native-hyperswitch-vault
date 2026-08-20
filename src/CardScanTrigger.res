@@ -1,16 +1,3 @@
-/*
- * CardScanTrigger — the divider + camera button that sits inside the card-number
- * input's right icon slot.
- *
- * The UI is card-domain and stays portable. The native module, the SCAN_CARD
- * analytics and the failure alert live behind the injected
- * `CardFormTypes.scanCardCapability.launch`, so this component imports no
- * native module and no client-core hook.
- *
- * Visual parity note: reproduces `ScanCardButton.res` exactly, with
- * `component.borderColor` supplied as `theme.dividerColor` and the camera glyph
- * supplied by the host through `renderIcon`.
- */
 
 open ReactNative
 open Style

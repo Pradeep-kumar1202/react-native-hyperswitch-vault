@@ -94,12 +94,10 @@ export function DeveloperPanel() {
       return;
     }
     if (result.status === 'success') {
-      setStatus(`Card saved •••• ${result.card.last4Digits}`);
+      setStatus('Card saved');
       setToken(result.token);
-      setDetail(
-        `expires ${result.card.expiryMonth}/${result.card.expiryYear}` +
-          (result.card.binNumber ? ` · BIN ${result.card.binNumber}` : ''),
-      );
+      /* The public result is token-only: no masked metadata is exposed to a merchant. */
+      setDetail('token returned');
     } else {
       setStatus(result.error.message);
       setDetail(`${result.status} / ${result.error.code}`);

@@ -36,7 +36,7 @@ import { execFileSync } from 'node:child_process';
 import { packFixture } from './pack-fixture.mjs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -143,6 +143,23 @@ const bareImports = (entryFile) => {
   return { bare: [...bare].sort(), files: seen.size };
 };
 
+/* Concatenated source of an entry and every relative file it pulls in. */
+const graphSource = (entryFile) => {
+  const seen = new Set();
+  let out = '';
+  const visit = (file) => {
+    if (seen.has(file) || !existsSync(file)) return;
+    seen.add(file);
+    const source = readFileSync(file, 'utf8');
+    out += source;
+    for (const match of source.matchAll(/(?:from|require\()\s*['"](\.[^'"]+)['"]/g)) {
+      visit(path.resolve(path.dirname(file), match[1]));
+    }
+  };
+  visit(entryFile);
+  return out;
+};
+
 /* ── Package metadata: the layout must be impossible to install ──────────── */
 
 console.log('\nPackaging metadata (packed tarball)');
@@ -151,71 +168,58 @@ const packed = JSON.parse(readFileSync(path.join(stagedPkgDir, 'package.json'), 
 
 check(
   !packed.dependencies || Object.keys(packed.dependencies).length === 0,
-  'published package declares no runtime `dependencies` (so no install can create a nested copy)'
+  'published package declares no runtime `dependencies`'
+);
+
+/* The whole point of this phase: no form library may be declared at all. */
+check(
+  packed.peerDependencies?.['react-final-form'] === undefined &&
+    packed.peerDependencies?.['final-form'] === undefined,
+  'the package declares NEITHER react-final-form NOR final-form as a peer'
 );
 check(
-  packed.peerDependencies?.['react-final-form'] !== undefined &&
-    packed.peerDependencies?.['final-form'] !== undefined,
-  'react-final-form and final-form are declared as peers'
+  packed.peerDependenciesMeta === undefined ||
+    (packed.peerDependenciesMeta['react-final-form'] === undefined &&
+      packed.peerDependenciesMeta['final-form'] === undefined),
+  'no form-library entry survives in peerDependenciesMeta'
 );
 check(
-  packed.peerDependenciesMeta?.['react-final-form']?.optional === true &&
-    packed.peerDependenciesMeta?.['final-form']?.optional === true,
-  'both are OPTIONAL peers, so a standalone merchant gets no missing-peer warning'
+  JSON.stringify(packed.dependencies ?? {}).includes('final-form') === false,
+  'no form library appears in runtime dependencies either'
 );
+
 
 /* ── Entry contracts, straight off the packed bundles ────────────────────── */
 
 console.log('\nEntry import contracts (packed bundles)');
 const dist = (rel) => path.join(stagedPkgDir, rel);
+const readAll = (file) => readFileSync(file, 'utf8');
 
 for (const format of ['esm', 'cjs']) {
-  const rootEntry = bareImports(dist(`dist/${format}/index.js`));
+  for (const entry of ['index', 'embedded', 'vault']) {
+    const file = dist(`dist/${format}/${entry}.js`);
+    const imports = bareImports(file).bare;
+    check(
+      !imports.includes('react-final-form') && !imports.includes('final-form'),
+      `${format}: /${entry} imports no form library (imports: ${imports.join(', ') || 'none'})`
+    );
+    check(
+      !/createForm|ReactFinalForm/.test(graphSource(file)),
+      `${format}: /${entry} bundles no form-library implementation`
+    );
+  }
   check(
-    !rootEntry.bare.includes('react-final-form') && !rootEntry.bare.includes('final-form'),
-    `${format}: root entry asks the host for no react-final-form (imports: ${rootEntry.bare.join(', ')})`
-  );
-
-  const embedded = bareImports(dist(`dist/${format}/embedded.js`));
-  check(
-    embedded.bare.includes('react-final-form'),
-    `${format}: /embedded asks the host for react-final-form, so the host instance resolves`
-  );
-
-  const vault = bareImports(dist(`dist/${format}/vault.js`));
-  check(
-    !vault.bare.includes('react') && !vault.bare.includes('react-native'),
-    `${format}: /vault is React and React Native free (imports: ${vault.bare.join(', ') || 'none'})`
+    bareImports(dist(`dist/${format}/vault.js`)).bare.every(
+      (id) => id !== 'react' && id !== 'react-native'
+    ),
+    `${format}: /vault stays free of React and React Native`
   );
 }
 
-/* Inlining must be exclusive to the root entry. */
-const readAll = (file) => {
-  const { files } = bareImports(file);
-  void files;
-  const seen = new Set();
-  const collect = (f) => {
-    if (seen.has(f) || !existsSync(f)) return '';
-    seen.add(f);
-    const source = readFileSync(f, 'utf8');
-    let out = source;
-    for (const match of source.matchAll(/(?:from|require\()\s*['"](\.[^'"]+)['"]/g)) {
-      out += collect(path.resolve(path.dirname(f), match[1]));
-    }
-    return out;
-  };
-  return collect(file);
-};
-
-check(/createForm/.test(readAll(dist('dist/esm/index.js'))), 'root entry has react-final-form bundled in');
-check(
-  !/createForm/.test(readAll(dist('dist/esm/embedded.js'))),
-  '/embedded has NO bundled react-final-form'
-);
 
 /* ── Fixture A — standalone consumer, nothing else installed ─────────────── */
 
-console.log('\nA. standalone consumer (no react-final-form installed)');
+console.log('\nA. standalone consumer (no form library installed anywhere)');
 {
   const { fixture, nodeModules } = makeFixture('a-standalone');
   const pkgDir = installPackage(fixture);
@@ -285,139 +289,136 @@ console.log('\nA. standalone consumer (no react-final-form installed)');
   );
 }
 
-/* ── Fixture B — embedded consumer with one host copy ────────────────────── */
+/* ── Fixture B — the embedded entry with NO form library anywhere ────────── */
 
-console.log('\nB. embedded consumer (host owns react-final-form)');
-let hostReactFinalFormPath = null;
+/*
+ * The old fixture proved react-final-form module identity between host and package. That contract
+ * no longer exists: the package contains no form library, so the assertions here are the ones the
+ * refactor actually needs — the controlled fields load and render with nothing installed, and the
+ * host repository is still the one that owns react-final-form.
+ */
+console.log('\nB. embedded consumer (controlled fields, no form library installed)');
 {
   const { fixture, nodeModules } = makeFixture('b-embedded');
   const pkgDir = installPackage(fixture);
   linkReal(nodeModules, 'react');
   writeReactNativeStub(nodeModules);
-  copyReal(nodeModules, 'react-final-form');
-  copyReal(nodeModules, 'final-form');
   linkReal(nodeModules, '@babel');
 
-  const requireFromPackage = createRequire(path.join(pkgDir, 'dist/cjs/embedded.js'));
   const requireFromHost = createRequire(path.join(fixture, 'app.js'));
 
-  hostReactFinalFormPath = requireFromHost.resolve('react-final-form');
-  const fromPackage = requireFromPackage.resolve('react-final-form');
+  let resolved = null;
+  try {
+    resolved = requireFromHost.resolve('react-final-form');
+  } catch {
+    resolved = null;
+  }
+  check(resolved === null, 'no form library is installed in the embedded fixture at all');
 
+  let embedded = null;
+  let loadError = null;
+  try {
+    embedded = requireFromHost(`${PKG}/embedded`);
+  } catch (error) {
+    loadError = error;
+  }
+  check(loadError === null, `/embedded loads without any form library${loadError ? `: ${loadError.message}` : ''}`);
+  /* The SDK integration surface: three controlled fields, no complete layout. */
+  for (const field of ['CardNumberField', 'CardExpiryField', 'CardCvcField']) {
+    check(
+      typeof embedded?.[field] === 'function' || typeof embedded?.[field] === 'object',
+      `/embedded exports the controlled ${field}`
+    );
+  }
   check(
-    fromPackage === hostReactFinalFormPath,
-    'the /embedded entry resolves react-final-form to the HOST copy, not a copy of its own'
+    embedded?.EmbeddedCardElement === undefined,
+    '/embedded no longer exports a complete card layout'
   );
-  check(
-    requireFromPackage('react-final-form') === requireFromHost('react-final-form'),
-    'both resolve to the SAME module instance (=== on the module exports)'
-  );
+  check(typeof embedded?.selectCardFields === 'function', '/embedded still exports selectCardFields');
 
   /*
-   * The behavioural half: a field created through the package's resolution of react-final-form
-   * registers on a <Form> created through the host's. Rendered with react-dom/server because the
-   * question is about React context identity, not about React Native.
+   * EXPORT SHAPE — the regression that shipped an unrenderable value.
+   *
+   * The fields are nested ReScript modules, so `VaultEmbedded.bs.js` exports `{make: Component}`.
+   * Publishing those module objects made React throw "Element type is invalid ... got: object" at
+   * render time, while every static check still passed. Each export must therefore BE the
+   * component: a function, or a React exotic value carrying `$$typeof`. A plain `{make}` object is
+   * rejected explicitly.
    */
-  const React = requireFromHost('react');
-  const { renderToStaticMarkup } = createRequire(path.join(root, 'app.js'))('react-dom/server');
-  const hostRff = requireFromHost('react-final-form');
-  const packageRff = requireFromPackage('react-final-form');
-
-  const Field = () => {
-    const { input, meta } = packageRff.useField('payment_method_data.card.card_number');
-    return React.createElement('span', null, `${input.name}:${meta.valid ? 'valid' : 'invalid'}`);
-  };
-
-  let markup = null;
-  let renderError = null;
-  try {
-    markup = renderToStaticMarkup(
-      React.createElement(hostRff.Form, {
-        onSubmit: () => {},
-        render: () => React.createElement(Field),
-      })
+  const FIELD_EXPORTS = ['CardNumberField', 'CardExpiryField', 'CardCvcField'];
+  const describeExport = (value) => ({
+    type: typeof value,
+    hasReactType: Boolean(value && value.$$typeof),
+    hasMake: Boolean(value && typeof value === 'object' && 'make' in value),
+  });
+  for (const name of FIELD_EXPORTS) {
+    const shape = describeExport(embedded?.[name]);
+    check(
+      !shape.hasMake,
+      `/embedded ${name} is NOT a ReScript module object containing \`make\``
     );
-  } catch (error) {
-    renderError = error;
+    check(
+      shape.type === 'function' || shape.hasReactType,
+      `/embedded ${name} is directly renderable (${shape.type}${shape.hasReactType ? ', $$typeof' : ''})`
+    );
   }
-  check(renderError === null, `a field from the package renders inside the host's <Form>${renderError ? `: ${renderError.message}` : ''}`);
+
+  /* The ESM entry must expose the same shapes as the CJS one. */
+  const esmModule = await import(pathToFileURL(path.join(pkgDir, 'dist/esm/embedded.js')).href).catch(
+    (error) => ({ __error: error })
+  );
+  if (esmModule.__error) {
+    check(false, `/embedded ESM entry loads: ${esmModule.__error.message}`);
+  } else {
+    for (const name of FIELD_EXPORTS) {
+      const cjsShape = describeExport(embedded?.[name]);
+      const esmShape = describeExport(esmModule[name]);
+      check(
+        !esmShape.hasMake && (esmShape.type === 'function' || esmShape.hasReactType),
+        `esm: /embedded ${name} is directly renderable`
+      );
+      check(
+        cjsShape.type === esmShape.type && cjsShape.hasReactType === esmShape.hasReactType,
+        `/embedded ${name} has the same shape in CJS and ESM`
+      );
+    }
+  }
+
+  /*
+   * Behavioural rendering of the controlled fields is proven by the example jest suite under the
+   * real React Native preset; this fixture only has a minimal RN stub, so it asserts the contract
+   * this harness can actually prove: the entry loads, exports what client-core binds to, and needs
+   * no form-library context to be imported or constructed.
+   */
+  let elementError = null;
+  try {
+    requireFromHost('react').createElement(embedded.CardNumberField, { value: '', label: 'x' });
+  } catch (error) {
+    elementError = error;
+  }
   check(
-    markup?.includes('payment_method_data.card.card_number'),
-    'the field registered against the host form instance'
+    elementError === null,
+    `a controlled card element can be constructed with no form context${elementError ? `: ${elementError.message}` : ''}`
   );
 }
 
-/* ── Fixture C — a deliberately nested copy ──────────────────────────────── */
+/* ── Fixture C — the host repository still owns react-final-form ─────────── */
 
-console.log('\nC. nested react-final-form (the hazard, deliberately created)');
+console.log('\nC. host repository (hyperswitch-client-core) still owns its form library');
 {
-  const { fixture, nodeModules } = makeFixture('c-nested');
-  const pkgDir = installPackage(fixture);
-  linkReal(nodeModules, 'react');
-  writeReactNativeStub(nodeModules);
-  copyReal(nodeModules, 'react-final-form');
-  copyReal(nodeModules, 'final-form');
-  linkReal(nodeModules, '@babel');
-
-  /* Exactly what a `dependencies` entry with a conflicting range would produce. */
-  const nested = path.join(pkgDir, 'node_modules');
-  mkdirSync(nested, { recursive: true });
-  copyReal(nested, 'react-final-form');
-  copyReal(nested, 'final-form');
-
-  const requireFromPackage = createRequire(path.join(pkgDir, 'dist/cjs/embedded.js'));
-  const requireFromHost = createRequire(path.join(fixture, 'app.js'));
-
-  const nestedResolved = requireFromPackage.resolve('react-final-form');
-  check(
-    nestedResolved.startsWith(nested),
-    'with a nested copy present the package resolves the NESTED one — the hazard is real'
-  );
-  check(
-    requireFromPackage('react-final-form') !== requireFromHost('react-final-form'),
-    'host and package now hold two different module instances'
-  );
-
-  /* And the failure mode is loud, not silent. */
-  const React = requireFromHost('react');
-  const { renderToStaticMarkup } = createRequire(path.join(root, 'app.js'))('react-dom/server');
-  const hostRff = requireFromHost('react-final-form');
-  const nestedRff = requireFromPackage('react-final-form');
-
-  const Field = () => {
-    const { input } = nestedRff.useField('payment_method_data.card.card_number');
-    return React.createElement('span', null, input.name);
-  };
-
-  let thrown = null;
-  try {
-    renderToStaticMarkup(
-      React.createElement(hostRff.Form, { onSubmit: () => {}, render: () => React.createElement(Field) })
+  const hostPkgPath = path.resolve(root, '../hyperswitch-client-core/package.json');
+  if (!existsSync(hostPkgPath)) {
+    notes.push('   skip host check - hyperswitch-client-core is not a sibling of this repository');
+    console.log('    skip hyperswitch-client-core not found beside this repository');
+  } else {
+    const hostPkg = JSON.parse(readFileSync(hostPkgPath, 'utf8'));
+    const declared = { ...hostPkg.dependencies, ...hostPkg.devDependencies };
+    check(
+      declared['react-final-form'] !== undefined && declared['final-form'] !== undefined,
+      'hyperswitch-client-core still declares react-final-form and final-form'
     );
-  } catch (error) {
-    thrown = error;
   }
-  check(
-    thrown !== null && /must be used inside of a <Form>/.test(thrown.message),
-    `a mismatched field throws react-final-form's own guard instead of failing silently (${thrown ? thrown.message : 'nothing was thrown'})`
-  );
-
-  /*
-   * Prevention. This layout cannot arise from this package's metadata: it declares no runtime
-   * dependencies at all, so neither npm nor yarn has anything to nest. The standalone entry is
-   * immune regardless, because it never asks the host for react-final-form.
-   */
-  const requireStandalone = createRequire(path.join(pkgDir, 'dist/cjs/index.js'));
-  const rootGraph = bareImports(path.join(pkgDir, 'dist/cjs/index.js'));
-  void requireStandalone;
-  check(
-    !rootGraph.bare.includes('react-final-form'),
-    'even with a nested copy present, the standalone entry never asks for react-final-form'
-  );
 }
-
-rmSync(workspace, { recursive: true, force: true });
-fixture.cleanup();
 
 /* ── Report ──────────────────────────────────────────────────────────────── */
 
@@ -428,4 +429,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\n[verify-consumers] OK - ${notes.length} checks across 3 consumer fixtures`);
+console.log(`\n[verify-consumers] OK - ${notes.length} checks across 2 consumer fixtures`);

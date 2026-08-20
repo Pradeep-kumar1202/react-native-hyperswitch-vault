@@ -75,7 +75,7 @@ type Phase =
   | {kind: 'browsing'}
   | {kind: 'starting'}
   | {kind: 'paying'; session: MerchantSession}
-  | {kind: 'done'; last4: string; token: string; reference: string};
+  | {kind: 'done'; token: string; reference: string};
 
 export function MerchantCheckout() {
   const formRef = useRef<HyperswitchVaultFormHandle>(null);
@@ -113,7 +113,7 @@ export function MerchantCheckout() {
     if (result.status === 'success') {
       setPhase({
         kind: 'done',
-        last4: result.card.last4Digits,
+
         token: result.token,
         reference: `ARV-${Math.floor(Math.random() * 900000 + 100000)}`,
       });
@@ -138,7 +138,6 @@ export function MerchantCheckout() {
   if (phase.kind === 'done') {
     return (
       <Confirmation
-        last4={phase.last4}
         token={phase.token}
         reference={phase.reference}
         onDone={() => setPhase({kind: 'browsing'})}
@@ -287,12 +286,10 @@ function SummaryLine({
 }
 
 function Confirmation({
-  last4,
   token,
   reference,
   onDone,
 }: {
-  last4: string;
   token: string;
   reference: string;
   onDone: () => void;
@@ -311,7 +308,7 @@ function Confirmation({
         <View style={styles.panel}>
           <SummaryLine label="Paid" value={money(total)} emphasis />
           <View style={styles.totalDivider} />
-          <SummaryLine label="Card saved" value={`•••• ${last4}`} />
+          <SummaryLine label="Card saved" value="for future exits" />
           <View style={styles.totalDivider} />
           <SummaryLine label="Next exit" value="Barrier opens automatically" />
         </View>

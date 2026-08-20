@@ -3,8 +3,6 @@
 /* eslint-disable */
 /* tslint:disable */
 
-import type {vaultCardMetadata as VaultConfirm_vaultCardMetadata} from './VaultConfirm.gen';
-
 export type safeVaultErrorCode = 
     "invalid_session"
   | "invalid_card_data"
@@ -15,7 +13,7 @@ export type safeVaultErrorCode =
 export type safeVaultError = { readonly code: safeVaultErrorCode; readonly message: string };
 
 export type vaultSubmitResult = 
-    { status: "success"; readonly token: string; readonly card: VaultConfirm_vaultCardMetadata }
+    { status: "success"; readonly token: string }
   | { status: "validation_error"; readonly error: safeVaultError }
   | { status: "not_ready"; readonly error: safeVaultError }
   | { status: "error"; readonly error: safeVaultError };

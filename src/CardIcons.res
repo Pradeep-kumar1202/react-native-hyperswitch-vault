@@ -1,24 +1,6 @@
-/*
- * Built-in card icons for the STANDALONE form.
- *
- * Context-free and self-contained: it reads no host context, imports no native module, and needs no
- * merchant prop. Rendering is plain React Native `Image` over packaged PNGs — deliberately not
- * `react-native-svg`, which is a native module and would cost this package its "no native module,
- * no Pod install, no Codegen" property.
- *
- * Behaviour matches hyperswitch-client-core's `Standard` mode exactly:
- *   - a detected scheme with packaged artwork -> that icon;
- *   - a detected scheme without artwork       -> `waitcard`;
- *   - no scheme detected                      -> `waitcard`;
- *   - no fade, no scale, no cross-fade, no rotation.
- *
- * `Animated` mode (client-core's delay/fade placeholder cycle) is NOT implemented here and is not
- * part of this phase.
- */
 
 open ReactNative
 
-/* The static asset table. Every entry is a literal import, so Metro can pick @1x/@2x/@3x. */
 type assetTable = {
   visa: Image.Source.t,
   mastercard: Image.Source.t,
@@ -34,13 +16,6 @@ type assetTable = {
 
 @module("./cardIconAssets.mjs") external assets: assetTable = "cardIconAssets"
 
-/*
- * Every issuer `Validation.cardPatterns` can return, as a closed variant.
- *
- * Closed on purpose: a new detected issuer cannot be added to sdk-utils and silently render nothing
- * here, because `fromDetectedName` and `artworkFor` both stop compiling until someone makes an
- * explicit artwork-or-fallback decision for it.
- */
 type detectedScheme =
   | Visa
   | Mastercard
@@ -57,11 +32,6 @@ type detectedScheme =
   | Sodexo
   | Unrecognised
 
-/*
- * Normalises exactly as client-core does before an icon lookup: `Icon.res` lower-cases the name
- * before matching. The detector returns mixed casing — "AmericanExpress", "CartesBancaires",
- * "RuPay", "BAJAJ", "SODEXO" — so lower-casing is required, not cosmetic.
- */
 let fromDetectedName = (name: string): detectedScheme =>
   switch name->String.trim->String.toLowerCase {
   | "visa" => Visa
@@ -80,13 +50,6 @@ let fromDetectedName = (name: string): detectedScheme =>
   | _ => Unrecognised
   }
 
-/*
- * Exhaustive artwork mapping for all 13 issuers.
- *
- * Five have no approved artwork yet and fall back to `waitcard`. That is a deliberate, visible
- * decision rather than an accident: the accessory is never empty, and no dynamic require is ever
- * attempted.
- */
 let artworkFor = (scheme: detectedScheme): Image.Source.t =>
   switch scheme {
   | Visa => assets.visa
@@ -97,7 +60,7 @@ let artworkFor = (scheme: detectedScheme): Image.Source.t =>
   | JCB => assets.jcb
   | CartesBancaires => assets.cartesbancaires
   | Interac => assets.interac
-  /* No approved artwork yet — render the neutral card placeholder. */
+
   | RuPay
   | UnionPay
   | Maestro
@@ -107,29 +70,11 @@ let artworkFor = (scheme: detectedScheme): Image.Source.t =>
     assets.waitcard
   }
 
-/*
- * How the brand accessory behaves. Mirrors client-core's `LayoutTypes.cardBrandVisibility`
- * (Hidden | Animated | Standard | HideGeneric) without importing it — the library owns its own
- * vocabulary, and this is a polymorphic variant so genType emits a plain string union.
- */
 @genType
 type brandIconMode = [#standard | #animated | #hidden | #hideGeneric]
 
-/* The placeholder cycle, in client-core's order. */
 let placeholderCycle = ["visa", "mastercard", "americanexpress", "dinersclub", "discover", "jcb"]
 
-/*
- * The brand mark shown inside the card-number field.
- *
- * `resizeMode: #contain` reproduces SVG's default `preserveAspectRatio="xMidYMid meet"`, which is
- * what client-core gets from `SvgUri`. The artwork has mixed aspect ratios (24x16, 40x24, 34x24,
- * square), so this matters.
- *
- * `#animated` reproduces `CardSchemeComponent.res` exactly: a 2000 ms delay, a 300 ms ease fade to
- * 0, advance the placeholder, a 300 ms ease fade back to 1, repeat — with opacity driven directly
- * and SCALE interpolated 0.8 -> 1.0 from the same value. There is no rotation in the source and
- * none here.
- */
 @react.component
 let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#standard) => {
   let hasBrand = detectedScheme->String.trim->String.length > 0
@@ -141,7 +86,6 @@ let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#sta
     extrapolate: #clamp,
   })
 
-  /* Placeholder index + name, seeded exactly as client-core seeds it. */
   let ((_, placeholder), setPlaceholder) = React.useState(_ => (
     0,
     mode === #animated ? "visa" : "waitcard",
@@ -197,15 +141,6 @@ let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#sta
     | None => ()
     }
 
-  /*
-   * Same trigger and dependencies as client-core: cycle only while NO brand is detected, and stop
-   * plus reset to full opacity the moment one is.
-   *
-   * One deliberate addition: the non-animated branch also stops and resets. client-core takes its
-   * mode from static configuration and never changes it at runtime, so it cannot strand a partial
-   * opacity/scale; a merchant CAN flip `brandIconMode` at runtime, and without this a mid-fade
-   * switch to #standard would leave the icon stuck at 40% opacity.
-   */
   React.useLayoutEffect2(() => {
     if mode === #animated && !hasBrand {
       startContinuousAnimation()
@@ -217,20 +152,14 @@ let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#sta
     }
   }, (detectedScheme, (mode :> string)))
 
-  /* Belt and braces: never leave a timer running past unmount. */
   React.useEffect0(() => Some(() => stopAnimation()))
 
-  /*
-   * Visibility gate, matching client-core:
-   *   cardBrandIcon !== Hidden && !(cardBrandIcon === HideGeneric && cardBrand === "")
-   */
   let visible = switch mode {
   | #hidden => false
   | #hideGeneric => hasBrand
   | #standard | #animated => true
   }
 
-  /* While a brand is known it always wins; otherwise the placeholder (cycling only in #animated). */
   let iconName = hasBrand ? detectedScheme : placeholder
 
   visible
@@ -249,7 +178,6 @@ let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#sta
     : React.null
 }
 
-/* The CVC hint glyph, rendered through CardFormView's existing `renderIcon` path. */
 module Cvc = {
   @react.component
   let make = (~size: float=32.) =>
