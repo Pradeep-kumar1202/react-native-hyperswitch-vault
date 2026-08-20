@@ -153,45 +153,26 @@ for (const [what, re] of bundleChecks) {
 }
 
 /*
- * react-final-form is inlined into the ROOT entry on purpose (a merchant then installs exactly one
- * package) and must stay external in /embedded, which has to resolve the HOST's instance — two
- * copies means two React contexts, and react-final-form's own useForm() guard throws rather than
- * degrading quietly. Checked per entry by walking each one's own chunk graph;
- * `scripts/verify-consumers.mjs` proves the same thing again against real consumer fixtures.
+ * NO FORM LIBRARY may appear in any entry. The card fields are controlled: hyperswitch-client-core
+ * keeps its own react-final-form and passes values in, and the standalone entries use an internal
+ * reducer. A form library reappearing in the published bundles would mean the refactor regressed.
  */
-const graphSource = (entry) => {
-  const seen = new Set();
-  const read = (rel) => {
-    const abs = path.join(pkgRoot, rel);
-    if (seen.has(rel) || !existsSync(abs)) return '';
-    seen.add(rel);
-    const source = readFileSync(abs, 'utf8');
-    let combined = source;
-    for (const match of source.matchAll(/(?:from|require\()\s*['"](\.[^'"]+)['"]/g)) {
-      combined += read(path.posix.join(path.posix.dirname(rel), match[1]));
-    }
-    return combined;
-  };
-  return read(entry);
-};
-
+if (/createForm|ReactFinalForm/.test(bundle)) {
+  failures.push('the packed bundles contain a form-library implementation');
+}
 for (const format of ['esm', 'cjs']) {
-  if (/createForm/.test(graphSource(`dist/${format}/embedded.js`))) {
-    failures.push(`dist/${format}/embedded.js bundles react-final-form; it must resolve the host's copy`);
-  }
-  if (!/createForm/.test(graphSource(`dist/${format}/index.js`))) {
-    failures.push(
-      `dist/${format}/index.js does not bundle react-final-form; a standalone merchant would have to install it`
-    );
-  }
-  if (/(?:from|require\()\s*['"]react(-native)?['"]/.test(graphSource(`dist/${format}/vault.js`))) {
-    failures.push(`dist/${format}/vault.js pulls in React or React Native; the transport must be free of both`);
+  for (const entry of ['index', 'embedded', 'vault']) {
+    const rel = `dist/${format}/${entry}.js`;
+    const source = readFileSync(path.join(pkgRoot, rel), 'utf8');
+    if (/['"](react-final-form|final-form)['"]/.test(source)) {
+      failures.push(`${rel} imports a form library`);
+    }
   }
 }
 
-/* Bundling third-party MIT code into the root entry requires shipping its notices. */
+/* Bundling third-party MIT code into the entries requires shipping its notices. */
 const notices = readFileSync(path.join(pkgRoot, 'THIRD-PARTY-NOTICES.md'), 'utf8');
-for (const dependency of ['react-final-form', 'final-form', '@babel/runtime']) {
+for (const dependency of ['@babel/runtime']) {
   if (!notices.includes(dependency)) {
     failures.push(`THIRD-PARTY-NOTICES.md does not cover bundled dependency ${dependency}`);
   }

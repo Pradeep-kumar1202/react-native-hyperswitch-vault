@@ -145,9 +145,17 @@ const success = VaultResult.fromConfirmOutcome({
 });
 check(success.status === 'success', 'success outcome did not map to status "success"');
 check(success.token === 'token_fake_abc', 'success did not carry the token through');
-check(success.card?.last4Digits === '4242', 'success did not carry the card metadata through');
+/*
+ * TOKEN ONLY. The transport receives masked metadata from the vault; the merchant-facing result
+ * must drop it. This is the runtime half of the type-level negative checks in type-tests.
+ */
+check(success.card === undefined, 'success carries NO card metadata (token only)');
+check(success.last4Digits === undefined, 'success exposes no last4');
+check(success.expiryMonth === undefined, 'success exposes no expiry');
+check(success.cardNumber === undefined, 'success exposes no PAN');
+check(typeof success.token === 'string' && success.token.length > 0, 'success carries a token');
 check(
-  Object.keys(success).sort().join(',') === 'card,status,token',
+  Object.keys(success).sort().join(',') === 'status,token',
   `success result has unexpected keys: ${Object.keys(success).join(',')}`
 );
 check(success.error === undefined, 'success result carries an error field');

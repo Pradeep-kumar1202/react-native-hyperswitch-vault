@@ -1,49 +1,3 @@
-/*
- * CardInput — context-free text input for card fields only.
- *
- * `CustomInput` is deliberately NOT modified and NOT reused: it reads
- * ThemebasedStyle, LoadingContext, LoggerContext (via LoggerHook),
- * NativePropContext (via FontFamily) and ShadowHook, and it has eight non-card
- * consumers whose behaviour is not locked by tests.
- *
- * ── Inventory: which CustomInput features the three card fields actually use ──
- *
- * Passed explicitly by the card fields, reproduced here:
- *   state, setState, placeholder, animateLabel, keyboardType, maxLength,
- *   isValid, textColor, secureTextEntry (CVC only), name (-> testID),
- *   reference, onKeyPress, onFocus, onBlur, iconRight, accessible,
- *   borderTopWidth / borderBottomWidth / borderLeftWidth / borderRightWidth,
- *   borderTopLeftRadius / borderTopRightRadius / borderBottomLeftRadius /
- *   borderBottomRightRadius.
- *
- * Relied on via CustomInput's defaults, reproduced here as fixed behaviour:
- *   animate = true          -> the floating animated label is always used
- *   enableShadow = true     -> the shadow style is always applied
- *   fontSize = 16.
- *   width = 100%
- *   editable = true         -> card inputs stay editable while a payment runs
- *   pointerEvents = #auto
- *   multiline = false
- *   placeholderTextColor = None -> falls back to the theme placeholder colour
- *   autoCapitalize #none, autoCorrect false, autoComplete #off,
- *   textContentType #oneTimeCode (suppresses OS card autofill)
- *
- * Never used by card fields, therefore NOT reproduced:
- *   iconLeft, heading, mandatory, autoFocus, clearTextOnFocus, textAlign,
- *   onPressIconRight, showEyeIconaftersecureTextEntry (so the CVC eye toggle
- *   cannot exist), height override, style override, animate = false,
- *   enableShadow = false, editable = false, pointerEvents override,
- *   placeholderTextColor override, and `enableCrossIcon` — which the card
- *   fields do pass as `false` but which CustomInput never reads (dead prop).
- *
- * Host-owned values arrive as props: `theme`, `isProcessing` (from
- * LoadingContext) and `onAnalytics` (focus/blur telemetry).
- *
- * Telemetry carries `fieldId` only — a `CardFormTypes.cardFieldId` — so no input value can leave
- * through the analytics channel. The host maps the identifier back to the placeholder string it
- * logs, which keeps the logged value identical to the pre-extraction behaviour.
- */
-
 open ReactNative
 open Style
 
@@ -68,7 +22,6 @@ let make = (
   ~isValid=true,
   ~textColor,
   ~secureTextEntry=false,
-  /* Standalone forms can disable input; the host card path never passes this. */
   ~editable=true,
   ~iconRight: iconType=NoIcon,
   ~reference=None,
@@ -219,7 +172,6 @@ let make = (
             onAnalytics(FieldFocused(fieldId))
           }}
           onBlur={_ => {
-            // TODO: remove invalid input (string with only space) eg: "      "
             state->String.trim == "" ? setState("") : ()
             onBlur()
             setIsFocused(_ => false)

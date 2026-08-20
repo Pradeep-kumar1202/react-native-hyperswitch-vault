@@ -45,9 +45,9 @@ npm install @juspay-tech/react-native-hyperswitch-vault
 **No native step.** The package is pure JavaScript: no native module, no `pod install`, no Codegen,
 no autolinking, no `react-native.config.js` entry.
 
-`react-final-form` and `final-form` appear as *optional* peer dependencies. You do **not** install
-them — they exist only for the `/embedded` entry used by the Hyperswitch client-core SDK. The root
-entry bundles its own copy.
+This package has **no form library**. It declares only `react` and `react-native` as peers, and its
+card fields are controlled views whose state it owns internally. You do not install, configure or
+interact with a form library to use it.
 
 ---
 

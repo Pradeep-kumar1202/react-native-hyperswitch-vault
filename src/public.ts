@@ -1,11 +1,4 @@
-/*
- * Type entry for the package root — the standalone merchant API.
- *
- * Every type below is generated from ReScript by genType. The one thing expressed here is the ref
- * attachment: genType types a forwardRef component as `React.ComponentType<Props>` and drops the
- * ref, so the handle is re-attached using the generated `Props` and `vaultFormHandle` types. No
- * type is re-declared by hand.
- */
+
 import './jsx-global';
 import type * as React from 'react';
 import { make as RawHyperswitchVaultForm, type Props, type vaultFormHandle } from './HyperswitchVaultForm.gen';
@@ -26,12 +19,6 @@ export const HyperswitchVaultForm =
     Props & React.RefAttributes<vaultFormHandle>
   >;
 
-/*
- * The custom-layout surface (ADR-0001). The provider's Props are generated — including
- * `children: React.ReactNode`, straight from genType — so the only hand-written piece is, as for
- * the form above, the ref re-attachment. Widgets take no props in this phase: only a ref exposing
- * focus()/blur(). There is no CardHolderWidget and no raw-value accessor anywhere.
- */
 export type WidgetHandle = widgetHandle;
 export type HyperswitchVaultFormProviderProps = ProviderProps;
 
@@ -61,7 +48,6 @@ export type {
   vaultSubmitResult as VaultSubmitResult,
   safeVaultError as SafeVaultError,
   safeVaultErrorCode as SafeVaultErrorCode,
-  vaultCardMetadata as VaultCardMetadata,
   cardFormState as CardFormState,
   appearance as VaultFormAppearance,
   vaultEnvironment as VaultEnvironment,
