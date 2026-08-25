@@ -8,6 +8,14 @@
 > Facts are labelled: **[code]** proven by current source or generated output, **[run]** produced by
 > a command executed against this tree, **[manual]** confirmed by a human on a device, and
 > **[historical]** true earlier but superseded.
+>
+> **Superseded in part, 2026-08-24.** Written before `react-final-form` was removed from the library
+> (commit `ae64e1a`). Everything below describing RFF as a library dependency — §11 "React Final
+> Form module-identity problem and solution", the "bundled in" entry table, and the two-Rollup-config
+> discussion — is now **[historical]**: the package declares no runtime dependencies, bundles no form
+> library, and builds all three entries from one Rollup configuration. `hyperswitch-client-core`
+> still owns its own react-final-form, and that half is unchanged. Current surface:
+> **[public-api-baseline.md](public-api-baseline.md)**.
 
 ---
 

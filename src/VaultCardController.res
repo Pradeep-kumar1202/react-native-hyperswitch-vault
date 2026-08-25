@@ -30,6 +30,12 @@ type controller = {
   register: widgetKind => unit => unit,
   countOf: widgetKind => int,
   registryVersion: int,
+  /*
+   * The merchant-facing snapshot of the three fields (ADR-0002 §4). Derived, never stored: it is a
+   * pure function of the reducer state the controller already holds, so there is no second source
+   * of truth to keep in sync and nothing new is retained.
+   */
+  publicFields: VaultPublicState.vaultFormFields,
   cardRef: React.ref<Nullable.t<TextInput.element>>,
   expiryRef: React.ref<Nullable.t<TextInput.element>>,
   cvcRef: React.ref<Nullable.t<TextInput.element>>,
@@ -87,6 +93,36 @@ let use = (
 
   let latestRef = React.useRef((state, errors))
   latestRef.current = (state, errors)
+
+  /*
+   * `accepted` is the RAW validator verdict; `visibleError` is the already-filtered message the UI
+   * is rendering. Publishing both keeps "is this field done?" and "is the customer being shown a
+   * problem?" as the separate questions they are, and stops the merchant's chrome disagreeing with
+   * the library's.
+   */
+  let publicFields: VaultPublicState.vaultFormFields = {
+    cardNumber: VaultPublicState.cardNumberStateOf(
+      {
+        value: state.cardNumber,
+        accepted: errors.cardNumber->Option.isNone,
+        focused: state.numberMeta.active,
+        visibleError: CardStateReducer.numberError(state, errors),
+      },
+      ~brand=state.brand,
+    ),
+    expiry: VaultPublicState.expiryStateOf({
+      value: state.expiryDisplay,
+      accepted: errors.expiry->Option.isNone,
+      focused: state.expiryMeta.active,
+      visibleError: CardStateReducer.expiryError(state, errors),
+    }),
+    cvc: VaultPublicState.cvcStateOf({
+      value: state.cvc,
+      accepted: errors.cvc->Option.isNone,
+      focused: state.cvcMeta.active,
+      visibleError: CardStateReducer.cvcError(state, errors),
+    }),
+  }
 
   let onNumberChange = (change: CardFieldLogic.numberChange) => {
     dispatch(NumberChanged(change))
@@ -187,6 +223,7 @@ let use = (
     register,
     countOf,
     registryVersion,
+    publicFields,
     cardRef,
     expiryRef,
     cvcRef,

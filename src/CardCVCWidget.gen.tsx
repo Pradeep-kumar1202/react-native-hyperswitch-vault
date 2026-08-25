@@ -7,6 +7,18 @@ import * as React from 'react';
 
 import * as CardCVCWidgetJS from './CardCVCWidget.bs.js';
 
-export type Props = { readonly children?: React.ReactNode };
+import type {cvcState as VaultPublicState_cvcState} from './VaultPublicState.gen';
 
-export const make: React.ComponentType<{ readonly children?: React.ReactNode }> = CardCVCWidgetJS.make as any;
+import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
+
+export type Props = {
+  readonly children?: React.ReactNode; 
+  readonly onStateChange?: (_1:VaultPublicState_cvcState) => void; 
+  readonly styles?: CardFieldStyles_fieldStyles
+};
+
+export const make: React.ComponentType<{
+  readonly children?: React.ReactNode; 
+  readonly onStateChange?: (_1:VaultPublicState_cvcState) => void; 
+  readonly styles?: CardFieldStyles_fieldStyles
+}> = CardCVCWidgetJS.make as any;

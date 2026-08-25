@@ -51,6 +51,7 @@
   "scripts": {
     "check:submodule": "node scripts/check-submodule.mjs",
     "check:generated": "node scripts/check-generated.mjs",
+    "check:surface": "node scripts/verify-public-surface.mjs",
     "check:icons": "node scripts/verify-icon-coverage.mjs",
     "check:consumer-types": "tsc -p tsconfig.consumer.json",
     "re:build": "rescript",
@@ -58,14 +59,19 @@
     "types": "tsc -p tsconfig.build.json",
     "icons": "node scripts/generate-icons.mjs",
     "bundle": "node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs",
-    "build": "node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
+    "build": "node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && node scripts/verify-public-surface.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
     "clean": "rescript clean && node scripts/clean.mjs",
-    "prepack": "node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
+    "prepack": "node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && node scripts/verify-public-surface.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
     "verify:mapping": "node scripts/verify-result-mapping.mjs",
     "verify:consumers": "node scripts/verify-consumers.mjs",
+    "verify:treeshaking": "node scripts/verify-treeshaking.mjs",
+    "verify:style-bridge": "node scripts/verify-style-bridge.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs",
-    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs",
-    "build:clean": "rescript clean && node scripts/clean.mjs && node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json"
+    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs && node scripts/verify-vault-isolation.mjs && node scripts/verify-treeshaking.mjs && node scripts/verify-style-bridge.mjs && node scripts/verify-event-surface.mjs && node scripts/verify-package-contents.mjs",
+    "build:clean": "rescript clean && node scripts/clean.mjs && node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && node scripts/verify-public-surface.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
+    "verify:vault-isolation": "node scripts/verify-vault-isolation.mjs",
+    "verify:event-surface": "node scripts/verify-event-surface.mjs",
+    "verify:package-contents": "node scripts/verify-package-contents.mjs"
   },
   "peerDependencies": {
     "react": ">=19.0.0 <20.0.0",

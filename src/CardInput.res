@@ -38,9 +38,40 @@ let make = (
   ~borderTopRightRadius=?,
   ~borderBottomLeftRadius=?,
   ~borderBottomRightRadius=?,
+  /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
+  ~styles: option<CardFieldStyles.fieldStyles>=?,
 ) => {
   let (isFocused, setIsFocused) = React.useState(_ => false)
   let animatedValue = CardAnimatedValue.useAnimatedValue(0.)
+
+  /*
+   * The floating label's ONLY animated key is `fontSize`, so a static merchant value there would
+   * shadow the interpolation and collapse AnimatedStyle. Take it away instead:
+   * `splitAnimatedText` returns the merchant's font size (to use as the animation endpoint for that
+   * state) and the REST of their style with `fontSize` removed. Memoised on the raw slot value so a
+   * merchant passing a stable style object does not re-flatten every render.
+   */
+  let placeholderSlot = React.useMemo1(
+    () => styles->CardFieldStyles.placeholderOf->CardFieldStyles.splitAnimatedText,
+    [styles->CardFieldStyles.placeholderOf],
+  )
+  let labelSlot = React.useMemo1(
+    () => styles->CardFieldStyles.labelOf->CardFieldStyles.splitAnimatedText,
+    [styles->CardFieldStyles.labelOf],
+  )
+
+  /*
+   * The two ends of the float animation. A merchant font size REPLACES the endpoint for its own
+   * state and leaves the other one alone, so `placeholder: {fontSize: 20}` still animates — down to
+   * the library's floating size. The merchant's number is taken literally: it is not multiplied by
+   * `theme.fontScale`, because an explicit size means that size.
+   */
+  let restingFontSize =
+    placeholderSlot.fontSize->Option.getOr(
+      (fontSize +. theme.placeholderTextSizeAdjust) *. theme.fontScale,
+    )
+  let floatingFontSize =
+    labelSlot.fontSize->Option.getOr(fontSize +. theme.placeholderTextSizeAdjust -. 5.)
 
   React.useEffect1(() => {
     animatedValue->Animated.Value.setValue(state === "" ? 0. : 1.)
@@ -89,7 +120,7 @@ let make = (
           justifyContent: #center,
         }),
         theme.shadowStyle,
-      ])}>
+      ])->CardFieldStyles.withView(styles->CardFieldStyles.containerOf)}>
       <View
         style={s({
           flex: 1.,
@@ -122,14 +153,16 @@ let make = (
                 ->Animated.Interpolation.interpolate({
                   inputRange: [0., 1.],
                   outputRange: [
-                    (fontSize +. theme.placeholderTextSizeAdjust) *. theme.fontScale,
-                    fontSize +. theme.placeholderTextSizeAdjust -. 5.,
+                    restingFontSize,
+                    floatingFontSize,
                   ]->Animated.Interpolation.fromFloatArray,
                 })
                 ->Animated.StyleProp.float,
                 color: theme.placeholderColor,
               }),
-            ])}>
+            ])->CardFieldStyles.withText(
+              isFocused || state != "" ? labelSlot.rest : placeholderSlot.rest,
+            )}>
             {React.string(
               if isFocused || state != "" {
                 animateLabel
@@ -150,7 +183,7 @@ let make = (
               fontSize: (fontSize +. theme.placeholderTextSizeAdjust) *. theme.fontScale,
             }),
             s({padding: 0.->dp, height: (theme.inputHeight *. 0.7)->dp, width: 100.->pct}),
-          ])}
+          ])->CardFieldStyles.withText(styles->CardFieldStyles.inputOf)}
           testID=name
           secureTextEntry
           autoCapitalize=#none
@@ -184,7 +217,14 @@ let make = (
       </View>
       {switch iconRight {
       | NoIcon => React.null
-      | CustomIcon(element) => <CardPressable> element </CardPressable>
+      | CustomIcon(element) =>
+        switch styles->CardFieldStyles.accessoryOf {
+        | None => <CardPressable> element </CardPressable>
+        | Some(accessory) =>
+          <CardPressable style={s({})->CardFieldStyles.withView(Some(accessory))}>
+            element
+          </CardPressable>
+        }
       }}
     </View>
   </View>

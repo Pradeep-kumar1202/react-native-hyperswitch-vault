@@ -28,6 +28,7 @@
     "src/jsx-global.ts",
     "src/merchantTypes.ts",
     "src/dom-types.ts",
+    "src/styleTypes.ts",
     "src/*.gen.tsx",
     "src/bs-modules.d.ts"
   ]

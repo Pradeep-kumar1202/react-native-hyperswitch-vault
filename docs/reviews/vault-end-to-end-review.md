@@ -9,6 +9,14 @@ probes with stubbed network calls.
 were used and no real vault or payment request was made. Two temporary probe test files were
 created, executed and deleted; nothing else was added to either repository.
 
+> **Superseded in part, 2026-08-24.** This review predates the removal of `react-final-form` from
+> the library (commit `ae64e1a`) and the shipping of the widget API. The dependency table's
+> "`react-final-form` — optional peer `^7.0.0`" and "`final-form` — optional peer `^5.0.0`" rows no
+> longer hold: the package declares **no runtime dependencies and no form-library peer**. The
+> `/embedded` export is now `CardNumberField` / `CardExpiryField` / `CardCvcField` rather than
+> `EmbeddedCardElement`. For the current surface see
+> **[../public-api-baseline.md](../public-api-baseline.md)**.
+
 Where this review contradicts an earlier document, **the executable artefact wins** and the
 disagreement is recorded.
 

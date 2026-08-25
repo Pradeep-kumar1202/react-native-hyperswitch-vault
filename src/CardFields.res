@@ -42,10 +42,16 @@ module Number = {
     ~borderBottomWidth: option<float>=?,
     ~borderBottomLeftRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
     let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
-    <View>
+    <View
+      style=?{styles
+      ->CardFieldStyles.rootOf
+      ->Option.map(root => Style.s({})->CardFieldStyles.withView(Some(root)))}>
       <CardInput
+        ?styles
         theme=common.theme
         isProcessing=common.isProcessing
         editable=common.editable
@@ -99,10 +105,16 @@ module Expiry = {
     ~borderTopLeftRadius: option<float>=?,
     ~borderTopRightRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    /* Widened from `expiryStyles`; `accessory` is structurally absent for this field. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
     let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
-    <View>
+    <View
+      style=?{styles
+      ->CardFieldStyles.rootOf
+      ->Option.map(root => Style.s({})->CardFieldStyles.withView(Some(root)))}>
       <CardInput
+        ?styles
         theme=common.theme
         isProcessing=common.isProcessing
         editable=common.editable
@@ -162,10 +174,16 @@ module Cvc = {
     ~borderBottomRightRadius: option<float>=?,
     ~borderBottomWidth: option<float>=?,
     ~borderRightWidth: option<float>=?,
+    /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
     let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
-    <View>
+    <View
+      style=?{styles
+      ->CardFieldStyles.rootOf
+      ->Option.map(root => Style.s({})->CardFieldStyles.withView(Some(root)))}>
       <CardInput
+        ?styles
         theme=common.theme
         isProcessing=common.isProcessing
         editable=common.editable

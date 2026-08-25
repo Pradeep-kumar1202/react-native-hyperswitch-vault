@@ -57,6 +57,17 @@ const treeshake = {
   propertyReadSideEffects: false,
 };
 
+/*
+ * `sourcemap: 'hidden'` rather than `true`.
+ *
+ * The maps are still WRITTEN, so local debugging and any future decision to publish them are
+ * unaffected. What 'hidden' removes is the `//# sourceMappingURL=` comment at the end of each
+ * emitted file — and that comment was a dangling reference in the published package, because
+ * `files[]` deliberately excludes `dist/**\/*.map`. Every consumer therefore received JS pointing
+ * at a map that is not in the tarball. Metro strips the comment and never noticed, but any other
+ * tool that follows it got a 404. Found by the Phase 4 external-consumer audit.
+ */
+
 /* Chunk prefixes differ per configuration so the two builds cannot collide in dist/. */
 const outputs = (chunkPrefix) => [
   {
@@ -64,7 +75,7 @@ const outputs = (chunkPrefix) => [
     format: 'es',
     entryFileNames: '[name].js',
     chunkFileNames: `${chunkPrefix}-[hash].js`,
-    sourcemap: true,
+    sourcemap: 'hidden',
   },
   {
     dir: 'dist/cjs',
@@ -72,7 +83,7 @@ const outputs = (chunkPrefix) => [
     entryFileNames: '[name].js',
     chunkFileNames: `${chunkPrefix}-[hash].js`,
     exports: 'named',
-    sourcemap: true,
+    sourcemap: 'hidden',
   },
 ];
 

@@ -366,8 +366,8 @@ export const childrenRequired = (
 // @ts-expect-error - widgets take no style prop in this phase
 export const noWidgetStyle = <CardNumberWidget style={{flex: 1}} />;
 
-// @ts-expect-error - widgets take no onStateChange in this phase (events are a later phase)
-export const noWidgetEvents = <CardCVCWidget onStateChange={() => {}} />;
+/* The legacy widget spelling receives the identical callback — it is the same object. */
+export const widgetEvents = <CardCVCWidget onStateChange={(s) => s.status} />;
 
 // @ts-expect-error - no raw-value accessor exists on the widget handle
 export const noRawValueGetter = (ref: React.RefObject<WidgetHandle>) => ref.current?.getValue();
@@ -378,3 +378,587 @@ export const noRawValueOnForm = (ref: React.RefObject<HyperswitchVaultFormHandle
 
 // @ts-expect-error - there is no CardHolderWidget: the PMS-confirm contract needs number/expiry/CVC only
 import {CardHolderWidget} from '../dist/types/public';
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Phase 1 — the merchant facade (ADR-0002 §1–§3)
+ *
+ * Canonical field names, handle type aliases and the convenience namespace.
+ * Everything here is additive: nothing above this line changed.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+import {
+  CardNumberField,
+  CardExpiryField,
+  CardCVCField,
+  HyperswitchVault,
+  type VaultFieldHandle,
+  type VaultFormHandle,
+} from '../dist/types/public';
+
+/* ── 1. The canonical names compile in a custom layout ────────────────────── */
+
+export function CanonicalNames() {
+  const formRef = React.useRef<VaultFormHandle>(null);
+  const numberRef = React.useRef<VaultFieldHandle>(null);
+
+  return (
+    <HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
+      <CardNumberField ref={numberRef} />
+      <View>
+        <CardExpiryField />
+        <CardCVCField />
+      </View>
+    </HyperswitchVaultFormProvider>
+  );
+}
+
+/* ── 2. Namespace usage compiles, including the ready-made form ───────────── */
+
+export function NamespaceReadyMade() {
+  const formRef = React.useRef<VaultFormHandle>(null);
+  return <HyperswitchVault.CardForm ref={formRef} session={session} environment="sandbox" />;
+}
+
+export function NamespaceCustomLayout() {
+  const formRef = React.useRef<VaultFormHandle>(null);
+  return (
+    <HyperswitchVault.Form ref={formRef} session={session} environment="sandbox">
+      <HyperswitchVault.CardNumber />
+      <View>
+        <HyperswitchVault.Expiry />
+        <HyperswitchVault.CVC />
+      </View>
+    </HyperswitchVault.Form>
+  );
+}
+
+/* ── 3. Aliases are the SAME TYPE, both directions ────────────────────────── */
+
+/*
+ * Mutual assignability is what proves these are aliases rather than two structurally-similar
+ * declarations that could drift. A one-way assignment would pass even for a widened type.
+ */
+export const fieldHandleIsWidgetHandle: VaultFieldHandle = {} as WidgetHandle;
+export const widgetHandleIsFieldHandle: WidgetHandle = {} as VaultFieldHandle;
+export const formHandleAlias: VaultFormHandle = {} as HyperswitchVaultFormHandle;
+export const formHandleAliasBack: HyperswitchVaultFormHandle = {} as VaultFormHandle;
+
+/* The component types are interchangeable in both directions too. */
+export const fieldIsWidget: typeof CardNumberWidget = CardNumberField;
+export const widgetIsField: typeof CardNumberField = CardNumberWidget;
+export const namespaceIsCanonical: typeof CardNumberField = HyperswitchVault.CardNumber;
+export const namespaceFormIsCanonical: typeof HyperswitchVaultForm = HyperswitchVault.CardForm;
+export const namespaceProviderIsCanonical: typeof HyperswitchVaultFormProvider =
+  HyperswitchVault.Form;
+
+/* A ref taken on the legacy name is accepted by the canonical one, and vice versa. */
+export function refsInterchange(
+  widgetRef: React.RefObject<WidgetHandle>,
+  fieldRef: React.RefObject<VaultFieldHandle>
+) {
+  return (
+    <>
+      <CardNumberField ref={widgetRef} />
+      <CardNumberWidget ref={fieldRef} />
+    </>
+  );
+}
+
+/* ── 4. Existing props and handles are unchanged ──────────────────────────── */
+
+/* The canonical form name accepts every existing prop, unchanged. */
+export function canonicalFormTakesEveryExistingProp() {
+  return (
+    <HyperswitchVault.CardForm
+      session={session}
+      environment="sandbox"
+      appearance={{primaryColor: '#0570DE', brandIconMode: 'animated'}}
+      localisation={fullyTranslated}
+      disabled={false}
+      splitCardFields
+      accessible
+      onStateChange={(state: CardFormState) => void state.complete}
+    />
+  );
+}
+
+/* The handle is still exactly submit / reset / focus. */
+export async function canonicalHandleSurface(handle: VaultFormHandle): Promise<string> {
+  const result: VaultSubmitResult = await handle.submit();
+  handle.reset();
+  handle.focus('cvc');
+  return result.status;
+}
+
+export function canonicalFieldHandleSurface(ref: React.RefObject<VaultFieldHandle>) {
+  ref.current?.focus();
+  ref.current?.blur();
+}
+
+/* ── 5. Out-of-scope surfaces must still be rejected ──────────────────────── */
+
+// @ts-expect-error - the hook is a later phase; the namespace has no useForm
+export const noNamespaceHook = HyperswitchVault.useForm;
+
+// @ts-expect-error - useHyperswitchVaultForm is not exported yet
+import {useHyperswitchVaultForm} from '../dist/types/public';
+
+/* Merchant state events are published — see the dedicated block at the end of this file. */
+
+/* All three fields accept `styles` — see the per-field style block at the end of this file. */
+export const expiryTakesStyles = <CardExpiryField styles={{input: {color: 'red'}}} />;
+export const cvcTakesStyles = <CardCVCField styles={{input: {color: 'red'}}} />;
+
+// @ts-expect-error - a bare `style` prop is not part of the contract, on any field
+export const noFieldStyleProp = <CardExpiryField style={{flex: 1}} />;
+
+// @ts-expect-error - a bare `style` prop is not the slot API, on any field
+export const noBareStyleOnNumber = <CardNumberField style={{flex: 1}} />;
+
+// @ts-expect-error - render slots are a later phase
+export const noRenderSlot = <CardNumberField renderBrandIcon={() => null} />;
+
+// @ts-expect-error - safe native config is a later phase
+export const noNativeConfig = <CardCVCField testID="cvc" />;
+
+// @ts-expect-error - the namespace is closed; there is no cardholder field
+export const noNamespaceCardHolder = HyperswitchVault.CardHolder;
+
+// @ts-expect-error - the namespace carries no transport
+export const noNamespaceVault = HyperswitchVault.confirmPaymentMethodSession;
+
+/* No raw-value accessor may exist under the new names either. */
+// @ts-expect-error - no raw-value accessor on the canonical field handle
+export const noRawValueOnFieldHandle = (ref: React.RefObject<VaultFieldHandle>) => ref.current?.getValue();
+
+export const noRawValueOnCanonicalForm = (ref: React.RefObject<VaultFormHandle>) =>
+  // @ts-expect-error - no raw-value accessor on the canonical form handle
+  ref.current?.getCardNumber();
+
+/* ── 6. The namespace is a namespace, not a component ─────────────────────── */
+
+// @ts-expect-error - HyperswitchVault is a plain object; it cannot be rendered
+export const namespaceIsNotRenderable = <HyperswitchVault session={session} environment="sandbox" />;
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * The merchant styling boundary (ADR-0002 §9 layer 2)
+ *
+ * These assertions are the TYPE half of the proof. The runtime half — that the
+ * style actually reaches the rendered element — is in
+ * example/__tests__/fieldStyles.test.tsx, because a type check alone cannot
+ * distinguish a working bridge from a cast.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+import type {StyleProp, ViewStyle, TextStyle} from 'react-native';
+import {StyleSheet} from 'react-native';
+import type {VaultFieldStyles} from '../dist/types/public';
+
+/* ── 1. The slots ARE React Native's own StyleProp types ──────────────────── */
+
+/*
+ * Mutual assignability against RN's types is the assertion that a cast cannot fake: if genType had
+ * emitted an opaque handle, `any` or `unknown`, at least one direction here would fail (an opaque
+ * class rejects a plain object; `any`/`unknown` would make the negative controls below stop
+ * erroring, which tsc reports as an unused @ts-expect-error).
+ */
+/* Each slot is an OPTIONAL property, so its type is `StyleProp<X> | undefined` exactly. */
+type OptionalViewStyle = StyleProp<ViewStyle> | undefined;
+type OptionalTextStyle = StyleProp<TextStyle> | undefined;
+
+export const rootIsViewStyleProp: OptionalViewStyle = {} as VaultFieldStyles['root'];
+export const viewStylePropIsRoot: VaultFieldStyles['root'] = {} as OptionalViewStyle;
+export const containerIsViewStyleProp: OptionalViewStyle = {} as VaultFieldStyles['container'];
+export const viewStylePropIsContainer: VaultFieldStyles['container'] = {} as OptionalViewStyle;
+export const accessoryIsViewStyleProp: OptionalViewStyle = {} as VaultFieldStyles['accessory'];
+export const viewStylePropIsAccessory: VaultFieldStyles['accessory'] = {} as OptionalViewStyle;
+
+export const inputIsTextStyleProp: OptionalTextStyle = {} as VaultFieldStyles['input'];
+export const textStylePropIsInput: VaultFieldStyles['input'] = {} as OptionalTextStyle;
+export const placeholderIsTextStyleProp: OptionalTextStyle = {} as VaultFieldStyles['placeholder'];
+export const textStylePropIsPlaceholder: VaultFieldStyles['placeholder'] = {} as OptionalTextStyle;
+export const labelIsTextStyleProp: OptionalTextStyle = {} as VaultFieldStyles['label'];
+export const textStylePropIsLabel: VaultFieldStyles['label'] = {} as OptionalTextStyle;
+export const errorIsTextStyleProp: OptionalTextStyle = {} as VaultFieldStyles['error'];
+export const textStylePropIsError: VaultFieldStyles['error'] = {} as OptionalTextStyle;
+
+/*
+ * The two slot families are NOT the same type. React Native's `TextStyle` extends `ViewStyle`, so a
+ * ViewStyle value is legitimately assignable to a TextStyle slot — that is RN's own hierarchy, not a
+ * bridge defect. The asymmetry that matters is the other direction, asserted by `rejectsTextInView`
+ * below: a text-only property must be rejected in a ViewStyle slot.
+ */
+
+/* Every slot is optional, and an empty object is a valid value. */
+export const emptySlots: VaultFieldStyles = {};
+
+/* ── 2. Everything StyleProp accepts, the slot accepts ────────────────────── */
+
+const sheet = StyleSheet.create({
+  box: {backgroundColor: '#101828', borderWidth: 3},
+  text: {fontSize: 22, color: '#F97316'},
+});
+
+export const acceptsPlainObject: VaultFieldStyles = {container: {borderWidth: 4}};
+export const acceptsRegisteredStyle: VaultFieldStyles = {container: sheet.box, input: sheet.text};
+export const acceptsArray: VaultFieldStyles = {container: [sheet.box, {borderRadius: 20}]};
+export const acceptsNestedArray: VaultFieldStyles = {container: [[sheet.box], {margin: 2}]};
+export const acceptsFalsy: VaultFieldStyles = {container: null, input: undefined, label: false};
+
+/* ── 2a. Animated-label typography is accepted, and handled at RUNTIME ────── */
+
+/*
+ * `placeholder` and `label` style the same Animated.Text, whose only animated key is `fontSize`.
+ * A static value there would shadow the interpolation, collapse AnimatedStyle and leak an
+ * unresolved AnimatedNode to the host element.
+ *
+ * That is NOT prevented here, deliberately. It was measured (docs/phase-2a-style-bridge-spike.md):
+ * `StyleProp<Omit<TextStyle, 'fontSize'>>` rejects only an inline object literal — a TextStyle
+ * variable, a registered style, an array and a type assertion all still compile, and JavaScript
+ * consumers have no types at all. A type that DOES block them (`fontSize?: never`) also rejects a
+ * legitimate `TextStyle` variable that has no fontSize, which is a worse merchant experience than
+ * the problem it solves.
+ *
+ * So the slots keep React Native's full `StyleProp<TextStyle>` — asserted mutually in section 1 —
+ * and the library removes `fontSize` at runtime, using it as the animation ENDPOINT for that state.
+ * These are the routes that must keep compiling; the runtime proof is in
+ * example/__tests__/fieldStyles.test.tsx.
+ */
+const sharedLabelStyle: TextStyle = {color: '#334155', fontSize: 18};
+const registeredLabelStyle = StyleSheet.create({lbl: {color: '#334155', fontSize: 18}}).lbl;
+
+export const acceptsInlineFontSize: VaultFieldStyles = {placeholder: {fontSize: 18}};
+export const acceptsWiderTextStyleVariable: VaultFieldStyles = {placeholder: sharedLabelStyle};
+export const acceptsRegisteredWithFontSize: VaultFieldStyles = {label: registeredLabelStyle};
+export const acceptsArrayWithFontSize: VaultFieldStyles = {
+  label: [registeredLabelStyle, {fontSize: 11}],
+};
+export const acceptsNestedArrayWithFontSize: VaultFieldStyles = {
+  placeholder: [[sharedLabelStyle], [null, {letterSpacing: 2}], undefined, false],
+};
+
+/* A TextStyle variable WITHOUT fontSize must also compile — the false positive a stricter type had. */
+const cleanLabelStyle: TextStyle = {color: '#334155', letterSpacing: 2};
+export const acceptsCleanTextStyleVariable: VaultFieldStyles = {label: cleanLabelStyle};
+
+/* ── 3. Wrong values must NOT compile ─────────────────────────────────────── */
+
+/* A ViewStyle slot must reject a text-only property. */
+// @ts-expect-error - fontSize is not a ViewStyle property
+export const rejectsTextInView: VaultFieldStyles = {container: {fontSize: 12}};
+
+// @ts-expect-error - `colour` is not a style property at all
+export const rejectsUnknownProperty: VaultFieldStyles = {input: {colour: 'red'}};
+
+// @ts-expect-error - borderWidth is a number, not a string
+export const rejectsWrongValueType: VaultFieldStyles = {container: {borderWidth: 'thick'}};
+
+// @ts-expect-error - there is no such slot; the slot set is closed
+export const rejectsUnknownSlot: VaultFieldStyles = {footer: {margin: 1}};
+
+/* helperText is deliberately absent: no helper-text element is rendered anywhere yet. */
+// @ts-expect-error - helperText has no rendered target, so it is not published
+export const rejectsHelperText: VaultFieldStyles = {helperText: {fontSize: 10}};
+
+/* State-based callbacks are layer 3, not this phase. */
+// @ts-expect-error - state-based style callbacks are a later phase
+export const rejectsStyleCallback: VaultFieldStyles = {container: () => ({borderWidth: 1})};
+
+/* ── 4. The styles prop does not open a route to card data ────────────────── */
+
+export const stylesOnNumber = (
+  <CardNumberField styles={{container: {borderWidth: 2}, input: {fontSize: 18}}} />
+);
+
+// @ts-expect-error - the field still takes no value prop
+export const stillNoValue = <CardNumberField value="4242" />;
+// @ts-expect-error - the field still takes no onChangeText
+export const stillNoOnChangeText = <CardNumberField onChangeText={() => {}} />;
+// @ts-expect-error - the field still takes no onChange
+export const stillNoOnChange = <CardNumberField onChange={() => {}} />;
+// @ts-expect-error - the field still takes no defaultValue
+export const stillNoDefaultValue = <CardNumberField defaultValue="4242" />;
+// @ts-expect-error - secureTextEntry stays library-owned
+export const stillNoSecureTextEntry = <CardNumberField secureTextEntry />;
+// @ts-expect-error - maxLength stays library-owned
+export const stillNoMaxLength = <CardNumberField maxLength={19} />;
+// @ts-expect-error - keyboardType stays library-owned
+export const stillNoKeyboardType = <CardNumberField keyboardType="numeric" />;
+// @ts-expect-error - autoCorrect stays library-owned
+export const stillNoAutoCorrect = <CardNumberField autoCorrect />;
+// @ts-expect-error - textContentType stays library-owned
+export const stillNoTextContentType = <CardNumberField textContentType="creditCardNumber" />;
+// @ts-expect-error - autoComplete stays library-owned
+export const stillNoAutoComplete = <CardNumberField autoComplete="cc-number" />;
+
+/* ── 5. The ref contract is untouched by the styles prop ──────────────────── */
+
+export function styledFieldStillTakesARef(ref: React.RefObject<VaultFieldHandle>) {
+  return <CardNumberField ref={ref} styles={{root: {padding: 4}}} />;
+}
+
+export function styledFieldHandleIsStillFocusBlur(ref: React.RefObject<VaultFieldHandle>) {
+  ref.current?.focus();
+  ref.current?.blur();
+  // @ts-expect-error - still no raw-value accessor
+  ref.current?.getValue();
+}
+
+/* The legacy name carries the identical type — they are the same object. */
+export const stylesOnLegacyName = <CardNumberWidget styles={{input: {fontSize: 18}}} />;
+export const stylesViaNamespace = <HyperswitchVault.CardNumber styles={{input: {fontSize: 18}}} />;
+
+
+/* ══ Per-field style types and the ready-made form's grouped prop ═══════════════════════════════
+ *
+ * The expiry field renders NO accessory element: `CardFields.Expiry` never passes `iconRight`, so
+ * `CardInput` matches `NoIcon` and returns nothing. Publishing an `accessory` slot there would be a
+ * silent no-op, so the expiry type simply does not have it. These assertions are what keep the
+ * difference real rather than a comment.
+ */
+
+import type {
+  VaultCardNumberStyles,
+  VaultExpiryStyles,
+  VaultCVCStyles,
+  VaultFormFieldStyles,
+} from '../dist/types/public';
+
+/* Card number and CVC carry the full slot set. */
+export const numberHasAccessory: VaultCardNumberStyles = {accessory: {width: 40}};
+export const cvcHasAccessory: VaultCVCStyles = {accessory: {width: 40}};
+
+/* Expiry does not. */
+// @ts-expect-error - the expiry field renders no accessory element
+export const expiryHasNoAccessory: VaultExpiryStyles = {accessory: {width: 40}};
+
+// @ts-expect-error - and the field component rejects it too, not just the bare type
+export const expiryFieldRejectsAccessory = <CardExpiryField styles={{accessory: {width: 40}}} />;
+
+/* Every other slot IS available on expiry. */
+export const expiryHasEverythingElse: VaultExpiryStyles = {
+  root: {padding: 2},
+  container: {borderWidth: 1},
+  input: {fontSize: 14},
+  placeholder: {color: '#888888'},
+  label: {color: '#111111'},
+  error: {color: '#B91C1C'},
+};
+
+/* The grouped form prop routes each field to its own type. */
+export const formFieldStyles: VaultFormFieldStyles = {
+  cardNumber: {container: {borderColor: '#2563EB'}, input: {fontSize: 18}, accessory: {width: 44}},
+  expiry: {container: {flex: 1}},
+  cvc: {container: {flex: 1}, accessory: {width: 32}},
+};
+
+export const styledCardForm = (
+  <HyperswitchVault.CardForm session={session} environment="sandbox" fieldStyles={formFieldStyles} />
+);
+
+// @ts-expect-error - the expiry group inherits the narrower type
+export const formRejectsExpiryAccessory: VaultFormFieldStyles = {expiry: {accessory: {width: 1}}};
+
+// @ts-expect-error - the field group set is closed
+export const formRejectsUnknownField: VaultFormFieldStyles = {cardHolder: {root: {margin: 1}}};
+
+/* eslint-disable-next-line -- one line so the directive lands on the erroring expression */
+// @ts-expect-error - flat per-slot props (cardNumberContainerStyle, expiryInputStyle, ...) are deliberately not offered
+export const noFlatStyleProps = <HyperswitchVault.CardForm session={session} environment="sandbox" cardNumberContainerStyle={{margin: 1}} />;
+
+/* The provider API keeps working unchanged alongside the ready-made form. */
+export const styledViaProvider = (
+  <HyperswitchVaultFormProvider session={session} environment="sandbox">
+    <CardNumberField styles={{container: {borderWidth: 2}}} />
+    <CardExpiryField styles={{container: {borderWidth: 2}}} />
+    <CardCVCField styles={{container: {borderWidth: 2}, accessory: {width: 30}}} />
+  </HyperswitchVaultFormProvider>
+);
+
+/* The legacy alias names have the identical capability — they are the same component objects. */
+export const legacyAliasesTakeStyles = (
+  <HyperswitchVaultFormProvider session={session} environment="sandbox">
+    <CardNumberWidget styles={{container: {borderWidth: 2}}} />
+    <CardExpiryWidget styles={{container: {borderWidth: 2}}} />
+    <CardCVCWidget styles={{accessory: {width: 30}}} />
+  </HyperswitchVaultFormProvider>
+);
+
+/* ══ Merchant state events (ADR-0002 §4, §4a, §5) ═══════════════════════════════════════════════
+ *
+ * The TYPE half. The runtime half — that the emitted object really has this shape and really
+ * contains no card value — is example/__tests__/fieldEvents.test.tsx.
+ */
+
+import type {
+  CardBrand,
+  VaultField,
+  VaultFieldStatus,
+  VaultFieldErrorCode,
+  VaultFieldError,
+  VaultFieldState,
+  VaultCardNumberState,
+  VaultExpiryState,
+  VaultCVCState,
+  VaultSessionStatus,
+  VaultFormState,
+} from '../dist/types/public';
+
+/* ── 1. Each field callback receives its own narrowed state ────────────────── */
+
+export const numberEvents = (
+  <CardNumberField
+    onStateChange={(state) => {
+      const field: 'cardNumber' = state.field;
+      const status: VaultFieldStatus = state.status;
+      const focused: boolean = state.focused;
+      const brand: CardBrand = state.brand; // REQUIRED on the card number
+      const error: VaultFieldError | undefined = state.error;
+      return [field, status, focused, brand, error];
+    }}
+  />
+);
+
+export const expiryEvents = (
+  <CardExpiryField
+    onStateChange={(state) => {
+      const field: 'expiry' = state.field;
+      return [field, state.status, state.focused, state.error];
+    }}
+  />
+);
+
+export const cvcEvents = (
+  <CardCVCField
+    onStateChange={(state) => {
+      const field: 'cvc' = state.field;
+      return [field, state.status, state.focused, state.error];
+    }}
+  />
+);
+
+/* ── 2. Card-number-only members are absent from the other two ─────────────── */
+
+// @ts-expect-error - only the card number carries a brand
+export const noExpiryBrand = <CardExpiryField onStateChange={(s) => s.brand} />;
+
+// @ts-expect-error - only the card number carries a brand
+export const noCvcBrand = <CardCVCField onStateChange={(s) => s.brand} />;
+
+// @ts-expect-error - the expiry state is not the card-number state
+export const expiryFieldIsNotCardNumber: VaultExpiryState = {} as VaultCardNumberState;
+
+/* The narrowed records ARE assignable to the published union. */
+export const numberIsFieldState: VaultFieldState = {} as VaultCardNumberState;
+export const expiryIsFieldState: VaultFieldState = {} as VaultExpiryState;
+export const cvcIsFieldState: VaultFieldState = {} as VaultCVCState;
+
+/* And the union discriminates on `field`. */
+export const discriminates = (state: VaultFieldState): CardBrand =>
+  state.field === 'cardNumber' ? state.brand : 'unknown';
+
+/* ── 3. Literal unions, never broad strings ───────────────────────────────── */
+
+// @ts-expect-error - status is a closed union, not string
+export const statusIsNotString: VaultFieldStatus = 'nearly';
+// @ts-expect-error - the field name is a closed union
+export const fieldIsNotString: VaultField = 'cardHolder';
+// @ts-expect-error - error codes are a closed union
+export const codeIsNotString: VaultFieldErrorCode = 'expired_card';
+// @ts-expect-error - the brand union is lower-camel and closed
+export const brandIsNotString: CardBrand = 'Visa';
+// @ts-expect-error - session status is a two-member union
+export const sessionIsNotString: VaultSessionStatus = 'expired';
+
+/* A string variable must not be assignable to any of them. */
+declare const someString: string;
+// @ts-expect-error - broad string is not a VaultFieldStatus
+export const noWideningStatus: VaultFieldStatus = someString;
+// @ts-expect-error - broad string is not a CardBrand
+export const noWideningBrand: CardBrand = someString;
+
+/* All fourteen brands, spelled as the contract states. */
+export const everyBrand: CardBrand[] = [
+  'visa', 'mastercard', 'americanExpress', 'dinersClub', 'discover', 'jcb',
+  'cartesBancaires', 'interac', 'maestro', 'unionPay', 'rupay', 'sodexo', 'bajaj', 'unknown',
+];
+
+/* ── 4. The aggregate callback, on both integration styles ─────────────────── */
+
+const readFormState = (state: VaultFormState) => {
+  const fieldsReady: boolean = state.fieldsReady;
+  const sessionStatus: VaultSessionStatus = state.sessionStatus;
+  const complete: boolean = state.complete;
+  const submitting: boolean = state.submitting;
+  const canSubmit: boolean = state.canSubmit;
+  const brand: CardBrand = state.brand;
+  const number: VaultCardNumberState = state.fields.cardNumber;
+  const expiry: VaultExpiryState = state.fields.expiry;
+  const cvc: VaultCVCState = state.fields.cvc;
+  return [fieldsReady, sessionStatus, complete, submitting, canSubmit, brand, number, expiry, cvc];
+};
+
+export const readyMadeFormEvents = (
+  <HyperswitchVault.CardForm session={session} environment="sandbox" onFormStateChange={readFormState} />
+);
+
+export const providerFormEvents = (
+  <HyperswitchVaultFormProvider session={session} environment="sandbox" onFormStateChange={readFormState}>
+    <CardNumberField />
+    <CardExpiryField />
+    <CardCVCField />
+  </HyperswitchVaultFormProvider>
+);
+
+/* The pre-existing `onStateChange` on the form components keeps its own payload — not a rename. */
+export const legacyFormStateStillWorks = (
+  <HyperswitchVault.CardForm
+    session={session}
+    environment="sandbox"
+    onStateChange={(s: CardFormState) => s.complete}
+    onFormStateChange={readFormState}
+  />
+);
+
+/* ── 5. Forbidden properties are compile errors, at every depth ────────────── */
+
+// @ts-expect-error - no raw value
+export const noValue = <CardNumberField onStateChange={(s) => (s as VaultCardNumberState).value} />;
+// @ts-expect-error - no formatted value
+export const noFormatted = <CardNumberField onStateChange={(s) => s.formattedValue} />;
+// @ts-expect-error - no length
+export const noLength = <CardNumberField onStateChange={(s) => s.length} />;
+// @ts-expect-error - no BIN
+export const noBin = <CardNumberField onStateChange={(s) => s.bin} />;
+// @ts-expect-error - no last four
+export const noLast4 = <CardNumberField onStateChange={(s) => s.last4} />;
+// @ts-expect-error - no expiry month
+export const noExpiryMonth = <CardExpiryField onStateChange={(s) => s.expiryMonth} />;
+// @ts-expect-error - no CVC value
+export const noCvcValue = <CardCVCField onStateChange={(s) => s.cvc} />;
+// @ts-expect-error - no native event
+export const noNativeEvent = <CardNumberField onStateChange={(s) => s.nativeEvent} />;
+// @ts-expect-error - no target
+export const noTarget = <CardNumberField onStateChange={(s) => s.target} />;
+// @ts-expect-error - no token before submit resolves
+export const noToken = <HyperswitchVault.CardForm session={session} environment="sandbox" onFormStateChange={(s) => s.token} />;
+// @ts-expect-error - no authorization
+export const noAuth = <HyperswitchVault.CardForm session={session} environment="sandbox" onFormStateChange={(s) => s.authorization} />;
+// @ts-expect-error - no session id
+export const noSessionId = <HyperswitchVault.CardForm session={session} environment="sandbox" onFormStateChange={(s) => s.sessionId} />;
+// @ts-expect-error - the aggregate carries no raw values either
+export const noAggregateValue = <HyperswitchVault.CardForm session={session} environment="sandbox" onFormStateChange={(s) => s.fields.cardNumber.value} />;
+
+/* ── 6. Aliases and namespace carry the identical callback types ───────────── */
+
+export const eventsOnLegacyName = <CardNumberWidget onStateChange={(s) => s.brand} />;
+export const eventsViaNamespace = <HyperswitchVault.CardNumber onStateChange={(s) => s.brand} />;
+export const eventsViaNamespaceExpiry = <HyperswitchVault.Expiry onStateChange={(s) => s.field} />;
+export const eventsViaNamespaceCvc = <HyperswitchVault.CVC onStateChange={(s) => s.field} />;
+
+/* Styling and events compose; neither disturbs the other. */
+export const stylesAndEvents = (
+  <CardNumberField
+    styles={{container: {borderWidth: 2}, placeholder: {fontSize: 18}}}
+    onStateChange={(s) => s.status}
+  />
+);

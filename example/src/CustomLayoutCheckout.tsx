@@ -155,19 +155,19 @@ export function CustomLayoutCheckout() {
               onStateChange={setCardState}>
 
 
-              
+              {/* <Section title="Security code" sdk> */}
+                <CardCVCWidget />
+              {/* </Section> */}
 
               {/* <Section title="Card number" sdk> */}
                 <CardNumberWidget ref={numberRef} />
               {/* </Section> */}
 
               {/* <Section title="Expiry" sdk> */}
-                <CardExpiryWidget />
+                <CardExpiryWidget styles={{}}/>
               {/* </Section> */}
 
-                 {/* <Section title="Security code" sdk> */}
-                <CardCVCWidget />
-              {/* </Section> */}
+
 
              
 

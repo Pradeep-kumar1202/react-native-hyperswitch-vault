@@ -28,6 +28,7 @@ let useHost = (
   ~disabled: bool,
   ~accessible: option<bool>,
   ~onStateChange: option<VaultFormOptions.cardFormState => unit>,
+  ~onFormStateChange: option<VaultPublicState.vaultFormState => unit>,
 ): host => {
   let sessionState = React.useMemo1(() => session->VaultFormCoordinator.readSession, [session])
   let theme = React.useMemo1(() => appearance->VaultFormOptions.buildTheme, [appearance])
@@ -101,6 +102,37 @@ let useHost = (
     ~markSubmitAttempted=controller.markSubmitAttempted,
     ~presenceGate,
     ~clearLocal=controller.reset,
+  )
+
+  let publicFields = controller.publicFields
+  let isSubmitting = machinery.isSubmitting
+  let sessionStatus: VaultPublicState.vaultSessionStatus = switch sessionState {
+  | Ready(_) => #valid
+  | Unusable(_) => #invalid
+  }
+
+  /*
+   * Aggregate merchant form state (ADR-0002 §5). `fieldsReady` is derived from the SAME registry
+   * counts `presenceGate` uses to refuse a submit, so a merchant's disabled Pay button and the
+   * library's own gate can never disagree — there is deliberately no second definition of
+   * readiness.
+   *
+   * The snapshot is built inside the emitter's effect rather than during render: each field
+   * registers itself in a child effect, and child effects run before the parent's, so a render-time
+   * read of the registry would be one commit stale and the first snapshot would claim `ready:
+   * false` for a form that is already complete.
+   */
+  VaultStateEmitter.use(
+    ~build=() =>
+      VaultPublicState.formStateOf(
+        ~fieldsReady=requiredKinds->Array.every(kind => countOf(kind) === 1),
+        ~sessionStatus,
+        ~submitting=isSubmitting,
+        ~brand=values.brand,
+        ~fields=publicFields,
+      ),
+    ~equal=VaultPublicState.formEq,
+    ~notify=onFormStateChange,
   )
 
   {
