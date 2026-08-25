@@ -7,6 +7,15 @@ bundles and the packed tarball — not by trusting earlier reports.
 **Status of this document:** investigation and documentation only. No production code, API name or
 defect was changed while producing it.
 
+> **Superseded in part, 2026-08-24.** This review was written before `react-final-form` was removed
+> from the library (commit `ae64e1a`) and before the widget API shipped. Its react-final-form
+> sections — including the optional RFF/`final-form` peer dependencies and "the root entry ships
+> react-final-form bundled inside it" — no longer describe the package: there are **no runtime
+> dependencies**, no RFF peer, and no RFF import in `src/**` or `dist/**`. It also predates
+> `EmbeddedCardElement` being replaced by `CardNumberField` / `CardExpiryField` / `CardCvcField`.
+> For the current surface see **[public-api-baseline.md](public-api-baseline.md)**. Everything else
+> here is kept as the historical record it was written to be.
+
 **How to read the evidence markers**
 
 | Marker | Meaning |

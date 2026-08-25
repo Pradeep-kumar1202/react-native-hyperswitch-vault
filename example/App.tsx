@@ -1,7 +1,9 @@
 /**
  * Example app shell.
  *
- * Three sections, one tab bar:
+ * Four sections, one tab bar:
+ *   - Start     — the shortest complete integration: session, ready-made form, and a merchant Pay
+ *                 button driven by `canSubmit`. Read this one first.
  *   - Store     — the ready-made <HyperswitchVaultForm/> inside a normal checkout sheet.
  *   - Custom    — <HyperswitchVaultFormProvider/> with the three field widgets placed wherever the
  *                 merchant's own layout wants them.
@@ -12,25 +14,29 @@
  */
 import React, {useState} from 'react';
 import {Pressable, SafeAreaView, StyleSheet, Text, View} from 'react-native';
+import {QuickStartCheckout} from './src/QuickStartCheckout';
 import {MerchantCheckout} from './src/MerchantCheckout';
 import {DeveloperPanel} from './src/DeveloperPanel';
 import {CustomLayoutCheckout} from './src/CustomLayoutCheckout';
 
-type Tab = 'store' | 'custom' | 'dev';
+type Tab = 'start' | 'store' | 'custom' | 'dev';
 
 const TABS: {key: Tab; icon: string; label: string}[] = [
+  {key: 'start', icon: '⚡', label: 'Start'},
   {key: 'store', icon: '🛍', label: 'Store'},
   {key: 'custom', icon: '🧩', label: 'Custom layout'},
   {key: 'dev', icon: '🛠', label: 'Developer'},
 ];
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('store');
+  const [tab, setTab] = useState<Tab>('start');
 
   return (
     <View style={styles.root}>
       <View style={styles.screen}>
-        {tab === 'store' ? (
+        {tab === 'start' ? (
+          <QuickStartCheckout />
+        ) : tab === 'store' ? (
           <MerchantCheckout />
         ) : tab === 'custom' ? (
           <CustomLayoutCheckout />

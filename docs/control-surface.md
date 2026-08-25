@@ -71,7 +71,8 @@ You also decide:
 
 ## Layer 2 — Appearance
 
-Ten optional tokens. Pass none and you get a neutral default; pass two and only those change.
+Sixteen optional tokens. Pass none and you get a neutral default; pass two and only those change.
+The ten most commonly used:
 
 | Token | Default | What it actually affects |
 |---|---|---|
@@ -98,9 +99,12 @@ const appearance = {
 };
 ```
 
-**Fixed, not exposed:** the 12pt gap between fields in split layout, font scale, placeholder size
-adjustment, and any shadow. If a design needs those, it needs a change to the library, not a
-workaround.
+Six further tokens tune spacing and typography: `gap` (the 12pt gap between fields in split layout),
+`fontScale`, `placeholderTextSizeAdjust`, `errorTextSizeAdjust`, `errorMessageSpacing` and
+`brandIconMode` (`standard` | `animated` | `hidden` | `hideGeneric`).
+
+**Fixed, not exposed:** any shadow, and per-field styling of any kind — `appearance` is form-wide.
+If a design needs those, it needs a change to the library, not a workaround.
 
 ---
 
@@ -119,13 +123,14 @@ sheet.
 
 ---
 
-## Decided, not yet shipped — custom layout via HyperswitchVaultFormProvider
+## Shipped — custom layout via HyperswitchVaultFormProvider
 
-> **Status: accepted in [ADR-0001](adr/0001-widget-api-shape.md), not implemented.** Everything
-> else in this document describes shipped source; this section describes a committed contract so
-> you can plan against it.
+> **Status: accepted in [ADR-0001](adr/0001-widget-api-shape.md) and implemented.**
+> `HyperswitchVaultFormProvider`, `CardNumberWidget`, `CardExpiryWidget` and `CardCVCWidget` are
+> exported from the root entry today (`src/public.ts`, `dist/types/public.d.ts`). An earlier
+> revision of this document described them as not yet built; that is no longer true.
 
-A second hosting component will let you arrange the three fields yourself:
+A second hosting component lets you arrange the three fields yourself:
 
 ```tsx
 <HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
@@ -178,7 +183,7 @@ put in any state container.
 
 | Method | Use it for |
 |---|---|
-| `submit()` | the only required call; returns a typed result, never throws |
+| `submit()` | the only required call; every documented operational outcome comes back as a typed result rather than an exception |
 | `reset()` | "use a different card", clearing after an error, resetting a reusable sheet |
 | `focus(field)` | deep links, "edit card", returning focus after your own validation step |
 
@@ -232,14 +237,16 @@ forms go wrong.
 
 ## Not currently configurable — know before you promise
 
-Honest list. None of these are hard to add; none are exposed today.
+Honest list. None of these are hard to add; none are available today.
 
-1. **Field labels and validation messages are English only.** The standalone form ships fixed labels
-   (`Card number`, `MM / YY`, `CVC`) and validation strings from sdk-utils' default locale. There is
-   no `labels` or `locale` prop. **A non-English merchant cannot localise the fields.** This is the
-   single biggest gap for international selling. (The `/embedded` path does not have this problem —
-   client-core passes resolved locale strings in.)
-2. **RTL** is wired through the same labels structure and is likewise not exposed.
+1. **A locale *identifier* is not accepted.** Labels and validation messages are localisable — the
+   `localisation` prop takes `labels` (six placeholder / floating-label strings),
+   `validationMessages` (six strings) and `isRtl`, each merged per field over the English defaults —
+   but you supply the strings yourself. There is no `locale: 'fr-FR'` prop that would resolve them
+   for you. (An earlier revision of this document said the fields could not be localised at all;
+   that is no longer true.)
+2. **Per-field style props do not exist.** Appearance is form-wide; a widget takes no `style`,
+   `containerStyle` or `textStyle`.
 3. **Focus auto-advance cannot be turned off.**
 4. **Field-level error placement** is a consequence of `splitCardFields`, not an independent choice.
 5. **Card scanning** and the **co-badged network picker** are excluded from the standalone form.
@@ -276,7 +283,8 @@ keeping secret keys off the device.
 | Native modules | 0 |
 | `pod install` required | no |
 | Codegen | no |
-| Peers | `react`, `react-native` only (react-final-form is bundled in) |
+| Peers | `react` (>=19 <20), `react-native` (>=0.79 <0.80) — and nothing else |
+| Runtime dependencies | none; the package has no form library at all |
 
 ---
 
@@ -284,13 +292,13 @@ keeping secret keys off the device.
 
 Two entry points, different jobs.
 
-| | root entry (`HyperswitchVaultForm`) | `/embedded` (`EmbeddedCardElement`) |
+| | root entry (`HyperswitchVaultForm`) | `/embedded` (`CardNumberField`, `CardExpiryField`, `CardCvcField`) |
 |---|---|---|
-| Owns the form | yes | no — binds into the host's react-final-form |
+| Owns the field state | yes — an internal reducer | no — the host passes `value` and `onChange` in |
 | Intended consumer | any merchant app | hyperswitch-client-core |
-| Labels / locale | fixed English | supplied by the host |
+| Labels / locale | English defaults, overridable via `localisation` | supplied by the host, required |
 | Scan card, co-badge picker | excluded | injected by the host |
-| react-final-form | bundled in | must be the host's instance |
+| Form library | none — neither entry has one | the host's own (client-core owns react-final-form) |
 
 If you are already rendering client-core's payment sheet, you do not need this package. It exists
 for merchants who want the card-saving step inside their own UI.

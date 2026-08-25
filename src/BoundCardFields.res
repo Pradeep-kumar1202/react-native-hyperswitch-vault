@@ -1,7 +1,12 @@
 
 open ReactNative
 
-let useBinding = (ctx: VaultWidgetContext.contextValue, kind: VaultCardController.widgetKind) => {
+let useBinding = (
+  ctx: VaultWidgetContext.contextValue,
+  kind: VaultCardController.widgetKind,
+  /* Merchant `styles.error`, forwarded to the field's own error message. */
+  ~errorStyle: option<CardFieldStyles.textStyleProp>=?,
+) => {
   let register = ctx.controller.register
   React.useEffect0(() => Some(register(kind)))
   message =>
@@ -10,6 +15,7 @@ let useBinding = (ctx: VaultWidgetContext.contextValue, kind: VaultCardControlle
       theme=ctx.theme
       errorFontSize=ctx.errorFontSize
       errorSpacing=ctx.errorSpacing
+      ?errorStyle
     />
 }
 
@@ -23,10 +29,17 @@ module Number = {
     ~borderBottomWidth: option<float>=?,
     ~borderBottomLeftRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let defaultRenderError = useBinding(ctx, VaultCardController.CardNumberKind)
+    let defaultRenderError = useBinding(
+      ctx,
+      VaultCardController.CardNumberKind,
+      ~errorStyle=?styles->CardFieldStyles.errorOf,
+    )
     let controller = ctx.controller
     <CardFields.Number
+      ?styles
       value=controller.values.cardNumber
       onChange=controller.onNumberChange
       currentBrand=controller.values.brand
@@ -59,10 +72,17 @@ module Expiry = {
     ~borderTopLeftRadius: option<float>=?,
     ~borderTopRightRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    /* Widened from `expiryStyles` by the caller; `accessory` is absent for this field. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let defaultRenderError = useBinding(ctx, VaultCardController.ExpiryKind)
+    let defaultRenderError = useBinding(
+      ctx,
+      VaultCardController.ExpiryKind,
+      ~errorStyle=?styles->CardFieldStyles.errorOf,
+    )
     let controller = ctx.controller
     <CardFields.Expiry
+      ?styles
       value=controller.values.expiryDisplay
       onChange=controller.onExpiryChange
       onFocus={() => controller.onFocus(#expiry)}
@@ -96,8 +116,14 @@ module Cvc = {
     ~borderTopLeftRadius: option<float>=?,
     ~borderTopRightRadius: option<float>=?,
     ~borderBottomLeftRadius: option<float>=?,
+    /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let defaultRenderError = useBinding(ctx, VaultCardController.CvcKind)
+    let defaultRenderError = useBinding(
+      ctx,
+      VaultCardController.CvcKind,
+      ~errorStyle=?styles->CardFieldStyles.errorOf,
+    )
     let controller = ctx.controller
     let borderTopWidth = borderTopWidth->Option.getOr(ctx.theme.borderWidth)
     let borderLeftWidth = borderLeftWidth->Option.getOr(ctx.theme.borderWidth)
@@ -105,6 +131,7 @@ module Cvc = {
     let borderTopRightRadius = borderTopRightRadius->Option.getOr(ctx.theme.borderRadius)
     let borderBottomLeftRadius = borderBottomLeftRadius->Option.getOr(ctx.theme.borderRadius)
     <CardFields.Cvc
+      ?styles
       value=controller.values.cvc
       onChange=controller.onCvcChange
       brand=controller.values.brand

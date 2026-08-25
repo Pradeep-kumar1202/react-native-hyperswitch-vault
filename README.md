@@ -61,7 +61,7 @@ security rules — all verified against a live sandbox.
 ## Custom layout
 
 When the built-in arrangement is not enough, the same package exposes a coordinator plus three
-field widgets, so the layout is yours while validation, formatting, focus behaviour and the vault
+card fields, so the layout is yours while validation, formatting, focus behaviour and the vault
 call stay identical to the ready-made form:
 
 ```tsx
@@ -69,14 +69,14 @@ import {useRef} from 'react';
 import {View} from 'react-native';
 import {
   HyperswitchVaultFormProvider,
-  CardNumberWidget,
-  CardExpiryWidget,
-  CardCVCWidget,
-  type HyperswitchVaultFormHandle,
+  CardNumberField,
+  CardExpiryField,
+  CardCVCField,
+  type VaultFormHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
 function Checkout({session}) {
-  const formRef = useRef<HyperswitchVaultFormHandle>(null);
+  const formRef = useRef<VaultFormHandle>(null);
 
   const save = async () => {
     const result = await formRef.current?.submit();
@@ -85,14 +85,14 @@ function Checkout({session}) {
 
   return (
     <HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
-      <CardNumberWidget />
+      <CardNumberField />
 
       <View style={{flexDirection: 'row', gap: 12}}>
         <View style={{flex: 1}}>
-          <CardExpiryWidget />
+          <CardExpiryField />
         </View>
         <View style={{flex: 1}}>
-          <CardCVCWidget />
+          <CardCVCField />
         </View>
       </View>
     </HyperswitchVaultFormProvider>
@@ -102,26 +102,73 @@ function Checkout({session}) {
 
 The rules:
 
-- **All three widgets are mandatory.** The submit contract needs the card number, expiry and CVC,
-  so `submit()` returns `not_ready` — naming the widget, with no network request — until exactly
-  one of each is mounted. Rendering a widget twice is refused the same way.
-- **Widgets can sit anywhere under one provider** — nested in your own Views, fragments, rows,
+- **All three fields are mandatory.** The submit contract needs the card number, expiry and CVC,
+  so `submit()` returns `not_ready` — naming the field, with no network request — until exactly
+  one of each is mounted. Rendering a field twice is refused the same way.
+- **Fields can sit anywhere under one provider** — nested in your own Views, fragments, rows,
   whatever your layout needs. Focus auto-advance stays semantic (number → expiry → CVC) no matter
   where you place them.
-- **`appearance` and `localisation` live on the provider** and flow to every widget. There is no
-  `splitCardFields` here — layout is yours — and widgets take no style props of their own in this
+- **`appearance` and `localisation` live on the provider** and flow to every field. There is no
+  `splitCardFields` here — layout is yours — and fields take no style props of their own in this
   release.
 - **`onStateChange` on the provider** reports the same safe aggregate as the ready-made form
   (`complete`, per-field validity, detected `brand` — never a card value). `complete` also
-  requires all three widgets to be mounted, so a hidden field can never look valid.
-- A widget rendered outside its provider throws immediately with an actionable message.
-- Each widget shows its own validation error directly beneath itself, with the form's error
+  requires all three fields to be mounted, so a hidden field can never look valid.
+- A field rendered outside its provider throws immediately with an actionable message.
+- Each field shows its own validation error directly beneath itself, with the form's error
   styling and your `localisation` strings.
-- The provider ref exposes the same handle as the form (`submit`/`reset`/`focus`), and each widget
+- The provider ref exposes the same handle as the form (`submit`/`reset`/`focus`), and each field
   accepts a ref exposing `focus()`/`blur()` only.
 
-Per-widget state events and per-widget style overrides are planned future work, deliberately not
+Per-field state events and per-field style overrides are planned future work, deliberately not
 in this release.
+
+### Naming — two spellings, one component
+
+`CardNumberField` / `CardExpiryField` / `CardCVCField` are the canonical names.
+`CardNumberWidget` / `CardExpiryWidget` / `CardCVCWidget` are the original names and remain fully
+supported — they are **the same objects**, not wrappers, so `CardNumberField === CardNumberWidget`
+holds and you can mix the two spellings in one layout. Nothing is deprecated.
+
+The handle types follow the same rule: `VaultFieldHandle` is `WidgetHandle`, and `VaultFormHandle`
+is `HyperswitchVaultFormHandle`.
+
+### Optional: the `HyperswitchVault` namespace
+
+If you prefer one import, the package also exports a convenience namespace over the same five
+components:
+
+```tsx
+import {HyperswitchVault} from '@juspay-tech/react-native-hyperswitch-vault';
+
+<HyperswitchVault.CardForm ref={formRef} session={session} environment="sandbox" />;
+```
+
+```tsx
+<HyperswitchVault.Form ref={formRef} session={session} environment="sandbox">
+  <HyperswitchVault.CardNumber />
+
+  <View style={{flexDirection: 'row', gap: 12}}>
+    <View style={{flex: 1}}>
+      <HyperswitchVault.Expiry />
+    </View>
+    <View style={{flex: 1}}>
+      <HyperswitchVault.CVC />
+    </View>
+  </View>
+</HyperswitchVault.Form>;
+```
+
+| Namespace member | Same object as |
+|---|---|
+| `HyperswitchVault.CardForm` | `HyperswitchVaultForm` |
+| `HyperswitchVault.Form` | `HyperswitchVaultFormProvider` |
+| `HyperswitchVault.CardNumber` | `CardNumberField` (= `CardNumberWidget`) |
+| `HyperswitchVault.Expiry` | `CardExpiryField` (= `CardExpiryWidget`) |
+| `HyperswitchVault.CVC` | `CardCVCField` (= `CardCVCWidget`) |
+
+The named exports remain first-class — prefer them if your bundler tree-shakes, since importing the
+namespace pulls in all five components. There is no `HyperswitchVault.useForm` yet.
 
 ## API
 
@@ -132,11 +179,13 @@ in this release.
 | `session` | `MerchantSession` | yes | the session response from your backend, passed through untouched. Only `vault_details.vault_type` and `vault_details.vault_data.sdk_authorization` are read; any other field is ignored. |
 | `environment` | `"production" \| "sandbox" \| "integration"` | yes | selects the vault host |
 | `appearance` | `VaultFormAppearance` | no | colours, radius, border width, font, input height — every field optional |
+| `fieldStyles` | `VaultFormFieldStyles` | no | per-field React Native styles, grouped as `{cardNumber, expiry, cvc}` — see [Styling](#styling) |
 | `disabled` | `boolean` | no | makes the three inputs genuinely non-interactive (not merely dimmed) |
 | `splitCardFields` | `boolean` | no | `false` (default) renders one bordered block with expiry and CVC sharing a row; `true` renders three separately bordered fields, each error under its own field |
 | `localisation` | `VaultFormLocalisation` | no | translated labels, translated validation messages and `isRtl` — every field optional, merged over the English defaults |
 | `accessible` | `boolean` | no | forwarded to each of the three inputs individually |
-| `onStateChange` | `(state: CardFormState) => void` | no | validity only — never a card value |
+| `onStateChange` | `(state: CardFormState) => void` | no | validity only — never a card value. Kept permanently; not renamed |
+| `onFormStateChange` | `(state: VaultFormState) => void` | no | the fuller state snapshot — see [State events](#state-events) |
 
 `CardFormState` is `{ complete, cardNumberValid, expiryValid, cvcValid, brand }`. It carries no card
 data at all, not even a masked BIN or last4.
@@ -149,6 +198,322 @@ back to a neutral card placeholder, so the field is never blank.
 For what all of this adds up to — everything a merchant can shape, what is fixed on purpose, and
 what is not configurable yet — see **[docs/control-surface.md](docs/control-surface.md)**.
 
+The exact published surface, export by export, is recorded in
+**[docs/public-api-baseline.md](docs/public-api-baseline.md)**. The merchant API contract is
+**[ADR-0002](docs/adr/0002-merchant-public-api-contract.md)**; its implementation-status table says
+which sections exist today.
+
+### Styling
+
+Two layers, and you can use either or both.
+
+**`appearance`** is semantic and form-wide — `primaryColor`, `borderRadius`, `fontFamily` and so on.
+Set it and the whole form stays coherent, including the focus and error states the library computes
+for you. Start here.
+
+**`fieldStyles`** is per-field React Native styles, for when a specific element needs to match a
+design exactly. Both the ready-made form and the custom layout take the same style records.
+
+#### Ready-made form
+
+One grouped prop. There are deliberately no flat props like `cardNumberContainerStyle`.
+
+```tsx
+<HyperswitchVault.CardForm
+  session={session}
+  environment="sandbox"
+  fieldStyles={{
+    cardNumber: {
+      container: {borderColor: '#2563EB', borderWidth: 2},
+      input: {fontSize: 18},
+    },
+    expiry: {container: {flex: 1}},
+    cvc: {container: {flex: 1}},
+  }}
+/>
+```
+
+#### Custom layout
+
+Each field takes its own `styles` prop.
+
+```tsx
+<HyperswitchVaultFormProvider session={session} environment="sandbox">
+  <CardNumberField styles={{container: {borderColor: '#2563EB'}, input: {fontSize: 18}}} />
+  <CardExpiryField styles={{container: {borderColor: '#2563EB'}}} />
+  <CardCVCField styles={{container: {borderColor: '#2563EB'}, accessory: {width: 32}}} />
+</HyperswitchVaultFormProvider>
+```
+
+#### Supported slots
+
+Every slot is optional and takes a real React Native `StyleProp` — a plain object, a
+`StyleSheet.create` entry, an array, or a nested array with `null` / `undefined` / `false` in it.
+
+| Slot | Type | The element it styles |
+|---|---|---|
+| `root` | `StyleProp<ViewStyle>` | the field's outermost wrapper, which contains the input box **and** its error message |
+| `container` | `StyleProp<ViewStyle>` | the bordered input box |
+| `input` | `StyleProp<TextStyle>` | the `TextInput` itself |
+| `placeholder` | `StyleProp<TextStyle>` | the label text while the field is empty and unfocused |
+| `label` | `StyleProp<TextStyle>` | the same text once it floats (focused, or filled) |
+| `error` | `StyleProp<TextStyle>` | the validation message |
+| `accessory` | `StyleProp<ViewStyle>` | the icon container to the right of the input |
+
+**The expiry field has no `accessory` slot**, because it renders no icon. Rather than accept the
+property and silently do nothing with it, `VaultExpiryStyles` simply does not have it, and passing
+one is a compile error.
+
+`helperText` is not published: no helper-text element is rendered anywhere yet, and a slot that does
+nothing is worse than no slot.
+
+#### Precedence
+
+```text
+library defaults  →  appearance (form-wide)  →  fieldStyles (per field)
+```
+
+Later wins on conflicting properties, and only on those: set `container.borderColor` and the
+library's border *width*, radius and focus behaviour are untouched. Pass no styling props at all and
+the UI is exactly what it was before this feature existed.
+
+In the ready-made form the library owns the joined layout — the halved shared borders and squared
+inner corners of the fused block, the row direction under RTL, and the gaps. A merchant style can
+override any of that on purpose; nothing is overridden by accident.
+
+Error placement follows the layout: in the **split** layout each field renders its own message with
+its own `error` slot; in the **fused** layout the three fields share one message line, styled with
+the `error` slot of the field the message belongs to (a network error uses the card number's).
+
+#### `placeholder.fontSize` and `label.fontSize` are animation endpoints
+
+The label animates between two sizes as it floats, and `fontSize` is the only animated property on
+that element. So the two slots interpret it specially:
+
+```tsx
+styles={{
+  placeholder: {fontSize: 18},  // resting size
+  label: {fontSize: 12},        // floating size
+}}
+```
+
+Set one and the label still animates — to the library's default for the other end. Set neither and
+the default animation is unchanged. Every other property in those slots behaves like an ordinary
+style.
+
+A static `fontSize` is removed before the style reaches the animated element, because leaving it
+there would silently stop the animation. Values that cannot be an endpoint — a string, `NaN`,
+infinity, a negative number, or `0` — are ignored, and the library's default is used instead.
+
+#### What you cannot style
+
+The fields take no native `TextInput` props and no bare `style` prop. These are all compile errors,
+and none of them is spread onto the input at runtime:
+
+```text
+value  defaultValue  onChange  onChangeText  secureTextEntry
+maxLength  keyboardType  autoCorrect  textContentType  autoComplete
+```
+
+They are library-owned because they carry the card data or the input behaviour the library must
+guarantee.
+
+**Styling never exposes a card value.** Style slots are write-only presentation: nothing here is
+readable back, no slot is passed a card number, expiry or CVC, and the field ref stays exactly
+`focus()` and `blur()`. There is no styling route to the PAN, the expiry, the CVC, the
+`sdk_authorization` or any session identifier.
+
+### State events
+
+Two callbacks, both carrying **state snapshots** — not native input events, and never a card value.
+
+#### 1. A Pay button you own
+
+`canSubmit` is the library's own gate, so your button and `submit()` can never disagree.
+
+```tsx
+const [state, setState] = useState<VaultFormState>();
+
+<HyperswitchVault.CardForm
+  ref={formRef}
+  session={session}
+  environment="sandbox"
+  onFormStateChange={setState}
+/>
+
+<Button
+  title={state?.submitting ? 'Paying…' : 'Pay'}
+  disabled={!state?.canSubmit}
+  onPress={() => formRef.current?.submit()}
+/>
+```
+
+The same prop works on `HyperswitchVaultFormProvider`, so a custom layout gets identical semantics
+without switching to the ready-made form.
+
+**Bind your button to `canSubmit` and nothing else** — it consults every gate. The other members
+exist so you can explain to the customer *why* it is false:
+
+```tsx
+if (state?.sessionStatus === 'invalid') return <SessionProblem onRetry={refetchSession} />;
+if (!state?.fieldsReady) return <SetupError />;   // a field is missing or mounted twice
+return <PayButton disabled={!state.canSubmit} />;
+```
+
+| Property | Meaning |
+|---|---|
+| `fieldsReady` | exactly one of each field is mounted — **registration only**, nothing about the session |
+| `sessionStatus` | `'valid'` / `'invalid'` — whether the session can be used at all |
+| `complete` | all three fields are `'complete'` |
+| `submitting` | a confirmation is in flight |
+| `canSubmit` | `fieldsReady && sessionStatus === 'valid' && complete && !submitting` |
+| `brand` | the detected scheme, or `'unknown'` |
+| `fields` | the three field states below |
+
+#### 2. Individual field state
+
+```tsx
+<CardNumberField onStateChange={(s) => setNumberState(s)} />
+<CardExpiryField onStateChange={(s) => setExpiryState(s)} />
+<CardCVCField onStateChange={(s) => setCvcState(s)} />
+```
+
+Each callback receives only its own field, narrowed to that field's shape:
+
+```ts
+type VaultFieldStatus = 'empty' | 'incomplete' | 'complete';
+
+type VaultCardNumberState = {
+  field: 'cardNumber';
+  status: VaultFieldStatus;
+  focused: boolean;
+  brand: CardBrand;                 // card number only
+  error?: {code: VaultFieldErrorCode; message: string};
+};
+```
+
+`VaultExpiryState` and `VaultCVCState` are the same without `brand` — the library never detects a
+scheme from those fields, so there is no property to read.
+
+| Status | Means |
+|---|---|
+| `empty` | nothing entered |
+| `incomplete` | something entered, but the validator does not accept it yet |
+| `complete` | the validator accepts it |
+
+There is deliberately no `invalid` status. Derive it from `error !== undefined` — the same condition
+the library uses to paint the field, so your chrome and ours cannot disagree.
+
+#### 3. The detected brand
+
+```tsx
+<CardNumberField onStateChange={(s) => setBrand(s.brand)} />
+```
+
+`CardBrand` is a closed union of all fourteen values: `'visa'`, `'mastercard'`, `'americanExpress'`,
+`'dinersClub'`, `'discover'`, `'jcb'`, `'cartesBancaires'`, `'interac'`, `'maestro'`, `'unionPay'`,
+`'rupay'`, `'sodexo'`, `'bajaj'`, `'unknown'`. Every scheme the detector recognises is reported, even
+the five that have no dedicated artwork yet.
+
+#### 4. Safe validation errors
+
+```tsx
+<CardExpiryField
+  onStateChange={(s) =>
+    setHint(s.error ? myCopy[s.error.code] ?? s.error.message : undefined)
+  }
+/>
+```
+
+`code` is stable and locale-independent — one of `'required'`, `'invalid_card_number'`,
+`'invalid_expiry'`, `'invalid_cvc'` — so you can substitute your own copy. `message` is the resolved,
+localised string the library is already showing.
+
+**`error` appears exactly when the customer can see it**, never earlier: not before the field is
+touched, and not while it is still focused and half-typed. It appears after blur, or after a
+`submit()` attempt, and clears as soon as the input is corrected or `reset()` is called.
+
+#### When callbacks fire
+
+One snapshot after the fields register, then one whenever the public state actually changes,
+compared structurally. Passing a new inline arrow function on every render emits nothing. Identical
+snapshots are not repeated, and nothing is emitted after unmount.
+
+#### What these callbacks never contain
+
+**No card values, at any depth.** No PAN, formatted PAN, input length, BIN or last four, no expiry
+month or year, no CVC or its length. No `sdk_authorization`, no session identifier, and **no token**
+— `submit()` remains the only route to the token, and it appears only in its resolved result.
+
+`status: 'complete'` tells you the field is done; it does not tell you what was typed. And these are
+state snapshots, not native input events: there is no `nativeEvent`, no `target`, and no React ref.
+
+### Handling the result
+
+`submit()` returns one of three shapes, and the third one is the important one.
+
+```tsx
+const result = await formRef.current?.submit();
+
+if (result?.status === 'success') {
+  await sendTokenToYourBackend(result.token);   // never store or display it in the app
+} else if (result?.error.code === 'unknown_outcome') {
+  // The request may or may not have reached the vault. DO NOT silently retry.
+  showSupportPrompt();
+} else if (result) {
+  showMessage(result.error.message);            // a definite failure — retrying is safe
+}
+```
+
+| Situation | `status` | Retry? |
+|---|---|---|
+| Card saved | `success` | — |
+| The customer's input was rejected | `validation_error` | yes, after they correct it |
+| A field is missing or mounted twice | `not_ready` | fix the integration, not the retry |
+| The session cannot be used | `error`, code `invalid_session` | get a new session first |
+| The vault returned a definite failure | `error`, code `server_error` | yes |
+| **The outcome could not be determined** | `error`, code **`unknown_outcome`** | **no — ask your backend what happened first** |
+
+An unknown outcome is not a failure. A network drop or a timeout leaves the vault's own state
+unknown to the app, so a blind retry risks saving the card twice. Reconcile server-side.
+
+### Replacing the session
+
+Passing a different `session` prop swaps the credential and nothing else:
+
+- **anything the customer has typed is preserved** — the session is a credential, not form state;
+- `sessionStatus` follows the new session immediately;
+- passing a structurally identical session as a new object emits nothing and disturbs nothing;
+- a request already in flight is not re-attributed to the new session.
+
+There is **no session-refresh mechanism** in this package. When a session expires, your backend
+creates a new one and you pass it in. `sessionStatus: 'valid'` means the session names vault details
+this component can use — it does **not** guarantee the credential inside is still accepted, which is
+only proven when `submit()` runs.
+
+### Unsupported imports
+
+The export map publishes exactly three entry points: the root, `/embedded` and `/vault` (plus
+`/package.json`). Anything else fails to resolve, deliberately:
+
+```ts
+import {…} from '@juspay-tech/react-native-hyperswitch-vault/dist/esm/index.js';  // ERR_PACKAGE_PATH_NOT_EXPORTED
+```
+
+Internal module paths are not API and will change without notice.
+
+### Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `CardNumberWidget must be rendered inside a <HyperswitchVaultFormProvider>` | a field mounted outside the provider | wrap it, or use `HyperswitchVault.CardForm` |
+| `submit()` returns `not_ready` naming a widget | that field is not mounted | mount exactly one of each |
+| `Only one CardExpiryWidget may be mounted … found 2` | the field is rendered twice | remove the duplicate; `fieldsReady` is `false` while it lasts |
+| The Pay button never enables | check `sessionStatus` and `fieldsReady` separately — they tell you whether it is the session or your JSX | |
+| `invalid_session` on submit with `sessionStatus: 'valid'` | the credential itself is stale or malformed | fetch a new session from your backend |
+| `SyntaxError: Cannot use import statement outside a module` in jest | the RN preset does not transform this package | add the `transformIgnorePatterns` line above |
+| `ERR_PACKAGE_PATH_NOT_EXPORTED` | a deep import into `dist/` | import from the package root, `/embedded` or `/vault` |
+
 ### Ref handle
 
 ```ts
@@ -159,14 +524,20 @@ interface HyperswitchVaultFormHandle {
 }
 ```
 
-`submit()` never throws for a validation, configuration, HTTP or network failure — each is a typed
-result:
+Every documented operational outcome — validation failure, missing or duplicate widgets, invalid
+session, HTTP failure, malformed response and unknown request outcome — resolves through
+`VaultSubmitResult`. Raw backend failures are not thrown to your code:
 
 ```ts
 type VaultSubmitResult =
-  | { status: 'success'; token: string; card: { last4Digits; binNumber?; expiryMonth; expiryYear } }
+  | { status: 'success'; token: string }
   | { status: 'validation_error' | 'not_ready' | 'error'; error: SafeVaultError };
 ```
+
+**A success carries the token and nothing else** — no brand, no BIN, no last four, no expiry, no
+card object. `type-tests/consumer.tsx` holds `@ts-expect-error` negative controls against
+`result.card`, `result.last4Digits` and `result.expiryMonth`, so the build fails if any of them
+becomes readable.
 
 `SafeVaultError` is `{ code, message }`, where `message` is always one of this library's own fixed
 strings. A backend error body, the authorization, anything decoded from it, and card values are
@@ -254,9 +625,11 @@ customer id, publishable key and profile id. Treat it like a bearer token.
   file. Keep it in component state and refetch when you need a new one.
 - **Never log or display** the PAN, expiry or CVC. The payment-method token should go from
   `submit()` to your backend and nowhere else — it is a reference to the stored card rather than
-  card data, but it is still a credential for charging that card. The vault's masked `last4Digits`
-  is fine to show. (`example/App.tsx` deliberately renders the token on screen so a developer can
-  check it against their dashboard. That is an example-app affordance, not a pattern to copy.)
+  card data, but it is still a credential for charging that card. `submit()` returns no masked card
+  metadata to display; if you want to show "•••• 4242" on a confirmation screen, read it from your
+  own backend after you store the token. (`example/App.tsx` deliberately renders the token on screen
+  so a developer can check it against their dashboard. That is an example-app affordance, not a
+  pattern to copy.)
 - **Serve your session endpoint with `Cache-Control: no-store`.** It is the only directive that
   forbids storing the response; `no-cache` still permits it. `example-server/merchant-server.mjs`
   does this.
@@ -267,10 +640,19 @@ customer id, publishable key and profile id. Treat it like a bearer token.
 - **Do not paste a real authorization anywhere** — issues, screenshots, chat, or this repository.
   Every fixture here is base64 of an obviously fake envelope.
 
-**On compliance:** this library is designed so that card values pass from the native inputs to the
-Hyperswitch vault without entering merchant application code. That is a statement about data flow,
-not a compliance claim. It is **not** a claim of PCI DSS compliance and **not** a claim that your
-PCI scope is reduced. Only your own assessor, evaluating your whole integration, can determine that.
+**On compliance.** This applies to the **standalone root-entry flow** — `HyperswitchVaultForm`, or
+`HyperswitchVaultFormProvider` with the card-number, expiry and CVC fields.
+
+Raw card values are processed inside library-managed React Native state running in your
+application's process. In that flow the supported merchant API does not expose those values through
+merchant callbacks, handles, public form state, submission results or library logs, and the
+standalone flow does not send them to your backend. That is an API/data-flow guarantee — **not**
+native-process isolation, **not** physical memory zeroization, **not** automatic PCI compliance and
+**not** a PCI-scope determination. Only your own assessor, evaluating your whole integration, can
+determine your scope.
+
+**This guarantee does not cover `/vault`.** That entry takes raw card details directly — see
+"Advanced exports" below.
 
 ## Example app
 
@@ -325,10 +707,53 @@ integration needs only the Save button.
 
 No provider SDK, no native module, no Pod install, no Codegen.
 
-| Dependency | Kind | Range | Verified against |
+| Dependency | Kind | Declared range | Actually verified |
 |---|---|---|---|
-| react | peer | `>=19.0.0 <20.0.0` | 19.0.0 |
-| react-native | peer | `>=0.79.0 <0.80.0` | 0.79.7 |
+| react | peer | `>=19.0.0 <20.0.0` | **19.0.0 only** |
+| react-native | peer | `>=0.79.0 <0.80.0` | **0.79.1 and 0.79.7** |
+| node (to build/test, not to ship) | engine | `>=18.18.0` | 26.3.0 |
+
+The package has **zero runtime dependencies** — no `dependencies`, no `optionalDependencies`. The
+two peers above are the whole install.
+
+**Read the right-hand column literally.** The declared ranges are what the manifest allows; the
+verified column is what has been installed, type-checked, bundled for both platforms and run. Other
+versions inside those ranges are expected to work and have not been tested.
+
+### Supported environment
+
+| Question | Answer |
+|---|---|
+| Does the package contain native code? | **No.** No Android or iOS directory, no podspec, no Gradle, no Codegen. |
+| Native linking steps? | **None.** |
+| Pod install? | **Not needed** for this package. |
+| Do merchants need ReScript? | **No.** The package ships compiled JavaScript and `.d.ts`. ReScript is a build-time tool of this repository only. |
+| Do merchants need Babel config? | **No** for app code. See the jest note below for tests. |
+| Do merchants need Metro config? | **No.** Verified with a default `@react-native/metro-config` and no aliases, `extraNodeModules` or custom resolvers. |
+| TypeScript | Verified with **5.6.3** against the packed declarations under the stock `@react-native/typescript-config`. |
+| Package manager | Developed with **yarn 3.6.4**; verified by installing the packed tarball into a clean external project. |
+| Hermes | The bundles are produced by standard Metro for RN 0.79 and contain no dynamic `require` and no Node builtins. Hermes byte-compilation itself has **not** been run — see below. |
+| Expo managed workflow | **Unverified.** Not tested; no claim either way. |
+| React Native versions outside `0.79.x` | **Unverified.** |
+
+### If your tests import this package
+
+React Native's jest preset excludes everything in `node_modules` from Babel except `react-native`
+itself, and jest resolves this package through its `react-native` export condition — which points at
+the ESM build, because that is what Metro wants. Add the package to the transform allowlist:
+
+```js
+// jest.config.js
+module.exports = {
+  preset: 'react-native',
+  transformIgnorePatterns: [
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|@juspay-tech)/)',
+  ],
+};
+```
+
+Without it you get `SyntaxError: Cannot use import statement outside a module`. Your app build is
+unaffected — Metro handles the ESM build natively.
 
 For the Quick Start above you install **only this package**. It has **no form library at all**:
 the card fields are controlled views, the standalone entries keep their state in an internal

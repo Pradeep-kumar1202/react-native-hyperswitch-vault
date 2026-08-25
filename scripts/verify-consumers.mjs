@@ -1,19 +1,24 @@
 #!/usr/bin/env node
 /*
- * React Final Form module identity, proved against the PACKED TARBALL with three consumer fixtures.
+ * Consumer contracts, proved against the PACKED TARBALL with four fixtures.
  *
- * The hazard: react-final-form connects <Form> to useField through a React context that lives in
- * the module instance. Two copies means two contexts, and the second one does not degrade quietly —
- * react-final-form's own useForm() guard throws. The three entries of this package have different
- * requirements, so each fixture pins one of them down:
+ * Each of the three published entries has a different audience, and this file pins each one down as
+ * an installed consumer would actually see it — not as `src/` reads:
  *
- *   A  standalone consumer  - no react-final-form installed anywhere, and the root entry still
- *                             resolves and loads. react-final-form is bundled INTO it.
- *   B  embedded consumer    - one host copy of react-final-form; the /embedded entry resolves that
- *                             exact instance, and a field from it registers on the host's <Form>.
- *   C  nested copy (hazard) - a second copy planted under the package. Demonstrates that the
- *                             failure is loud, and that this package's metadata cannot produce the
- *                             layout in the first place.
+ *   A  standalone merchant  - the root entry resolves and loads with only react + react-native
+ *                             present, exports exactly the documented value surface, and every
+ *                             ADR-0002 alias / namespace member is the SAME OBJECT as the component
+ *                             it aliases (`===`, which is what rules out a wrapper).
+ *   B  embedded consumer    - the /embedded controlled fields load and construct with no form
+ *                             library installed at all, are directly renderable in both CJS and
+ *                             ESM, and expose nothing from the standalone facade.
+ *   D  vault transport      - /vault exports one function, stays free of React, React Native,
+ *                             icons and controllers, and gained none of the facade.
+ *   C  host repository      - hyperswitch-client-core still declares its OWN react-final-form.
+ *
+ * React Final Form was removed from this library; the fixtures assert its ABSENCE from every entry
+ * and its continued ownership by the host, rather than the module-identity contract they were
+ * originally written for.
  *
  * Everything here runs offline: the fixtures are assembled from the packed tarball and from
  * node_modules, never from a registry.
@@ -287,6 +292,88 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
       loaded.HyperswitchVaultForm.$$typeof === Symbol.for('react.forward_ref'),
     'the loaded export is a real forwardRef component'
   );
+
+  /*
+   * ── ADR-0002 §1–§3: the merchant facade ────────────────────────────────────
+   *
+   * These are IDENTITY assertions, deliberately, not shape assertions. A wrapper component would
+   * satisfy "is a forwardRef" and "renders the same thing" while silently breaking `===` checks,
+   * React.memo identity and devtools naming. `===` is the only test that rules a wrapper out, and
+   * it is run here against the PACKED tarball rather than against src.
+   */
+  const forwardRef = Symbol.for('react.forward_ref');
+  const isForwardRef = (v) => typeof v === 'object' && v !== null && v.$$typeof === forwardRef;
+
+  const CANONICAL_ALIASES = [
+    ['CardNumberField', 'CardNumberWidget'],
+    ['CardExpiryField', 'CardExpiryWidget'],
+    ['CardCVCField', 'CardCVCWidget'],
+  ];
+
+  for (const [next, legacy] of CANONICAL_ALIASES) {
+    check(isForwardRef(loaded?.[legacy]), `${legacy} is a real forwardRef component`);
+    check(isForwardRef(loaded?.[next]), `${next} is a real forwardRef component`);
+    check(loaded?.[next] === loaded?.[legacy], `${next} === ${legacy} (same object, not a wrapper)`);
+  }
+
+  const NAMESPACE_MEMBERS = [
+    ['CardForm', 'HyperswitchVaultForm'],
+    ['Form', 'HyperswitchVaultFormProvider'],
+    ['CardNumber', 'CardNumberField'],
+    ['Expiry', 'CardExpiryField'],
+    ['CVC', 'CardCVCField'],
+  ];
+
+  check(
+    loaded?.HyperswitchVault !== null && typeof loaded?.HyperswitchVault === 'object',
+    'HyperswitchVault is exported as a plain object'
+  );
+  check(
+    isForwardRef(loaded?.HyperswitchVault) === false,
+    'HyperswitchVault is a namespace, not itself a component'
+  );
+
+  for (const [member, canonical] of NAMESPACE_MEMBERS) {
+    check(
+      loaded?.HyperswitchVault?.[member] === loaded?.[canonical],
+      `HyperswitchVault.${member} === ${canonical}`
+    );
+  }
+
+  check(
+    Object.keys(loaded?.HyperswitchVault ?? {}).sort().join(',') ===
+      NAMESPACE_MEMBERS.map(([m]) => m).sort().join(','),
+    `HyperswitchVault has exactly ${NAMESPACE_MEMBERS.length} members and no extras`
+  );
+
+  /* Phase 1 does not ship the hook. It must be absent, not undefined-but-present. */
+  check(
+    !('useForm' in (loaded?.HyperswitchVault ?? {})),
+    'HyperswitchVault.useForm does not exist yet (the hook is a later phase)'
+  );
+  check(
+    loaded?.useHyperswitchVaultForm === undefined,
+    'useHyperswitchVaultForm is not exported yet (the hook is a later phase)'
+  );
+
+  /* The full root value surface, pinned. A new export must be a deliberate edit here. */
+  const EXPECTED_ROOT_VALUES = [
+    'CardCVCField',
+    'CardCVCWidget',
+    'CardExpiryField',
+    'CardExpiryWidget',
+    'CardNumberField',
+    'CardNumberWidget',
+    'HyperswitchVault',
+    'HyperswitchVaultForm',
+    'HyperswitchVaultFormProvider',
+  ];
+  const actualRootValues = Object.keys(loaded ?? {}).sort();
+  check(
+    actualRootValues.join(',') === EXPECTED_ROOT_VALUES.join(','),
+    `the root entry exports exactly the expected ${EXPECTED_ROOT_VALUES.length} values ` +
+      `(got: ${actualRootValues.join(', ')})`
+  );
 }
 
 /* ── Fixture B — the embedded entry with NO form library anywhere ────────── */
@@ -400,6 +487,99 @@ console.log('\nB. embedded consumer (controlled fields, no form library installe
     elementError === null,
     `a controlled card element can be constructed with no form context${elementError ? `: ${elementError.message}` : ''}`
   );
+
+  /*
+   * ── Entry boundary: /embedded must not drift with the merchant facade ──────
+   *
+   * The root gained aliases and a namespace in ADR-0002 Phase 1. None of that belongs here:
+   * `/embedded` is client-core's controlled-field contract, and a standalone controller, provider,
+   * context or namespace leaking into it would be a silent scope expansion.
+   */
+  const EXPECTED_EMBEDDED = [
+    'CardCvcField',
+    'CardExpiryField',
+    'CardNumberField',
+    'selectCardFields',
+  ];
+  const actualEmbedded = Object.keys(embedded ?? {}).sort();
+  check(
+    actualEmbedded.join(',') === EXPECTED_EMBEDDED.join(','),
+    `/embedded exports exactly its ${EXPECTED_EMBEDDED.length} SDK-integration values ` +
+      `(got: ${actualEmbedded.join(', ')})`
+  );
+  for (const leaked of [
+    'HyperswitchVault',
+    'HyperswitchVaultForm',
+    'HyperswitchVaultFormProvider',
+    'CardCVCField',
+    'CardNumberWidget',
+  ]) {
+    check(embedded?.[leaked] === undefined, `/embedded does not expose ${leaked}`);
+  }
+
+  /*
+   * The merchant `styles` API is a ROOT-ENTRY feature. `/embedded` is client-core's controlled-field
+   * contract: its fields take `value`/`onChange` and client-core owns React Final Form and its own
+   * presentation. Exposing merchant style slots here would be a scope expansion, and would put two
+   * different styling stories in front of the same team.
+   */
+  const embeddedDecl = readFileSync(path.join(pkgDir, 'dist/types/embedded.d.ts'), 'utf8');
+  check(
+    !/\bstyles\b/.test(embeddedDecl),
+    '/embedded declares no merchant `styles` prop (root-entry feature)'
+  );
+  for (const styleType of ['fieldStyles', 'expiryStyles', 'formFieldStyles', 'VaultFieldStyles']) {
+    check(
+      embedded?.[styleType] === undefined && !embeddedDecl.includes(styleType),
+      `/embedded does not expose ${styleType}`
+    );
+  }
+}
+
+/* ── Fixture D — /vault stays a bare transport ───────────────────────────── */
+
+console.log('\nD. vault transport entry (no React, no UI, no controllers)');
+{
+  const { fixture, nodeModules } = makeFixture('d-vault');
+  const pkgDir = installPackage(fixture);
+  linkReal(nodeModules, 'react');
+  writeReactNativeStub(nodeModules);
+
+  const requireFromApp = createRequire(path.join(fixture, 'app.js'));
+  let vault = null;
+  let loadError = null;
+  try {
+    vault = requireFromApp(`${PKG}/vault`);
+  } catch (error) {
+    loadError = error;
+  }
+  check(loadError === null, `/vault loads${loadError ? `: ${loadError.message}` : ''}`);
+
+  const EXPECTED_VAULT = ['confirmPaymentMethodSession'];
+  const actualVault = Object.keys(vault ?? {}).sort();
+  check(
+    actualVault.join(',') === EXPECTED_VAULT.join(','),
+    `/vault exports exactly ${EXPECTED_VAULT.join(', ')} (got: ${actualVault.join(', ')})`
+  );
+  check(typeof vault?.confirmPaymentMethodSession === 'function', '/vault confirm is a function');
+
+  /* The facade must not have reached the transport entry. */
+  for (const leaked of ['HyperswitchVault', 'CardNumberField', 'CardNumberWidget', 'HyperswitchVaultForm']) {
+    check(vault?.[leaked] === undefined, `/vault does not expose ${leaked}`);
+  }
+
+  /* Free of React, React Native, icons and controllers — asserted on the packed bundle source. */
+  for (const format of ['esm', 'cjs']) {
+    const source = readFileSync(path.join(pkgDir, `dist/${format}/vault.js`), 'utf8');
+    check(
+      !/\breact\b/i.test(source),
+      `${format}: /vault entry source mentions neither React nor React Native`
+    );
+    check(
+      !/\.png|CardIcons|CardInput|VaultCardController/.test(source),
+      `${format}: /vault entry pulls in no icons, inputs or controllers`
+    );
+  }
 }
 
 /* ── Fixture C — the host repository still owns react-final-form ─────────── */
@@ -429,4 +609,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\n[verify-consumers] OK - ${notes.length} checks across 2 consumer fixtures`);
+console.log(`\n[verify-consumers] OK - ${notes.length} checks across 4 consumer fixtures`);

@@ -13,6 +13,12 @@ import type {brandIconMode as VaultFormOptions_brandIconMode} from './VaultFormO
 
 import type {cardFormState as VaultFormOptions_cardFormState} from './VaultFormOptions.gen';
 
+import type {expiryStyles as CardFieldStyles_expiryStyles} from './CardFieldStyles.gen';
+
+import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
+
+import type {formFieldStyles as CardFieldStyles_formFieldStyles} from './CardFieldStyles.gen';
+
 import type {localisationLabels as VaultFormOptions_localisationLabels} from './VaultFormOptions.gen';
 
 import type {localisationMessages as VaultFormOptions_localisationMessages} from './VaultFormOptions.gen';
@@ -26,6 +32,8 @@ import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.g
 import type {vaultEnvironment as VaultFormOptions_vaultEnvironment} from './VaultFormOptions.gen';
 
 import type {vaultFormHandle as VaultFormOptions_vaultFormHandle} from './VaultFormOptions.gen';
+
+import type {vaultFormState as VaultPublicState_vaultFormState} from './VaultPublicState.gen';
 
 import type {vaultSession as VaultFormOptions_vaultSession} from './VaultFormOptions.gen';
 
@@ -55,12 +63,22 @@ export type vaultSubmitResult = VaultResult_vaultSubmitResult;
 
 export type vaultFormHandle = VaultFormOptions_vaultFormHandle;
 
+export type fieldStyles = CardFieldStyles_fieldStyles;
+
+export type expiryStyles = CardFieldStyles_expiryStyles;
+
+export type formFieldStyles = CardFieldStyles_formFieldStyles;
+
+export type vaultFormState = VaultPublicState_vaultFormState;
+
 export type Props = {
   readonly accessible?: boolean; 
   readonly appearance?: appearance; 
   readonly disabled?: boolean; 
   readonly environment: vaultEnvironment; 
+  readonly fieldStyles?: formFieldStyles; 
   readonly localisation?: localisation; 
+  readonly onFormStateChange?: (_1:vaultFormState) => void; 
   readonly onStateChange?: (_1:cardFormState) => void; 
   readonly session: vaultSession; 
   readonly splitCardFields?: boolean
@@ -71,7 +89,9 @@ export const make: React.ComponentType<{
   readonly appearance?: appearance; 
   readonly disabled?: boolean; 
   readonly environment: vaultEnvironment; 
+  readonly fieldStyles?: formFieldStyles; 
   readonly localisation?: localisation; 
+  readonly onFormStateChange?: (_1:vaultFormState) => void; 
   readonly onStateChange?: (_1:cardFormState) => void; 
   readonly session: vaultSession; 
   readonly splitCardFields?: boolean

@@ -36,6 +36,18 @@ type vaultSubmitResult = VaultResult.vaultSubmitResult
 type vaultFormHandle = VaultFormOptions.vaultFormHandle
 
 @genType
+type fieldStyles = CardFieldStyles.fieldStyles
+
+@genType
+type expiryStyles = CardFieldStyles.expiryStyles
+
+@genType
+type formFieldStyles = CardFieldStyles.formFieldStyles
+
+@genType
+type vaultFormState = VaultPublicState.vaultFormState
+
+@genType
 let make = React.forwardRef((
   props: {
     "session": vaultSession,
@@ -47,6 +59,8 @@ let make = React.forwardRef((
     "localisation": option<localisation>,
     "accessible": option<bool>,
     "onStateChange": option<cardFormState => unit>,
+    "onFormStateChange": option<vaultFormState => unit>,
+    "fieldStyles": option<formFieldStyles>,
   },
   ref,
 ) => {
@@ -58,6 +72,7 @@ let make = React.forwardRef((
     ~disabled=props["disabled"]->Option.getOr(false),
     ~accessible=props["accessible"],
     ~onStateChange=props["onStateChange"],
+    ~onFormStateChange=props["onFormStateChange"],
   )
 
   React.useImperativeHandle0(ref, () => {
@@ -68,6 +83,9 @@ let make = React.forwardRef((
   })
 
   <VaultWidgetContext.ContextProvider value={Some(host.contextValue)}>
-    <CardFormView splitCardFields={props["splitCardFields"]->Option.getOr(false)} />
+    <CardFormView
+      splitCardFields={props["splitCardFields"]->Option.getOr(false)}
+      fieldStyles=?{props["fieldStyles"]}
+    />
   </VaultWidgetContext.ContextProvider>
 })

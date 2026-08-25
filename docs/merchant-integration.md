@@ -46,8 +46,7 @@ Where something is version- or account-specific, it says so.
 Two things to notice:
 
 - **The card never touches your code.** The component collects it and posts it to the vault itself.
-  Your app receives a token and masked metadata (`last4Digits`, optional `binNumber`, expiry) —
-  never a PAN or CVC.
+  Your app receives a token and nothing else — no PAN, no CVC, and no masked card metadata either.
 - **Your secret key never leaves your server.** The app only ever sees the session response, which
   carries a short-lived, single-session credential.
 
@@ -160,8 +159,9 @@ yarn add @juspay-tech/react-native-hyperswitch-vault
 ```
 
 That is the whole install. No provider SDK, no native module, no `pod install`, no Codegen, and no
-react-final-form — the standalone entry bundles its own. Peers are just `react` (>=19 <20) and
-`react-native` (>=0.79 <0.80).
+form library — the package has **no runtime dependencies at all**, and the standalone entries keep
+their state in an internal reducer. Peers are just `react` (>=19 <20) and `react-native`
+(>=0.79 <0.80).
 
 ### 3.2 Fetch, render, submit
 
@@ -233,7 +233,7 @@ explicitly and make sure it matches the environment your **server** created the 
 ### 3.5 The ref handle
 
 ```ts
-submit(): Promise<VaultSubmitResult>   // never throws for a validation/HTTP/network failure
+submit(): Promise<VaultSubmitResult>   // documented outcomes resolve as a result, not an exception
 reset(): void                          // clears values, expiry text, validation state and errors
 focus(field: 'cardNumber' | 'expiry' | 'cvc'): void
 ```
@@ -289,9 +289,17 @@ the exact shape for your API version before you build on it — that part is out
 - Fetch a **fresh session per attempt**. Replacing the `session` prop cancels an in-flight
   confirmation and the next `submit()` always uses the current authorization.
 
-**On compliance:** this design keeps card values out of your application code. That is a statement
-about data flow, not a compliance claim — it is **not** a claim of PCI DSS compliance and **not** a
-claim that your PCI scope is reduced. Only your own assessor can determine that.
+**On compliance** — for the **standalone root-entry flow** (`HyperswitchVaultForm`, or
+`HyperswitchVaultFormProvider` with the three card fields): raw card values are processed inside
+library-managed React Native state running in your application's process. In that flow the
+supported merchant API does not expose them through merchant callbacks, handles, public form state,
+submission results or library logs, and the standalone flow does not send them to your backend.
+That is an API/data-flow guarantee — **not** native-process isolation, **not** memory zeroization,
+**not** a claim of PCI DSS compliance and **not** a claim that your PCI scope is reduced. Only your
+own assessor can determine that.
+
+The guarantee is scoped to that flow. **`/vault` accepts raw card details by design** and is
+outside it.
 
 ---
 

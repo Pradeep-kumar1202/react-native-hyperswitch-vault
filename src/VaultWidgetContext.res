@@ -29,14 +29,21 @@ let useRequired = (widgetName: string): contextValue =>
 
 module ErrorText = {
   @react.component
-  let make = (~message: string, ~theme: CardFormTypes.cardTheme, ~errorFontSize, ~errorSpacing) =>
+  let make = (
+    ~message: string,
+    ~theme: CardFormTypes.cardTheme,
+    ~errorFontSize,
+    ~errorSpacing,
+    /* Merchant `styles.error`. None => byte-identical to the unstyled render. */
+    ~errorStyle: option<CardFieldStyles.textStyleProp>=?,
+  ) =>
     <Text
       style={Style.s({
         color: theme.dangerColor,
         fontFamily: theme.fontFamily,
         fontSize: errorFontSize,
         marginTop: errorSpacing->Style.dp,
-      })}>
+      })->CardFieldStyles.withText(errorStyle)}>
       {React.string(message)}
     </Text>
 }

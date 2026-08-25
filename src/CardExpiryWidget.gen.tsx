@@ -7,6 +7,18 @@ import * as React from 'react';
 
 import * as CardExpiryWidgetJS from './CardExpiryWidget.bs.js';
 
-export type Props = { readonly children?: React.ReactNode };
+import type {expiryState as VaultPublicState_expiryState} from './VaultPublicState.gen';
 
-export const make: React.ComponentType<{ readonly children?: React.ReactNode }> = CardExpiryWidgetJS.make as any;
+import type {expiryStyles as CardFieldStyles_expiryStyles} from './CardFieldStyles.gen';
+
+export type Props = {
+  readonly children?: React.ReactNode; 
+  readonly onStateChange?: (_1:VaultPublicState_expiryState) => void; 
+  readonly styles?: CardFieldStyles_expiryStyles
+};
+
+export const make: React.ComponentType<{
+  readonly children?: React.ReactNode; 
+  readonly onStateChange?: (_1:VaultPublicState_expiryState) => void; 
+  readonly styles?: CardFieldStyles_expiryStyles
+}> = CardExpiryWidgetJS.make as any;

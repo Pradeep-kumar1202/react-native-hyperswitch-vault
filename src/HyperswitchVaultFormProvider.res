@@ -15,6 +15,7 @@ let make = React.forwardRef((
     "disabled": option<bool>,
     "accessible": option<bool>,
     "onStateChange": option<VaultFormOptions.cardFormState => unit>,
+    "onFormStateChange": option<VaultPublicState.vaultFormState => unit>,
     "children": React.element,
   },
   ref,
@@ -27,6 +28,7 @@ let make = React.forwardRef((
     ~disabled=props["disabled"]->Option.getOr(false),
     ~accessible=props["accessible"],
     ~onStateChange=props["onStateChange"],
+    ~onFormStateChange=props["onFormStateChange"],
   )
 
   React.useImperativeHandle0(ref, () => {
