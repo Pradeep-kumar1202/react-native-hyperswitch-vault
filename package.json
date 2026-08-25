@@ -17,21 +17,7 @@
       "require": "./dist/cjs/index.js",
       "default": "./dist/esm/index.js"
     },
-    "./embedded": {
-      "types": "./dist/types/embedded.d.ts",
-      "react-native": "./dist/esm/embedded.js",
-      "import": "./dist/esm/embedded.js",
-      "require": "./dist/cjs/embedded.js",
-      "default": "./dist/esm/embedded.js"
-    },
-    "./package.json": "./package.json",
-    "./vault": {
-      "types": "./dist/types/vault.d.ts",
-      "react-native": "./dist/esm/vault.js",
-      "import": "./dist/esm/vault.js",
-      "require": "./dist/cjs/vault.js",
-      "default": "./dist/esm/vault.js"
-    }
+    "./package.json": "./package.json"
   },
   "files": [
     "dist/esm/**",
@@ -67,11 +53,11 @@
     "verify:treeshaking": "node scripts/verify-treeshaking.mjs",
     "verify:style-bridge": "node scripts/verify-style-bridge.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs",
-    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs && node scripts/verify-vault-isolation.mjs && node scripts/verify-treeshaking.mjs && node scripts/verify-style-bridge.mjs && node scripts/verify-event-surface.mjs && node scripts/verify-package-contents.mjs",
+    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs && node scripts/verify-treeshaking.mjs && node scripts/verify-style-bridge.mjs && node scripts/verify-event-surface.mjs && node scripts/verify-package-contents.mjs && node scripts/verify-merchant-only.mjs",
     "build:clean": "rescript clean && node scripts/clean.mjs && node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && node scripts/verify-public-surface.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json",
-    "verify:vault-isolation": "node scripts/verify-vault-isolation.mjs",
     "verify:event-surface": "node scripts/verify-event-surface.mjs",
-    "verify:package-contents": "node scripts/verify-package-contents.mjs"
+    "verify:package-contents": "node scripts/verify-package-contents.mjs",
+    "verify:merchant-only": "node scripts/verify-merchant-only.mjs"
   },
   "peerDependencies": {
     "react": ">=19.0.0 <20.0.0",

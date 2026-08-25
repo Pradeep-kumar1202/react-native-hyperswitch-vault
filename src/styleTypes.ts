@@ -6,8 +6,7 @@
  * something to import, and makes the emitted declaration reference React Native's own types rather
  * than an opaque handle.
  *
- * This is the same mechanism `src/dom-types.ts` already uses for `AbortSignal` and
- * `src/merchantTypes.ts` uses for `MerchantSession`.
+ * This is the same mechanism `src/merchantTypes.ts` uses for `MerchantSession`.
  */
 import type {StyleProp, ViewStyle, TextStyle} from 'react-native';
 

@@ -3,8 +3,7 @@
 **Why this exists.** Everything else in this repository is verified automatically: ReScript
 compiles, declarations are generated and type-checked against the real React Native tsconfig, the
 tarball contents are asserted, the result-mapping table is executed, three consumer fixtures prove
-that no entry imports or bundles a form library (and that hyperswitch-client-core still owns its
-own react-final-form), and the lifecycle contract is exercised with `react-test-renderer` under the
+that the entry imports and bundles no form library, and the lifecycle contract is exercised with `react-test-renderer` under the
 React Native jest preset.
 
 None of that is a device. The automated suite **builds and bundles** the example; it has never been
@@ -90,7 +89,7 @@ history, and never into `example/`.
 server; the app never receives it. The server logs only the mode, never a value and never the
 session contents. Expect `[merchant-server] mode: live (sandbox)`.
 
-The server mints the vault session the same way hyperswitch-client-core does: `POST /payments` with
+The server mints the vault session with `POST /payments` and
 the secret key, then `POST /payments/session_tokens` authenticated with that intent's own
 `sdk_authorization`. The intent is never confirmed, so no money moves.
 

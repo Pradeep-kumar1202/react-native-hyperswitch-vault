@@ -2,7 +2,12 @@
 open ReactNative
 
 @genType
-type vaultEnvironment = VaultConfirm.vaultEnvironment
+/*
+ * Declared here rather than re-exported from the internal transport. ReScript polymorphic variants
+ * are structural, so this is the same type `VaultConfirm` uses — but the merchant-facing name now
+ * lives in the merchant-facing module, and no public declaration points at the transport.
+ */
+type vaultEnvironment = [#production | #sandbox | #integration]
 
 @genType.import(("./merchantTypes", "MerchantSession"))
 type vaultSession
@@ -73,9 +78,6 @@ type cardFormState = {
   cvcValid: bool,
   brand: string,
 }
-
-@genType
-type vaultCardMetadata = VaultConfirm.vaultCardMetadata
 
 @genType
 type safeVaultErrorCode = VaultResult.safeVaultErrorCode

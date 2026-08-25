@@ -1,5 +1,13 @@
 # ADR-0001: Custom card-field layout via HyperswitchVaultFormProvider and field widgets
 
+> **Merchant-only scope reset (2026-08-25).** This package is now exclusively a merchant-facing card
+> tokenization library. The `/embedded` controlled fields, the public `/vault` transport subpath and
+> every client-core integration surface were removed. Passages below that describe them are
+> historical: they record how the package used to be built, not what it publishes now. The current
+> surface is the package root only.
+
+
+
 **Date**: 2026-08-18
 **Status**: accepted
 **Deciders**: Pradeep Kumar

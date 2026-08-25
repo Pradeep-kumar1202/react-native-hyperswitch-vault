@@ -1,6 +1,5 @@
 open Validation
 
-@genType
 type numberChange = {
   formatted: string,
   brand: string,
@@ -28,7 +27,6 @@ let onCardNumberText = (text: string, ~currentBrand: string): numberChange => {
   }
 }
 
-@genType
 type expiryChange = {
   display: string,
   month: string,
@@ -42,7 +40,6 @@ let onExpiryText = (text: string): expiryChange => {
   {display, month, year, advanceFocus: checkCardExpiry(display)}
 }
 
-@genType
 type cvcChange = {
   formatted: string,
   blurField: bool,
@@ -56,10 +53,8 @@ let onCvcText = (text: string, ~brand: string): cvcChange => {
   }
 }
 
-@genType
 type scanFocus = [#cvc | #expiry | #none]
 
-@genType
 type scanResult = {
   cardNumber: string,
   brand: string,
@@ -88,14 +83,12 @@ let onScanned = (~pan: string, ~expiry: string): scanResult => {
   }
 }
 
-@genType
 type backspaceAction = [#blurSelf | #focusCardNumber | #focusExpiry | #none]
 
 let onCardNumberBackspace = (~value: string) => value === "" ? #blurSelf : #none
 let onExpiryBackspace = (~display: string) => display === "" ? #focusCardNumber : #none
 let onCvcBackspace = (~value: string) => value === "" ? #focusExpiry : #none
 
-@genType
 type eligibilityProbe = [#check(string) | #reset | #idle]
 
 let eligibilityFor = (~cardNumber: string, ~brand: string, ~alreadyAllowed: bool) => {

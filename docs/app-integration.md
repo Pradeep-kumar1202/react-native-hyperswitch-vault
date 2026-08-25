@@ -477,9 +477,9 @@ native-process isolation, physical memory zeroization, automatic PCI compliance 
 determination.
 
 **It does not extend to `/vault`, which accepts raw card details by design** —
-`confirmPaymentMethodSession` takes a `cardDetails` record holding the PAN, expiry and CVC, so any
-caller of that entry is handling raw card data directly. Nor does it extend to `/embedded`, where
-the host owns the values.
+
+There is one entry point and one flow, so the guarantee has no carve-out. The library renders the
+fields, keeps the values, tokenizes them itself, and returns a token.
 
 Merchants remain responsible for their own integration, applicable PCI obligations and required
 assessment; only their own assessor, evaluating the whole integration, can determine scope.

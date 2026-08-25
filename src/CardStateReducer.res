@@ -1,4 +1,3 @@
-@genType
 type field = [#cardNumber | #expiry | #cvc | #network]
 
 type fieldMeta = {touched: bool, active: bool}

@@ -3,7 +3,7 @@
 **Status:** proposed, not implemented. This library currently works around the problem; the
 workaround is described below so it can be removed once sdk-utils has the entry point.
 
-**Affects:** `hyperswitch-sdk-utils` (`shared-code/`), consumed by hyperswitch-client-core,
+**Affects:** `hyperswitch-sdk-utils` (`shared-code/`), consumed by
 hyperswitch-sdk-android, hyperswitch-sdk-ios and this library.
 
 ## The problem
@@ -42,7 +42,6 @@ duplicated**, and that is the part worth fixing: today the pairing of "which rul
 "which locale string to show" exists in two places, so a wording or ordering change in sdk-utils
 does not reach this library.
 
-The embedded path (`EmbeddedCardElement` inside hyperswitch-client-core) is unaffected: the host
 passes validators built with `createFieldValidator`, exactly as before extraction.
 
 ## Proposal

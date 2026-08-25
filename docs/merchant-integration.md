@@ -100,7 +100,7 @@ Authorization: <sdk_authorization from call 1>
 ```
 
 **Note the auth change.** This call authenticates with the intent's own `sdk_authorization`, *not*
-with your secret key. That is how `hyperswitch-client-core` does it too — see `Utils.getHeader`,
+with your secret key —
 which sends `Authorization` instead of `api-key` whenever an sdk_authorization is present.
 
 The response looks like this:
@@ -227,7 +227,7 @@ explicitly and make sure it matches the environment your **server** created the 
 |---|---|---|
 | `appearance` | `VaultFormAppearance` | colours, radius, border width, font, input height — every field optional |
 | `disabled` | `boolean` | makes the inputs genuinely non-interactive |
-| `splitCardFields` | `boolean` | `false` (default) is one bordered block, expiry and CVC sharing a row — the card-only client-core look. `true` gives three separately bordered fields, each error beneath its own field. |
+| `splitCardFields` | `boolean` | `false` (default) is one bordered block, expiry and CVC sharing a row — one compact block. `true` gives three separately bordered fields, each error beneath its own field. |
 | `onStateChange` | `(state: CardFormState) => void` | `{complete, cardNumberValid, expiryValid, cvcValid, brand}` — validity only, never a card value. Use `complete` to enable your button. |
 
 ### 3.5 The ref handle
@@ -267,7 +267,7 @@ Send it to your server and store it against the customer. It is a reference to t
 card data — but it is still a credential for charging that card, so treat it like one: your backend,
 not your app, and not your logs.
 
-To charge it later, `hyperswitch-client-core` passes it as `payment_token` in the payments confirm
+To charge it later, your backend passes it as `payment_token` in the payments confirm
 body (see `PaymentUtils.generateCardConfirmBody`) and omits `payment_method_data` entirely. Confirm
 the exact shape for your API version before you build on it — that part is outside this library.
 

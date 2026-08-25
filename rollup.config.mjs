@@ -89,17 +89,15 @@ const outputs = (chunkPrefix) => [
 
 export default [
   /*
-   * ONE configuration for all three entries. They share a chunk graph, so the compiled sdk-utils
-   * card validation common to them is hoisted into a single shared chunk instead of being inlined
-   * three times. Nothing needs a per-entry `external` rule any more: the only reason that ever
-   * existed was react-final-form module identity, and no entry depends on a form library.
+   * ONE entry, because there is one product: the merchant card form.
+   *
+   * The `/embedded` controlled fields and the `/vault` transport subpath were removed in the
+   * merchant-only scope reset. The PMS confirmation transport still exists — the merchant form
+   * cannot tokenize without it — but it is now reachable only from inside this bundle, never as a
+   * separately importable entry.
    */
   {
-    input: {
-      index: 'src/standalone-entry.mjs',
-      embedded: 'src/embedded-entry.mjs',
-      vault: 'src/vault-entry.mjs',
-    },
+    input: {index: 'src/standalone-entry.mjs'},
     external: (id) => hostRuntime.includes(id) || isImageAsset(id),
     plugins,
     treeshake,

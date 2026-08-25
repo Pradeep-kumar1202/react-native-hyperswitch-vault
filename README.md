@@ -493,8 +493,8 @@ only proven when `submit()` runs.
 
 ### Unsupported imports
 
-The export map publishes exactly three entry points: the root, `/embedded` and `/vault` (plus
-`/package.json`). Anything else fails to resolve, deliberately:
+The export map publishes exactly **one** entry point — the package root (plus `/package.json`).
+Anything else fails to resolve, deliberately:
 
 ```ts
 import {…} from '@juspay-tech/react-native-hyperswitch-vault/dist/esm/index.js';  // ERR_PACKAGE_PATH_NOT_EXPORTED
@@ -512,7 +512,7 @@ Internal module paths are not API and will change without notice.
 | The Pay button never enables | check `sessionStatus` and `fieldsReady` separately — they tell you whether it is the session or your JSX | |
 | `invalid_session` on submit with `sessionStatus: 'valid'` | the credential itself is stale or malformed | fetch a new session from your backend |
 | `SyntaxError: Cannot use import statement outside a module` in jest | the RN preset does not transform this package | add the `transformIgnorePatterns` line above |
-| `ERR_PACKAGE_PATH_NOT_EXPORTED` | a deep import into `dist/` | import from the package root, `/embedded` or `/vault` |
+| `ERR_PACKAGE_PATH_NOT_EXPORTED` | a deep import, or an import of the removed `/embedded` or `/vault` | import from the package root |
 
 ### Ref handle
 
@@ -640,19 +640,21 @@ customer id, publishable key and profile id. Treat it like a bearer token.
 - **Do not paste a real authorization anywhere** — issues, screenshots, chat, or this repository.
   Every fixture here is base64 of an obviously fake envelope.
 
-**On compliance.** This applies to the **standalone root-entry flow** — `HyperswitchVaultForm`, or
-`HyperswitchVaultFormProvider` with the card-number, expiry and CVC fields.
+**The boundary, stated exactly:**
 
-Raw card values are processed inside library-managed React Native state running in your
-application's process. In that flow the supported merchant API does not expose those values through
-merchant callbacks, handles, public form state, submission results or library logs, and the
-standalone flow does not send them to your backend. That is an API/data-flow guarantee — **not**
-native-process isolation, **not** physical memory zeroization, **not** automatic PCI compliance and
-**not** a PCI-scope determination. Only your own assessor, evaluating your whole integration, can
-determine your scope.
+> PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
+> state and are transmitted only by the library's internal tokenization transport. The merchant
+> receives safe UI state and the resulting token.
 
-**This guarantee does not cover `/vault`.** That entry takes raw card details directly — see
-"Advanced exports" below.
+There is one entry point and one flow, so there is no second path with weaker guarantees. The
+library renders the fields, holds the values, confirms the payment-method session itself, and
+returns a token.
+
+**What this is not.** It is an API and data-flow guarantee. It is **not** native-process isolation,
+**not** physical memory zeroization, **not** automatic PCI compliance or a PCI-scope determination,
+and **not** protection from malicious code executing inside your own application process — anything
+running there can reach React Native's own internals regardless of this package. Only your own
+assessor, evaluating your whole integration, can determine your scope.
 
 ## Example app
 
@@ -755,38 +757,29 @@ module.exports = {
 Without it you get `SyntaxError: Cannot use import statement outside a module`. Your app build is
 unaffected — Metro handles the ESM build natively.
 
-For the Quick Start above you install **only this package**. It has **no form library at all**:
-the card fields are controlled views, the standalone entries keep their state in an internal
-reducer, and hyperswitch-client-core keeps its own `react-final-form` and passes values in through
-`/embedded`. Nothing about a form library is shared between the two repositories.
+For the Quick Start above you install **only this package**. It has **no form library at all**: the
+card fields are library-controlled and keep their state in an internal reducer.
 
-## Advanced exports
+## One package, one entry point
 
-Most integrations need only the Quick Start above.
+The package publishes a single entry: the package root. There is no low-level transport subpath and
+no controlled-field subpath.
 
-- `@juspay-tech/react-native-hyperswitch-vault/vault` — `confirmPaymentMethodSession`, the bare
-  transport, if you have your own card UI. Free of React and React Native.
-- `@juspay-tech/react-native-hyperswitch-vault/embedded` — the controlled card fields, for a host
-  that owns its own card state and form library (used by hyperswitch-client-core).
+That is a product decision, not an omission. A subpath that accepted raw card details, or one that
+let a caller own the card values and pass them in, would put PAN, expiry and CVC back on the
+supported public API — which is exactly what this library exists to prevent. The confirmation
+transport still exists; it is internal, reachable only by the library's own form, and has no
+declaration and no importable path.
 
-The default standalone form deliberately excludes card scanning and the co-badged network picker:
-both need host-provided capabilities that would force a native module or a viewport-aware popover.
+The standalone form also deliberately excludes card scanning and the co-badged network picker: both
+need host-provided capabilities that would force a native module or a viewport-aware popover.
 
-### Why the entries are packaged the way they are
+### No form library
 
-The package contains **no form library**. Its card fields are controlled views: the owner holds the
-values and passes them in, together with the resolved errors and the change callbacks.
-
-- the **root** entry owns its state in an internal reducer, so a merchant installs one package and
-  configures no form library;
-- **`/embedded`** is rendered by hyperswitch-client-core, which keeps its own `react-final-form`,
-  performs every field registration itself and feeds the values in.
-
-Because nothing about a form library crosses the package boundary, there is no module-identity
-hazard to manage and one Rollup configuration builds all three entries. The package declares **no
-runtime `dependencies`**. `yarn verify:consumers` proves this against the packed tarball: no entry
-imports or bundles a form library, the package declares none, `/embedded` loads and constructs with
-none installed, and hyperswitch-client-core still declares its own.
+The package contains **no form library** and declares **no runtime `dependencies`**. The card
+fields are library-controlled: the library holds the values in an internal reducer, resolves the
+errors, and never asks the merchant for either. `yarn verify:consumers` and
+`yarn verify:merchant-only` prove this against the packed tarball.
 
 ## Development
 
