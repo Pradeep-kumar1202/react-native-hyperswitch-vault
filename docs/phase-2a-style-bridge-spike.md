@@ -1,5 +1,17 @@
 # Phase 2A — merchant styling boundary spike
 
+> **Historical / removed design.** This document is a decision and investigation record, not
+> current merchant guidance. It describes surfaces that no longer exist.
+
+
+> **Merchant-only scope reset (2026-08-25).** This package is now exclusively a merchant-facing card
+> tokenization library. The `/embedded` controlled fields, the public `/vault` transport subpath and
+> every client-core integration surface were removed. Passages below that describe them are
+> historical: they record how the package used to be built, not what it publishes now. The current
+> surface is the package root only.
+
+
+
 **Date**: 2026-08-25
 **Status**: spike complete, closure pass applied, recommendation made
 **Release state**: the style API exists only in the uncommitted working build and has not been released to merchants

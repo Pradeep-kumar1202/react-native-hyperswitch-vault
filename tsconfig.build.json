@@ -15,19 +15,16 @@
     "allowJs": false,
     "outDir": "dist/types",
     "rootDir": "src",
-    // React Native's own globals.d.ts is where the ambient AbortSignal comes from. The stock RN
-    // tsconfig has no "dom" lib, so this must resolve exactly the way a consumer's does.
+    // React Native's own globals.d.ts. The stock RN tsconfig has no "dom" lib, so this must
+    // resolve exactly the way a consumer's does.
     "types": [
       "react-native"
     ]
   },
   "include": [
     "src/public.ts",
-    "src/embedded.ts",
-    "src/vault.ts",
     "src/jsx-global.ts",
     "src/merchantTypes.ts",
-    "src/dom-types.ts",
     "src/styleTypes.ts",
     "src/*.gen.tsx",
     "src/bs-modules.d.ts"

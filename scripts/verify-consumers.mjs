@@ -1,26 +1,18 @@
 #!/usr/bin/env node
 /*
- * Consumer contracts, proved against the PACKED TARBALL with four fixtures.
+ * The merchant consumer contract, proved against the PACKED TARBALL.
  *
- * Each of the three published entries has a different audience, and this file pins each one down as
- * an installed consumer would actually see it — not as `src/` reads:
+ * There is now exactly ONE published entry and one audience, so there is one fixture: a standalone
+ * merchant with only react + react-native installed. It pins down what an installed consumer
+ * actually sees — not what `src/` reads — namely that the root entry resolves and loads, exports
+ * exactly the documented value surface, and that every alias and namespace member is the SAME
+ * OBJECT as the component it aliases (`===`, which is what rules out a wrapper).
  *
- *   A  standalone merchant  - the root entry resolves and loads with only react + react-native
- *                             present, exports exactly the documented value surface, and every
- *                             ADR-0002 alias / namespace member is the SAME OBJECT as the component
- *                             it aliases (`===`, which is what rules out a wrapper).
- *   B  embedded consumer    - the /embedded controlled fields load and construct with no form
- *                             library installed at all, are directly renderable in both CJS and
- *                             ESM, and expose nothing from the standalone facade.
- *   D  vault transport      - /vault exports one function, stays free of React, React Native,
- *                             icons and controllers, and gained none of the facade.
- *   C  host repository      - hyperswitch-client-core still declares its OWN react-final-form.
+ * The `/embedded` and `/vault` fixtures, and the client-core host fixture, were deleted in the
+ * merchant-only scope reset along with the entries they tested. `verify-merchant-only.mjs` now
+ * asserts those entries are UNREACHABLE rather than asserting how they behave.
  *
- * React Final Form was removed from this library; the fixtures assert its ABSENCE from every entry
- * and its continued ownership by the host, rather than the module-identity contract they were
- * originally written for.
- *
- * Everything here runs offline: the fixtures are assembled from the packed tarball and from
+ * Everything here runs offline: the fixture is assembled from the packed tarball and from
  * node_modules, never from a registry.
  *
  * The tarball is packed here, to a unique temp path, so this script has no ordering dependency on
@@ -54,7 +46,7 @@ const check = (ok, what) => {
   else failures.push(what);
 };
 
-if (!existsSync(path.join(root, 'dist/esm/embedded.js'))) {
+if (!existsSync(path.join(root, 'dist/esm/index.js'))) {
   console.error('[verify-consumers] FAIL: dist/ is missing. Run `yarn build` first.');
   process.exit(1);
 }
@@ -76,7 +68,7 @@ const requireFromRoot = createRequire(path.join(root, 'app.js'));
 /*
  * A stub react-native. The real package's entry is Flow-typed source that Node cannot parse, and
  * copying it would take hundreds of megabytes. Every access returns a callable/indexable dummy,
- * which is enough for a module to LOAD — which is all these fixtures assert. Rendering behaviour is
+ * which is enough for a module to LOAD — which is all this fixture asserts. Rendering behaviour is
  * covered by the example's jest suite, which uses the real React Native preset.
  */
 const writeReactNativeStub = (nodeModules) => {
@@ -376,229 +368,6 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
   );
 }
 
-/* ── Fixture B — the embedded entry with NO form library anywhere ────────── */
-
-/*
- * The old fixture proved react-final-form module identity between host and package. That contract
- * no longer exists: the package contains no form library, so the assertions here are the ones the
- * refactor actually needs — the controlled fields load and render with nothing installed, and the
- * host repository is still the one that owns react-final-form.
- */
-console.log('\nB. embedded consumer (controlled fields, no form library installed)');
-{
-  const { fixture, nodeModules } = makeFixture('b-embedded');
-  const pkgDir = installPackage(fixture);
-  linkReal(nodeModules, 'react');
-  writeReactNativeStub(nodeModules);
-  linkReal(nodeModules, '@babel');
-
-  const requireFromHost = createRequire(path.join(fixture, 'app.js'));
-
-  let resolved = null;
-  try {
-    resolved = requireFromHost.resolve('react-final-form');
-  } catch {
-    resolved = null;
-  }
-  check(resolved === null, 'no form library is installed in the embedded fixture at all');
-
-  let embedded = null;
-  let loadError = null;
-  try {
-    embedded = requireFromHost(`${PKG}/embedded`);
-  } catch (error) {
-    loadError = error;
-  }
-  check(loadError === null, `/embedded loads without any form library${loadError ? `: ${loadError.message}` : ''}`);
-  /* The SDK integration surface: three controlled fields, no complete layout. */
-  for (const field of ['CardNumberField', 'CardExpiryField', 'CardCvcField']) {
-    check(
-      typeof embedded?.[field] === 'function' || typeof embedded?.[field] === 'object',
-      `/embedded exports the controlled ${field}`
-    );
-  }
-  check(
-    embedded?.EmbeddedCardElement === undefined,
-    '/embedded no longer exports a complete card layout'
-  );
-  check(typeof embedded?.selectCardFields === 'function', '/embedded still exports selectCardFields');
-
-  /*
-   * EXPORT SHAPE — the regression that shipped an unrenderable value.
-   *
-   * The fields are nested ReScript modules, so `VaultEmbedded.bs.js` exports `{make: Component}`.
-   * Publishing those module objects made React throw "Element type is invalid ... got: object" at
-   * render time, while every static check still passed. Each export must therefore BE the
-   * component: a function, or a React exotic value carrying `$$typeof`. A plain `{make}` object is
-   * rejected explicitly.
-   */
-  const FIELD_EXPORTS = ['CardNumberField', 'CardExpiryField', 'CardCvcField'];
-  const describeExport = (value) => ({
-    type: typeof value,
-    hasReactType: Boolean(value && value.$$typeof),
-    hasMake: Boolean(value && typeof value === 'object' && 'make' in value),
-  });
-  for (const name of FIELD_EXPORTS) {
-    const shape = describeExport(embedded?.[name]);
-    check(
-      !shape.hasMake,
-      `/embedded ${name} is NOT a ReScript module object containing \`make\``
-    );
-    check(
-      shape.type === 'function' || shape.hasReactType,
-      `/embedded ${name} is directly renderable (${shape.type}${shape.hasReactType ? ', $$typeof' : ''})`
-    );
-  }
-
-  /* The ESM entry must expose the same shapes as the CJS one. */
-  const esmModule = await import(pathToFileURL(path.join(pkgDir, 'dist/esm/embedded.js')).href).catch(
-    (error) => ({ __error: error })
-  );
-  if (esmModule.__error) {
-    check(false, `/embedded ESM entry loads: ${esmModule.__error.message}`);
-  } else {
-    for (const name of FIELD_EXPORTS) {
-      const cjsShape = describeExport(embedded?.[name]);
-      const esmShape = describeExport(esmModule[name]);
-      check(
-        !esmShape.hasMake && (esmShape.type === 'function' || esmShape.hasReactType),
-        `esm: /embedded ${name} is directly renderable`
-      );
-      check(
-        cjsShape.type === esmShape.type && cjsShape.hasReactType === esmShape.hasReactType,
-        `/embedded ${name} has the same shape in CJS and ESM`
-      );
-    }
-  }
-
-  /*
-   * Behavioural rendering of the controlled fields is proven by the example jest suite under the
-   * real React Native preset; this fixture only has a minimal RN stub, so it asserts the contract
-   * this harness can actually prove: the entry loads, exports what client-core binds to, and needs
-   * no form-library context to be imported or constructed.
-   */
-  let elementError = null;
-  try {
-    requireFromHost('react').createElement(embedded.CardNumberField, { value: '', label: 'x' });
-  } catch (error) {
-    elementError = error;
-  }
-  check(
-    elementError === null,
-    `a controlled card element can be constructed with no form context${elementError ? `: ${elementError.message}` : ''}`
-  );
-
-  /*
-   * ── Entry boundary: /embedded must not drift with the merchant facade ──────
-   *
-   * The root gained aliases and a namespace in ADR-0002 Phase 1. None of that belongs here:
-   * `/embedded` is client-core's controlled-field contract, and a standalone controller, provider,
-   * context or namespace leaking into it would be a silent scope expansion.
-   */
-  const EXPECTED_EMBEDDED = [
-    'CardCvcField',
-    'CardExpiryField',
-    'CardNumberField',
-    'selectCardFields',
-  ];
-  const actualEmbedded = Object.keys(embedded ?? {}).sort();
-  check(
-    actualEmbedded.join(',') === EXPECTED_EMBEDDED.join(','),
-    `/embedded exports exactly its ${EXPECTED_EMBEDDED.length} SDK-integration values ` +
-      `(got: ${actualEmbedded.join(', ')})`
-  );
-  for (const leaked of [
-    'HyperswitchVault',
-    'HyperswitchVaultForm',
-    'HyperswitchVaultFormProvider',
-    'CardCVCField',
-    'CardNumberWidget',
-  ]) {
-    check(embedded?.[leaked] === undefined, `/embedded does not expose ${leaked}`);
-  }
-
-  /*
-   * The merchant `styles` API is a ROOT-ENTRY feature. `/embedded` is client-core's controlled-field
-   * contract: its fields take `value`/`onChange` and client-core owns React Final Form and its own
-   * presentation. Exposing merchant style slots here would be a scope expansion, and would put two
-   * different styling stories in front of the same team.
-   */
-  const embeddedDecl = readFileSync(path.join(pkgDir, 'dist/types/embedded.d.ts'), 'utf8');
-  check(
-    !/\bstyles\b/.test(embeddedDecl),
-    '/embedded declares no merchant `styles` prop (root-entry feature)'
-  );
-  for (const styleType of ['fieldStyles', 'expiryStyles', 'formFieldStyles', 'VaultFieldStyles']) {
-    check(
-      embedded?.[styleType] === undefined && !embeddedDecl.includes(styleType),
-      `/embedded does not expose ${styleType}`
-    );
-  }
-}
-
-/* ── Fixture D — /vault stays a bare transport ───────────────────────────── */
-
-console.log('\nD. vault transport entry (no React, no UI, no controllers)');
-{
-  const { fixture, nodeModules } = makeFixture('d-vault');
-  const pkgDir = installPackage(fixture);
-  linkReal(nodeModules, 'react');
-  writeReactNativeStub(nodeModules);
-
-  const requireFromApp = createRequire(path.join(fixture, 'app.js'));
-  let vault = null;
-  let loadError = null;
-  try {
-    vault = requireFromApp(`${PKG}/vault`);
-  } catch (error) {
-    loadError = error;
-  }
-  check(loadError === null, `/vault loads${loadError ? `: ${loadError.message}` : ''}`);
-
-  const EXPECTED_VAULT = ['confirmPaymentMethodSession'];
-  const actualVault = Object.keys(vault ?? {}).sort();
-  check(
-    actualVault.join(',') === EXPECTED_VAULT.join(','),
-    `/vault exports exactly ${EXPECTED_VAULT.join(', ')} (got: ${actualVault.join(', ')})`
-  );
-  check(typeof vault?.confirmPaymentMethodSession === 'function', '/vault confirm is a function');
-
-  /* The facade must not have reached the transport entry. */
-  for (const leaked of ['HyperswitchVault', 'CardNumberField', 'CardNumberWidget', 'HyperswitchVaultForm']) {
-    check(vault?.[leaked] === undefined, `/vault does not expose ${leaked}`);
-  }
-
-  /* Free of React, React Native, icons and controllers — asserted on the packed bundle source. */
-  for (const format of ['esm', 'cjs']) {
-    const source = readFileSync(path.join(pkgDir, `dist/${format}/vault.js`), 'utf8');
-    check(
-      !/\breact\b/i.test(source),
-      `${format}: /vault entry source mentions neither React nor React Native`
-    );
-    check(
-      !/\.png|CardIcons|CardInput|VaultCardController/.test(source),
-      `${format}: /vault entry pulls in no icons, inputs or controllers`
-    );
-  }
-}
-
-/* ── Fixture C — the host repository still owns react-final-form ─────────── */
-
-console.log('\nC. host repository (hyperswitch-client-core) still owns its form library');
-{
-  const hostPkgPath = path.resolve(root, '../hyperswitch-client-core/package.json');
-  if (!existsSync(hostPkgPath)) {
-    notes.push('   skip host check - hyperswitch-client-core is not a sibling of this repository');
-    console.log('    skip hyperswitch-client-core not found beside this repository');
-  } else {
-    const hostPkg = JSON.parse(readFileSync(hostPkgPath, 'utf8'));
-    const declared = { ...hostPkg.dependencies, ...hostPkg.devDependencies };
-    check(
-      declared['react-final-form'] !== undefined && declared['final-form'] !== undefined,
-      'hyperswitch-client-core still declares react-final-form and final-form'
-    );
-  }
-}
 
 /* ── Report ──────────────────────────────────────────────────────────────── */
 
@@ -609,4 +378,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\n[verify-consumers] OK - ${notes.length} checks across 4 consumer fixtures`);
+console.log(`\n[verify-consumers] OK - ${notes.length} checks in the merchant consumer fixture`);

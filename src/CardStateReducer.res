@@ -1,4 +1,3 @@
-@genType
 type field = [#cardNumber | #expiry | #cvc | #network]
 
 type fieldMeta = {touched: bool, active: bool}
@@ -13,7 +12,6 @@ type state = {
   cvc: string,
   brand: string,
   matchedSchemes: array<string>,
-  showSchemePicker: bool,
   numberMeta: fieldMeta,
   expiryMeta: fieldMeta,
   cvcMeta: fieldMeta,
@@ -29,7 +27,6 @@ let initial = {
   cvc: "",
   brand: "",
   matchedSchemes: [],
-  showSchemePicker: false,
   numberMeta: untouched,
   expiryMeta: untouched,
   cvcMeta: untouched,
@@ -41,8 +38,6 @@ type action =
   | NumberChanged(CardFieldLogic.numberChange)
   | ExpiryChanged(CardFieldLogic.expiryChange)
   | CvcChanged(CardFieldLogic.cvcChange)
-  | SchemeSelected(string)
-  | ScanApplied(CardFieldLogic.scanResult)
   | Focused(field)
   | Blurred(field)
   | SubmitAttempted
@@ -65,7 +60,6 @@ let reduce = (state: state, action: action): state =>
       cardNumber: change.formatted,
       brand: change.brand,
       matchedSchemes: change.matchedSchemes,
-      showSchemePicker: change.showSchemePicker,
       expiryDisplay: cleared ? "" : state.expiryDisplay,
       expiryMonth: cleared ? "" : state.expiryMonth,
       expiryYear: cleared ? "" : state.expiryYear,
@@ -78,15 +72,6 @@ let reduce = (state: state, action: action): state =>
       expiryYear: change.year,
     }
   | CvcChanged(change) => {...state, cvc: change.formatted}
-  | SchemeSelected(scheme) => {...state, brand: scheme}
-  | ScanApplied(result) => {
-      ...state,
-      cardNumber: result.cardNumber,
-      brand: result.brand,
-      expiryDisplay: result.expiryDisplay,
-      expiryMonth: result.expiryMonth,
-      expiryYear: result.expiryYear,
-    }
   | Focused(field) => state->withMeta(field, meta => {...meta, active: true})
   | Blurred(field) => state->withMeta(field, meta => {touched: true, active: false})
   | SubmitAttempted => {

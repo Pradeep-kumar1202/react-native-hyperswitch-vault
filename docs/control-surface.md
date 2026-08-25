@@ -113,7 +113,6 @@ If a design needs those, it needs a change to the library, not a workaround.
 `splitCardFields`:
 
 - `false` (default) — one bordered block, expiry and CVC sharing the row beneath the card number.
-  This is what a card-only hyperswitch-client-core payment sheet looks like.
 - `true` — three separately bordered fields, and each field's error moves directly beneath that
   field instead of below the whole block.
 
@@ -288,20 +287,11 @@ keeping secret keys off the device.
 
 ---
 
-## Standalone vs embedded
+## One entry point
 
-Two entry points, different jobs.
-
-| | root entry (`HyperswitchVaultForm`) | `/embedded` (`CardNumberField`, `CardExpiryField`, `CardCvcField`) |
-|---|---|---|
-| Owns the field state | yes — an internal reducer | no — the host passes `value` and `onChange` in |
-| Intended consumer | any merchant app | hyperswitch-client-core |
-| Labels / locale | English defaults, overridable via `localisation` | supplied by the host, required |
-| Scan card, co-badge picker | excluded | injected by the host |
-| Form library | none — neither entry has one | the host's own (client-core owns react-final-form) |
-
-If you are already rendering client-core's payment sheet, you do not need this package. It exists
-for merchants who want the card-saving step inside their own UI.
+The package publishes **one** entry point: the package root. A previous revision also published
+`/embedded` controlled fields and a `/vault` transport subpath; both were removed so that PAN,
+expiry and CVC cannot cross the supported public API in either direction.
 
 ---
 

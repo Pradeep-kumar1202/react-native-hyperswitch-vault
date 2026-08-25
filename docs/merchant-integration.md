@@ -99,9 +99,11 @@ Authorization: <sdk_authorization from call 1>
 { "payment_id": "<payment_id from call 1>", "wallets": [] }
 ```
 
-**Note the auth change.** This call authenticates with the intent's own `sdk_authorization`, *not*
-with your secret key. That is how `hyperswitch-client-core` does it too — see `Utils.getHeader`,
-which sends `Authorization` instead of `api-key` whenever an sdk_authorization is present.
+**Note the auth change.** Call 2 is the one request in this flow that does **not** use your secret
+key. `POST /payments/session_tokens` is authenticated by the `sdk_authorization` that call 1
+returned, sent in the `Authorization` header — there is no `api-key` header on this request. Call 1
+keeps `api-key: <SECRET_API_KEY>`; your secret key is never used for call 2 and never leaves your
+server. `example-server/merchant-server.mjs` makes both calls exactly this way.
 
 The response looks like this:
 
@@ -227,7 +229,7 @@ explicitly and make sure it matches the environment your **server** created the 
 |---|---|---|
 | `appearance` | `VaultFormAppearance` | colours, radius, border width, font, input height — every field optional |
 | `disabled` | `boolean` | makes the inputs genuinely non-interactive |
-| `splitCardFields` | `boolean` | `false` (default) is one bordered block, expiry and CVC sharing a row — the card-only client-core look. `true` gives three separately bordered fields, each error beneath its own field. |
+| `splitCardFields` | `boolean` | `false` (default) is one bordered block, expiry and CVC sharing a row — one compact block. `true` gives three separately bordered fields, each error beneath its own field. |
 | `onStateChange` | `(state: CardFormState) => void` | `{complete, cardNumberValid, expiryValid, cvcValid, brand}` — validity only, never a card value. Use `complete` to enable your button. |
 
 ### 3.5 The ref handle
@@ -267,7 +269,7 @@ Send it to your server and store it against the customer. It is a reference to t
 card data — but it is still a credential for charging that card, so treat it like one: your backend,
 not your app, and not your logs.
 
-To charge it later, `hyperswitch-client-core` passes it as `payment_token` in the payments confirm
+To charge it later, your backend passes it as `payment_token` in the payments confirm
 body (see `PaymentUtils.generateCardConfirmBody`) and omits `payment_method_data` entirely. Confirm
 the exact shape for your API version before you build on it — that part is outside this library.
 
@@ -289,17 +291,18 @@ the exact shape for your API version before you build on it — that part is out
 - Fetch a **fresh session per attempt**. Replacing the `session` prop cancels an in-flight
   confirmation and the next `submit()` always uses the current authorization.
 
-**On compliance** — for the **standalone root-entry flow** (`HyperswitchVaultForm`, or
-`HyperswitchVaultFormProvider` with the three card fields): raw card values are processed inside
-library-managed React Native state running in your application's process. In that flow the
-supported merchant API does not expose them through merchant callbacks, handles, public form state,
-submission results or library logs, and the standalone flow does not send them to your backend.
-That is an API/data-flow guarantee — **not** native-process isolation, **not** memory zeroization,
-**not** a claim of PCI DSS compliance and **not** a claim that your PCI scope is reduced. Only your
-own assessor can determine that.
+**On compliance.** The boundary, stated exactly:
 
-The guarantee is scoped to that flow. **`/vault` accepts raw card details by design** and is
-outside it.
+> PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
+> state and are transmitted only by the library's internal tokenization transport. The merchant
+> receives safe UI state and the resulting token.
+
+There is one entry point and one flow, so the guarantee has no carve-out.
+
+That is an API and data-flow guarantee — **not** native-process isolation, **not** memory
+zeroization, **not** a claim of PCI DSS compliance, **not** a claim that your PCI scope is reduced,
+and **not** protection from malicious code executing inside your own application process. Only your
+own assessor can determine your scope.
 
 ---
 

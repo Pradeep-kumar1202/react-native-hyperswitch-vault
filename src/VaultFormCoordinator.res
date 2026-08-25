@@ -40,13 +40,6 @@ let readSession = (session: JSON.t): sessionState => {
   }
 }
 
-let fieldSpecs: array<CardFormTypes.cardFieldSpec> = [
-  {renderType: "CardNumber", writePath: "payment_method_data.card.card_number"},
-  {renderType: "CardExpiryMonth", writePath: "payment_method_data.card.card_exp_month"},
-  {renderType: "CardExpiryYear", writePath: "payment_method_data.card.card_exp_year"},
-  {renderType: "Cvc", writePath: "payment_method_data.card.card_cvc"},
-]
-
 let readCardField = (values: Dict.t<JSON.t>, key) =>
   values
   ->Dict.get("payment_method_data")

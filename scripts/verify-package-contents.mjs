@@ -65,6 +65,9 @@ check(uncategorised.length === 0, `every shipped file is in a declared category 
 console.log('\nMust not ship');
 
 const FORBIDDEN_PATHS = [
+  ['an /embedded entry', /^dist\/(esm|cjs)\/embedded\.js$|^dist\/types\/embedded\.d\.ts$/],
+  ['a /vault entry', /^dist\/(esm|cjs)\/vault\.js$|^dist\/types\/vault\.d\.ts$/],
+  ['controlled-field declarations', /VaultEmbedded|CardFieldLogic\.gen|CardStateReducer\.gen/],
   ['ReScript sources or artefacts', /\.(res|resi|cmi|cmj|cmt)$|\.bs\.js$/],
   ['internal src/', /^src\//],
   ['repository-only scripts', /^scripts\//],
@@ -138,10 +141,8 @@ console.log('\nMust ship');
 
 for (const required of [
   'package.json', 'LICENSE', 'README.md', 'THIRD-PARTY-NOTICES.md',
-  'dist/types/public.d.ts', 'dist/types/embedded.d.ts', 'dist/types/vault.d.ts',
+  'dist/types/public.d.ts',
   'dist/esm/index.js', 'dist/cjs/index.js',
-  'dist/esm/embedded.js', 'dist/cjs/embedded.js',
-  'dist/esm/vault.js', 'dist/cjs/vault.js',
 ]) {
   check(files.includes(required), `ships ${required}`);
 }

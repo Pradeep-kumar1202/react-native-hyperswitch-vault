@@ -11,13 +11,9 @@ import type {safeVaultErrorCode as VaultResult_safeVaultErrorCode} from './Vault
 
 import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.gen';
 
-import type {vaultCardMetadata as VaultConfirm_vaultCardMetadata} from './VaultConfirm.gen';
-
-import type {vaultEnvironment as VaultConfirm_vaultEnvironment} from './VaultConfirm.gen';
-
 import type {vaultSubmitResult as VaultResult_vaultSubmitResult} from './VaultResult.gen';
 
-export type vaultEnvironment = VaultConfirm_vaultEnvironment;
+export type vaultEnvironment = "production" | "sandbox" | "integration";
 
 export type vaultSession = $$vaultSession;
 
@@ -73,8 +69,6 @@ export type cardFormState = {
   readonly cvcValid: boolean; 
   readonly brand: string
 };
-
-export type vaultCardMetadata = VaultConfirm_vaultCardMetadata;
 
 export type safeVaultErrorCode = VaultResult_safeVaultErrorCode;
 
