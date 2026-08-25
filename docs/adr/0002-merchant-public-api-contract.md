@@ -1,5 +1,9 @@
 # ADR-0002: Merchant Public API Contract
 
+> **Historical / removed design.** This document is a decision and investigation record, not
+> current merchant guidance. It describes surfaces that no longer exist.
+
+
 > **Merchant-only scope reset (2026-08-25).** This package is now exclusively a merchant-facing card
 > tokenization library. The `/embedded` controlled fields, the public `/vault` transport subpath and
 > every client-core integration surface were removed. Passages below that describe them are

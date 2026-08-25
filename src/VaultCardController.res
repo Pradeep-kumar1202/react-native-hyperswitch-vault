@@ -19,8 +19,6 @@ type controller = {
   onFocus: CardStateReducer.field => unit,
   onBlur: CardStateReducer.field => unit,
   onBackspace: (CardStateReducer.field, CardFieldLogic.backspaceAction) => unit,
-  onScanned: (~pan: string, ~expiry: string) => unit,
-  onSchemeSelected: string => unit,
   isValid: bool,
   isValidNow: unit => bool,
   cardDetails: unit => VaultConfirm.cardDetails,
@@ -150,16 +148,6 @@ let use = (
     | #none => ()
     }
 
-  let onScanned = (~pan, ~expiry) => {
-    let result = CardFieldLogic.onScanned(~pan, ~expiry)
-    dispatch(ScanApplied(result))
-    switch result.focus {
-    | #cvc => focusRef(cvcRef)
-    | #expiry => focusRef(expiryRef)
-    | #none => ()
-    }
-  }
-
   React.useEffect(() => {
     emitCardInfo(
       PaymentEventData.buildCardInfo(
@@ -196,8 +184,6 @@ let use = (
     onFocus: field => dispatch(Focused(field)),
     onBlur: field => dispatch(Blurred(field)),
     onBackspace,
-    onScanned,
-    onSchemeSelected: scheme => dispatch(SchemeSelected(scheme)),
     isValid: CardStateReducer.isValid(errors),
     isValidNow: () => {
       let (_, latestErrors) = latestRef.current

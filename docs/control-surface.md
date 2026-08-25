@@ -287,10 +287,7 @@ keeping secret keys off the device.
 
 ---
 
-## Standalone vs embedded
-
-Two entry points, different jobs.
-
+## One entry point
 
 The package publishes **one** entry point: the package root. A previous revision also published
 `/embedded` controlled fields and a `/vault` transport subpath; both were removed so that PAN,

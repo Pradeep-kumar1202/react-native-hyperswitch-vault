@@ -68,7 +68,7 @@ const requireFromRoot = createRequire(path.join(root, 'app.js'));
 /*
  * A stub react-native. The real package's entry is Flow-typed source that Node cannot parse, and
  * copying it would take hundreds of megabytes. Every access returns a callable/indexable dummy,
- * which is enough for a module to LOAD — which is all these fixtures assert. Rendering behaviour is
+ * which is enough for a module to LOAD — which is all this fixture asserts. Rendering behaviour is
  * covered by the example's jest suite, which uses the real React Native preset.
  */
 const writeReactNativeStub = (nodeModules) => {
@@ -378,4 +378,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log(`\n[verify-consumers] OK - ${notes.length} checks across 4 consumer fixtures`);
+console.log(`\n[verify-consumers] OK - ${notes.length} checks in the merchant consumer fixture`);

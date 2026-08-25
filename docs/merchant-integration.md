@@ -99,9 +99,11 @@ Authorization: <sdk_authorization from call 1>
 { "payment_id": "<payment_id from call 1>", "wallets": [] }
 ```
 
-**Note the auth change.** This call authenticates with the intent's own `sdk_authorization`, *not*
-with your secret key —
-which sends `Authorization` instead of `api-key` whenever an sdk_authorization is present.
+**Note the auth change.** Call 2 is the one request in this flow that does **not** use your secret
+key. `POST /payments/session_tokens` is authenticated by the `sdk_authorization` that call 1
+returned, sent in the `Authorization` header — there is no `api-key` header on this request. Call 1
+keeps `api-key: <SECRET_API_KEY>`; your secret key is never used for call 2 and never leaves your
+server. `example-server/merchant-server.mjs` makes both calls exactly this way.
 
 The response looks like this:
 
@@ -289,17 +291,18 @@ the exact shape for your API version before you build on it — that part is out
 - Fetch a **fresh session per attempt**. Replacing the `session` prop cancels an in-flight
   confirmation and the next `submit()` always uses the current authorization.
 
-**On compliance** — for the **standalone root-entry flow** (`HyperswitchVaultForm`, or
-`HyperswitchVaultFormProvider` with the three card fields): raw card values are processed inside
-library-managed React Native state running in your application's process. In that flow the
-supported merchant API does not expose them through merchant callbacks, handles, public form state,
-submission results or library logs, and the standalone flow does not send them to your backend.
-That is an API/data-flow guarantee — **not** native-process isolation, **not** memory zeroization,
-**not** a claim of PCI DSS compliance and **not** a claim that your PCI scope is reduced. Only your
-own assessor can determine that.
+**On compliance.** The boundary, stated exactly:
 
-The guarantee is scoped to that flow. **`/vault` accepts raw card details by design** and is
-outside it.
+> PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
+> state and are transmitted only by the library's internal tokenization transport. The merchant
+> receives safe UI state and the resulting token.
+
+There is one entry point and one flow, so the guarantee has no carve-out.
+
+That is an API and data-flow guarantee — **not** native-process isolation, **not** memory
+zeroization, **not** a claim of PCI DSS compliance, **not** a claim that your PCI scope is reduced,
+and **not** protection from malicious code executing inside your own application process. Only your
+own assessor can determine your scope.
 
 ---
 

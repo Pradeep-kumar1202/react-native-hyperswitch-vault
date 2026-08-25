@@ -2,8 +2,9 @@
 
 **Why this exists.** Everything else in this repository is verified automatically: ReScript
 compiles, declarations are generated and type-checked against the real React Native tsconfig, the
-tarball contents are asserted, the result-mapping table is executed, three consumer fixtures prove
-that the entry imports and bundles no form library, and the lifecycle contract is exercised with `react-test-renderer` under the
+tarball contents are asserted, the result-mapping table is executed, a packed-consumer fixture
+proves that the entry imports and bundles no form library, and the lifecycle contract is exercised
+with `react-test-renderer` under the
 React Native jest preset.
 
 None of that is a device. The automated suite **builds and bundles** the example; it has never been
@@ -529,7 +530,6 @@ the packed declarations, and Metro release bundles for both platforms on React N
 | a fresh app created outside this repo, `yarn add` the tarball, no Metro or Babel changes | builds and launches |
 | the card artwork on a device | brand icons and the CVC hint render at the right density (@1x/@2x/@3x) |
 | Hermes release build | the bundle byte-compiles and runs; no dynamic-require failure at startup |
-| a `/vault`-only integration (no card UI) | links and runs without pulling React Native UI |
 | an Expo managed project | **unverified** — if attempted, record the result rather than assuming |
 
 ## 12. Real sandbox tokenization
