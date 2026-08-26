@@ -15,6 +15,7 @@ import {
   HyperswitchVault,
   type CardBrand,
   type MerchantSession,
+  type VaultFormFieldOptions,
   type VaultFormFieldStyles,
   type VaultFormHandle,
   type VaultFormState,
@@ -22,7 +23,18 @@ import {
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {fetchMerchantSession} from './merchantServer';
 
-/* Per-field styling: one grouped prop, no flat per-slot props. */
+/*
+ * WHICH ELEMENTS EXIST. With no `fieldOptions` the form renders three empty, neutral inputs —
+ * no placeholder, no label, no icon, no error text. That is deliberate: the library owns the card
+ * values, the merchant owns the look. Pick what this checkout should show.
+ */
+const fieldOptions: VaultFormFieldOptions = {
+  cardNumber: {placeholder: 'Card number', brandIconMode: 'standard', errorDisplay: 'inline'},
+  expiry: {placeholder: 'MM/YY', errorDisplay: 'inline'},
+  cvc: {placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline'},
+};
+
+/* HOW THE ENABLED ELEMENTS LOOK. A separate axis from the options above. */
 const fieldStyles: VaultFormFieldStyles = {
   cardNumber: {
     container: {borderColor: '#CBD5F5', borderRadius: 12},
@@ -109,6 +121,7 @@ export function QuickStartCheckout() {
           ref={formRef}
           session={session}
           environment="sandbox"
+          fieldOptions={fieldOptions}
           fieldStyles={fieldStyles}
           onFormStateChange={setState}
         />

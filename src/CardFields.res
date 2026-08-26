@@ -12,11 +12,20 @@ let inputColors = (~theme: CardFormTypes.cardTheme, ~error: option<string>, ~isV
   (ok, ok ? theme.textColor : theme.dangerColor)
 }
 
+/*
+ * Inline error rendering is OPT-IN and separate from the error EVENT. `errorDisplay = #none` (the
+ * default) renders nothing at all — not an empty container, not reserved space — while the same
+ * safe error still reaches the merchant through the field and form state callbacks.
+ */
 module ErrorSlot = {
   @react.component
-  let make = (~error: option<string>, ~renderError: option<string => React.element>) =>
-    switch (error, renderError) {
-    | (Some(message), Some(render)) => render(message)
+  let make = (
+    ~error: option<string>,
+    ~renderError: option<string => React.element>,
+    ~errorDisplay: CardFieldOptions.errorDisplay,
+  ) =>
+    switch (errorDisplay, error, renderError) {
+    | (#inline, Some(message), Some(render)) => render(message)
     | _ => React.null
     }
 }
@@ -33,8 +42,7 @@ module Number = {
     ~error: option<string>=?,
     ~isValid: bool=?,
     ~renderError: option<string => React.element>=?,
-    ~label: string,
-    ~floatingLabel: string,
+    ~options: CardFieldOptions.resolved,
     ~common: common,
     ~onAnalytics: CardFormTypes.analyticsEvent => unit=_ => (),
     ~iconRight: CardInput.iconType=CardInput.NoIcon,
@@ -57,11 +65,10 @@ module Number = {
         editable=common.editable
         onAnalytics
         fieldId=CardFormTypes.CardNumberField
-        name={CardTestIds.cardNumberInputTestId}
+        options
         reference
         state=value
         setState={text => onChange(CardFieldLogic.onCardNumberText(text, ~currentBrand))}
-        placeholder=label
         keyboardType=#"number-pad"
         isValid
         maxLength=Some(23)
@@ -76,10 +83,9 @@ module Number = {
           if ev.nativeEvent.key == "Backspace" {
             onBackspace(CardFieldLogic.onCardNumberBackspace(~value))
           }}
-        animateLabel=floatingLabel
         accessible=?common.accessible
       />
-      <ErrorSlot error={error} renderError={renderError} />
+      <ErrorSlot error={error} renderError={renderError} errorDisplay={options.errorDisplay} />
     </View>
   }
 }
@@ -95,8 +101,7 @@ module Expiry = {
     ~error: option<string>=?,
     ~isValid: bool=?,
     ~renderError: option<string => React.element>=?,
-    ~label: string,
-    ~floatingLabel: string,
+    ~options: CardFieldOptions.resolved,
     ~common: common,
     ~onAnalytics: CardFormTypes.analyticsEvent => unit=_ => (),
     ~reference: option<React.ref<Nullable.t<TextInput.element>>>=?,
@@ -105,6 +110,8 @@ module Expiry = {
     ~borderTopLeftRadius: option<float>=?,
     ~borderTopRightRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    ~borderBottomWidth: option<float>=?,
+    ~borderBottomLeftRadius: option<float>=?,
     /* Widened from `expiryStyles`; `accessory` is structurally absent for this field. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
@@ -120,11 +127,10 @@ module Expiry = {
         editable=common.editable
         onAnalytics
         fieldId=CardFormTypes.ExpiryField
-        name={CardTestIds.expiryInputTestId}
+        options
         reference
         state=value
         setState={text => onChange(CardFieldLogic.onExpiryText(text))}
-        placeholder=label
         keyboardType=#"number-pad"
         isValid
         maxLength=Some(7)
@@ -133,6 +139,8 @@ module Expiry = {
         ?borderTopLeftRadius
         ?borderTopRightRadius
         ?borderBottomRightRadius
+        ?borderBottomWidth
+        ?borderBottomLeftRadius
         textColor
         onFocus
         onBlur
@@ -140,10 +148,9 @@ module Expiry = {
           if ev.nativeEvent.key == "Backspace" {
             onBackspace(CardFieldLogic.onExpiryBackspace(~display=value))
           }}
-        animateLabel=floatingLabel
         accessible=?common.accessible
       />
-      <ErrorSlot error={error} renderError={renderError} />
+      <ErrorSlot error={error} renderError={renderError} errorDisplay={options.errorDisplay} />
     </View>
   }
 }
@@ -160,8 +167,7 @@ module Cvc = {
     ~error: option<string>=?,
     ~isValid: bool=?,
     ~renderError: option<string => React.element>=?,
-    ~label: string,
-    ~floatingLabel: string,
+    ~options: CardFieldOptions.resolved,
     ~common: common,
     ~onAnalytics: CardFormTypes.analyticsEvent => unit=_ => (),
     ~iconRight: CardInput.iconType=CardInput.NoIcon,
@@ -189,12 +195,11 @@ module Cvc = {
         editable=common.editable
         onAnalytics
         fieldId=CardFormTypes.CvcField
-        name={CardTestIds.cvcInputTestId}
+        options
         reference
         secureTextEntry=true
         state=value
         setState={text => onChange(CardFieldLogic.onCvcText(text, ~brand))}
-        placeholder=label
         keyboardType=#"number-pad"
         isValid
         maxLength=Some(4)
@@ -214,10 +219,9 @@ module Cvc = {
           if ev.nativeEvent.key == "Backspace" {
             onBackspace(CardFieldLogic.onCvcBackspace(~value))
           }}
-        animateLabel=floatingLabel
         accessible=?common.accessible
       />
-      <ErrorSlot error={error} renderError={renderError} />
+      <ErrorSlot error={error} renderError={renderError} errorDisplay={options.errorDisplay} />
     </View>
   }
 }

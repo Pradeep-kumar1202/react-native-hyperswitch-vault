@@ -232,7 +232,13 @@ export function MerchantCheckout() {
                   session={phase.session}
                   environment="sandbox"
                   appearance={cardAppearance}
-                  splitCardFields={SPLIT_CARD_FIELDS}
+                  layout="inline"
+                  fieldOptions={{
+                    cardNumber: {placeholder: 'Card number', brandIconMode: 'standard', errorDisplay: 'inline'},
+                    expiry: {placeholder: 'MM/YY', errorDisplay: 'inline'},
+                    cvc: {placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline'},
+                  }}
+                  fieldArrangement={SPLIT_CARD_FIELDS ? 'separate' : 'fused'}
                   onStateChange={setCardState}
                 />
               ) : null}

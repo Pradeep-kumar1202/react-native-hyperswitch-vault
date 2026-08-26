@@ -162,6 +162,7 @@ Two consequences worth recording, both current behaviour:
 | `WidgetHandle` | `HyperswitchVaultFormProvider.gen` `widgetHandle` | `{ focus(): void; blur(): void }` |
 | `VaultFormAppearance` | `VaultFormOptions.gen` `appearance` | 16 optional tokens, see 2.7 |
 | `VaultFormBrandIconMode` | `CardIcons.gen` `brandIconMode` | `"standard" \| "animated" \| "hidden" \| "hideGeneric"` |
+| `VaultBrandIconMode` | `CardFieldOptions.gen` `brandIconMode` | the same union under the field-option name |
 | `VaultFormLocalisation` | `VaultFormOptions.gen` `localisation` | `{ labels?; validationMessages?; isRtl? }` |
 | `VaultFormLabels` | `VaultFormOptions.gen` `localisationLabels` | 6 optional strings |
 | `VaultFormValidationMessages` | `VaultFormOptions.gen` `localisationMessages` | 6 optional strings |
@@ -212,7 +213,10 @@ type Props = {
   readonly appearance?: appearance;
   readonly localisation?: localisation;
   readonly disabled?: boolean;
-  readonly splitCardFields?: boolean;
+  readonly layout?: formLayout;              // "stacked" (default) | "inline"
+  readonly fieldArrangement?: fieldArrangement;  // "separate" (default) | "fused"
+  readonly fieldOptions?: formFieldOptions;  // which visual elements each field renders
+  readonly fieldStyles?: formFieldStyles;
   readonly accessible?: boolean;
   readonly onStateChange?: (_1: cardFormState) => void;
 };
@@ -223,7 +227,9 @@ Only two fields of `session` are read — `vault_details.vault_type` and
 
 ### 2.4 `HyperswitchVaultFormProvider` props **[gen]**
 
-Identical to 2.3 **minus** `splitCardFields`, **plus** required `children: React.ReactNode`.
+Identical to 2.3 **minus** `layout`, `fieldArrangement`, `fieldOptions` and `fieldStyles`
+(the merchant owns the layout and passes options and styles to each field directly), **plus**
+required `children: React.ReactNode`.
 
 ### 2.5 Ref handle — both components **[gen]**
 
@@ -247,7 +253,7 @@ type cardFormState = {
   readonly cardNumberValid: boolean;
   readonly expiryValid: boolean;
   readonly cvcValid: boolean;
-  readonly brand: string;   // detected scheme name, "" when none
+  readonly brand: CardBrand;   // canonical union, "unknown" when none
 };
 ```
 
@@ -458,7 +464,7 @@ merchant session prop
 
 ```
 merchant session prop
-  → HyperswitchVaultFormProvider.res    (same props minus splitCardFields, plus children)
+  → HyperswitchVaultFormProvider.res    (same props minus the form-layout ones, plus children)
   → VaultFormHost.useHost               (THE SAME host and controller as above)
   → VaultWidgetContext.ContextProvider
   → merchant-owned children
@@ -490,7 +496,9 @@ to cover, each traced to source.
 | Error visibility gated on `touched` (and, for CVC, not `active`); expiry has its own predicate | `CardStateReducer.{numberError,expiryError,cvcError}` **[src]** |
 | Changing to an unmatched brand clears expiry and CVC | `CardStateReducer` `NumberChanged` with `clearDependents` **[src]** |
 | Floating label animates over 200 ms, `useNativeDriver: false` | `CardInput.res` **[src]** |
-| Brand icon + CVC icon render automatically; `brandIconMode` has 4 modes | `CardIcons.res`, `BoundCardFields.res` **[src]** |
+| Brand icon and CVC icon render only when asked for — `brandIconMode` defaults to `hidden`, `cvcIcon` to `none` | `CardFieldOptions.res`, `CardIcons.res`, `BoundCardFields.res` **[src]** |
+| `brandIconMode` resolves field → `appearance` → `hidden` at one call site | `CardFieldOptions.resolveBrandIconMode` **[src]** |
+| Both accessories are non-interactive and hidden from the accessibility tree | `CardInput.res` `CustomIcon` branch **[src]** |
 | Single-flight `submit()` returns the same promise instance | `VaultFormCoordinator.submit` `inFlightRef` **[src]** |
 | `reset()` during an in-flight request is a no-op that does **not** cancel | `VaultFormCoordinator.reset` **[src]** |
 | Session/environment replacement aborts the superseded in-flight request | `VaultFormCoordinator` `requestKey` effect **[src]** |

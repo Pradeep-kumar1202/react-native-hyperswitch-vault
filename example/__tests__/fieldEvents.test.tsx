@@ -1364,12 +1364,19 @@ describe('the legacy onStateChange payload', () => {
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
-  it('its `brand` is a scheme name, never a card value', () => {
-    const {legacy, renderer} = both();
+  it('its `brand` is the canonical CardBrand value, never a card value', () => {
+    const {legacy, modern, renderer} = both();
 
     type(renderer, NUMBER_ID, CARD_NUMBER);
     const latest = legacy[legacy.length - 1];
-    expect(latest.brand).toBe('Visa');
+    /*
+     * The canonical token, not the detector's display casing. This surface used to emit "Visa"
+     * while every other event surface emitted "visa", so the same card produced two different
+     * values depending on which callback the merchant used.
+     */
+    expect(latest.brand).toBe('visa');
+    /* and it is now literally the same value the modern payload carries */
+    expect(latest.brand).toBe(modern[modern.length - 1].brand);
     expect(latest.brand).not.toContain('4242');
     expect(latest.brand.length).toBeLessThan(30);
 

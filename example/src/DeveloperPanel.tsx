@@ -145,7 +145,8 @@ export function DeveloperPanel() {
                 ref={formRef}
                 session={session}
                 environment="sandbox"
-                splitCardFields={split}
+                layout="inline"
+                fieldArrangement={split ? 'separate' : 'fused'}
                 onStateChange={state => setComplete(state.complete)}
               />
 

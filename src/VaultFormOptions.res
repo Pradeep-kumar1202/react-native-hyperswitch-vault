@@ -70,13 +70,22 @@ type localisation = {
   isRtl?: bool,
 }
 
+/*
+ * `brand` is the canonical `CardBrand` union, the SAME type the per-field and form state events
+ * carry. It was a bare `string` here, and this surface emitted the detector's own display casing
+ * ("Visa") while every other surface emitted the canonical token ("visa") — the same card produced
+ * two different values depending on which callback a merchant happened to use. There is one union
+ * and one mapping table (`VaultPublicState.brandOf`); nothing else maps brands.
+ *
+ * An undetected or unrecognised scheme is `#unknown`, where this used to emit `""`.
+ */
 @genType
 type cardFormState = {
   complete: bool,
   cardNumberValid: bool,
   expiryValid: bool,
   cvcValid: bool,
-  brand: string,
+  brand: VaultPublicState.cardBrand,
 }
 
 @genType

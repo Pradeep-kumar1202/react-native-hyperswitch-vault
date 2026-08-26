@@ -116,7 +116,7 @@ body shape; redact the header at capture time.
 
 - three fields in ONE bordered block: card number on top, expiry and CVC sharing the row beneath;
 - no gap between the rows, and rounded corners only on the outside of the block
-  (`splitCardFields` is off for the standalone form);
+  (the default `layout` is `stacked` and `fieldArrangement` is `separate`);
 - resting placeholders read `Card number`, `MM / YY`, `CVC`;
 - under the divider: `Manual checks — session #1, form incomplete`
   (tap **Dev** first — the app opens on the storefront).
@@ -539,6 +539,33 @@ in the automated suite performs a live request, and no production request has ev
 
 ---
 
+## 13. Merchant UI reset — defaults and prop-controlled presentation
+
+**Not yet performed.** The rendered-tree proofs are `react-test-renderer` plus Metro bundling; no
+pixel has been rendered.
+
+| Check | Expect |
+|---|---|
+| the zero-configuration form on a device | three empty, neutral boxes — no placeholder, label, icon or error text, and no gaps where they would be |
+| tap through the blank form | focus ring moves, keyboard opens, auto-advance still works with nothing visible to read |
+| VoiceOver / TalkBack on the blank form | each field is still announced "Card number" / "Expiration date" / "Security code" |
+| `labelBehavior="static"` | the label sits above the box and never overlaps the placeholder at any font scale |
+| `labelBehavior="floating"` | the animation is unchanged, and no second placeholder shows behind it |
+| `labelBehavior="none"`, empty field | the placeholder sits on the vertical centre line of the box, not below it |
+| `labelBehavior="none"`, typing | the typed text keeps exactly the placeholder's baseline — no jump when the placeholder goes |
+| `appearance.inputHeight` 32 / 48 / 72 | the placeholder stays centred at every height |
+| max OS font scale with a placeholder | placeholder and typed text stay centred and unclipped |
+| `layout="stacked"` vs `"inline"` | stacked gives three rows; inline puts expiry and CVC side by side, and reverses under RTL |
+| `fieldArrangement="fused"` at inline | shared edges read as one line on both platforms |
+| `errorDisplay="none"` with an invalid field | nothing appears and the layout does not shift |
+| `errorDisplay="inline"` | the message appears without pushing the Pay button under the user's finger |
+| `brandIconMode` `'hidden'` → `'standard'` / `cvcIcon` off then on | no reserved space when off; correct density artwork when on |
+| `brandIconMode="animated"` on `appearance`, `'hidden'` on the field | the field's mark stays off — the field value wins over the form-wide one |
+| VoiceOver / TalkBack over an enabled brand or CVC icon | the icon is skipped entirely; it is never announced as a button and never takes focus |
+| max OS font scale, blank default | the empty boxes keep their height and do not clip |
+
+---
+
 ## Recording results
 
 | # | Check | iOS | Android |
@@ -574,6 +601,7 @@ in the automated suite performs a live request, and no production request has ev
 | 10.11 | Accessibility and screen-reader interaction | ☐ | ☐ |
 | 11 | External-consumer install, artwork density, Hermes release build | ☐ | ☐ |
 | 12 | Real sandbox tokenization | ☐ | ☐ |
+| 13 | Merchant UI reset: blank defaults, labels, layout, icons, errors | ☐ | ☐ |
 
 Record the device model and OS version beside the ticks — keyboard and text-measurement behaviour
 varies more between OS versions than between devices. File a failure with the platform, the OS

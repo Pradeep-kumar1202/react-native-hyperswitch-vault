@@ -183,6 +183,15 @@ const mount = async (session: MerchantSession): Promise<Mounted> => {
         ref={ref}
         session={session}
         environment="sandbox"
+        /*
+         * Inline error RENDERING is opt-in since the merchant UI reset. The lifecycle suite asserts
+         * what is on screen, so it asks for it; nothing about validation or the error EVENT changed.
+         */
+        fieldOptions={{
+          cardNumber: {errorDisplay: 'inline'},
+          expiry: {errorDisplay: 'inline'},
+          cvc: {errorDisplay: 'inline'},
+        }}
         onStateChange={next => {
           latest = next;
         }}
@@ -266,7 +275,10 @@ describe('reset', () => {
   it('clears values, the visible expiry text, validation state and displayed errors', async () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
 
-    /* An invalid card, submitted, so an inline error is on screen. */
+    /*
+     * An invalid card, submitted. Inline error RENDERING is opt-in since the merchant UI reset, so
+     * this form asks for it; the error EVENT is unaffected either way.
+     */
     await type(tree, 'CardNumberInputTestId', '4242424242424241');
     let result!: VaultSubmitResult;
     await ReactTestRenderer.act(async () => {
@@ -515,10 +527,12 @@ describe('backend failure', () => {
   });
 });
 
-describe('splitCardFields', () => {
+describe('layout and fieldArrangement', () => {
   /*
-   * The two layouts differ in the container styles, not in the TextInput props: stacked merges the
-   * three fields into one block by squaring the inner corners, split separates them with a gap.
+   * `fieldArrangement` decides the container styles, not the TextInput props: `fused` merges the
+   * three fields into one block by squaring the inner corners, `separate` gives each its own
+   * rounded box with a gap between them. Both are shown here in the `inline` layout, where expiry
+   * and CVC share a row. The DEFAULT is `stacked` + `separate` — see the zero-configuration suite.
    */
   const flatten = (style: any): any[] =>
     Array.isArray(style) ? style.flatMap(flatten) : style ? [style] : [];
@@ -535,7 +549,8 @@ describe('splitCardFields', () => {
         <HyperswitchVaultForm
           session={sessionWith('pms_fake_layout')}
           environment="sandbox"
-          splitCardFields={split}
+          layout="inline"
+          fieldArrangement={split ? 'separate' : 'fused'}
         />,
       );
     });
@@ -543,7 +558,7 @@ describe('splitCardFields', () => {
     return containerStyles(tree);
   };
 
-  it('defaults to one merged block, and separates the fields when asked', async () => {
+  it('fuses the fields into one block, and separates them when asked', async () => {
     const stacked = await mountWith(false);
     /* Inner corners squared so the fields read as a single bordered block, and no gap between them. */
     expect(stacked.filter(s => s?.borderBottomLeftRadius === 0 || s?.borderTopLeftRadius === 0).length)

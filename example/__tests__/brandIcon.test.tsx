@@ -1,5 +1,15 @@
 /**
- * Brand-icon rendering across the four modes.
+ * Brand-icon rendering across the four `brandIconMode` values.
+ *
+ * Since the icon consolidation there is ONE control. `brandIconMode` decides both whether the
+ * brand mark exists and which artwork it uses, and it is the same union on the form-wide
+ * `appearance` and on `fieldOptions.cardNumber`. This suite drives it form-wide and leaves the
+ * field option unset, so `appearance` is what resolves. The precedence between the two is proved
+ * separately in `defaultUi.test.tsx`.
+ *
+ * The CVC icon is a separate control (`cvcIcon`) with no form-wide counterpart, and is turned on
+ * here so that "hidden" can be shown to remove the brand accessory only.
+ *
  * @format
  */
 import React from 'react';
@@ -26,6 +36,7 @@ const mount = async (mode?: string) => {
         session={session}
         environment="sandbox"
         appearance={mode ? ({brandIconMode: mode} as any) : undefined}
+        fieldOptions={{cvc: {cvcIcon: 'default'}}}
       />,
     );
   });
@@ -42,15 +53,15 @@ const type = async (tree: Renderer, text: string) => {
 
 it('standard: renders the placeholder icon empty, and a brand icon once detected', async () => {
   const tree = await mount('standard');
-  expect(images(tree).length).toBeGreaterThan(0);      // waitcard + cvc
+  expect(images(tree).length).toBe(2);                 // waitcard + cvc
   await type(tree, '4242424242424242');
-  expect(images(tree).length).toBeGreaterThan(0);      // visa + cvc
+  expect(images(tree).length).toBe(2);                 // visa + cvc
   await ReactTestRenderer.act(() => tree.unmount());
 });
 
-it('default (no mode) behaves like standard', async () => {
+it('default (no mode) is hidden: only the CVC icon remains', async () => {
   const tree = await mount();
-  expect(images(tree).length).toBeGreaterThan(0);
+  expect(images(tree).length).toBe(1);                 // cvc only
   await ReactTestRenderer.act(() => tree.unmount());
 });
 

@@ -95,6 +95,34 @@ const SENTINEL = {
   accessoryWidth: 88,
 };
 
+/*
+ * Every optional element is OFF by default since the merchant UI reset, so the styling suite has to
+ * ask for the elements it styles. The styling behaviour itself is unchanged — only the opt-in is
+ * new. `FULL_UI` turns on everything a card-number field can render.
+ */
+const FULL_UI = {
+  placeholder: 'Card number',
+  label: 'Card number',
+  labelBehavior: 'floating',
+  errorDisplay: 'inline',
+  brandIconMode: 'standard',
+} as const;
+
+const EXPIRY_UI = {
+  placeholder: 'MM / YY',
+  label: 'Expiry',
+  labelBehavior: 'floating',
+  errorDisplay: 'inline',
+} as const;
+
+const CVC_UI = {
+  placeholder: 'CVC',
+  label: 'CVC',
+  labelBehavior: 'floating',
+  errorDisplay: 'inline',
+  cvcIcon: 'default',
+} as const;
+
 const merchantStyles: VaultFieldStyles = {
   root: {backgroundColor: SENTINEL.rootBackground, padding: SENTINEL.rootPadding},
   container: {
@@ -198,7 +226,7 @@ const cardNumberRoot = (renderer: Renderer) =>
 
 describe('each style slot reaches its intended React Native element', () => {
   it('container — border width, colour, radius and height land on the bordered box', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
     const style = flat(cardNumberContainer(renderer).props.style);
 
     expect(style.borderWidth ?? style.borderTopWidth).toBe(SENTINEL.containerBorderWidth);
@@ -210,7 +238,7 @@ describe('each style slot reaches its intended React Native element', () => {
   });
 
   it('input — font size, colour, family, padding and alignment land on the TextInput', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
     const style = flat(cardNumberInput(renderer).props.style);
 
     expect(style.fontSize).toBe(SENTINEL.inputFontSize);
@@ -223,7 +251,7 @@ describe('each style slot reaches its intended React Native element', () => {
   });
 
   it('root — background and padding land on the outermost wrapper', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
     const matches = cardNumberRoot(renderer).filter(
       (n) => flat(n.props.style).backgroundColor === SENTINEL.rootBackground,
     );
@@ -241,7 +269,7 @@ describe('each style slot reaches its intended React Native element', () => {
   });
 
   it('placeholder — styles the label element while the field is empty and unfocused', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
 
     const texts = renderer.root.findAll(
       (n) => flat(n.props.style).color === SENTINEL.placeholderColor,
@@ -254,7 +282,7 @@ describe('each style slot reaches its intended React Native element', () => {
   });
 
   it('label — replaces the placeholder slot once the field is focused', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
 
     /* Resting: placeholder slot is applied, label slot is not. */
     const restingLabel = renderer.root
@@ -279,27 +307,26 @@ describe('each style slot reaches its intended React Native element', () => {
   });
 
   it('accessory — background and width land on the brand-icon container', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
 
-    const pressables = renderer.root
-      .findAll((n) => n.type === Pressable)
-      .filter((n) => {
-        const resolved = typeof n.props.style === 'function' ? n.props.style({pressed: false}) : n.props.style;
-        return flat(resolved).backgroundColor === SENTINEL.accessoryBackground;
-      });
+    /*
+     * The accessory container is a plain View, not a Pressable: neither icon has an action, so
+     * nothing in the tree pretends it does.
+     */
+    const containers = renderer.root
+      .findAll((n) => n.type === View)
+      .filter((n) => flat(n.props.style).backgroundColor === SENTINEL.accessoryBackground);
 
-    expect(pressables.length).toBeGreaterThan(0);
-    const resolved =
-      typeof pressables[0].props.style === 'function'
-        ? pressables[0].props.style({pressed: false})
-        : pressables[0].props.style;
+    expect(containers.length).toBeGreaterThan(0);
+    expect(renderer.root.findAll((n) => n.type === Pressable)).toHaveLength(0);
+    const resolved = containers[0].props.style;
     expect(flat(resolved).width).toBe(SENTINEL.accessoryWidth);
 
     ReactTestRenderer.act(() => renderer.unmount());
   });
 
   it('error — styles the validation message once it becomes visible', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
     const input = cardNumberInput(renderer);
 
     /* Type an invalid number, then blur so the library's visibility predicate shows the error. */
@@ -356,9 +383,9 @@ describe('precedence and absence', () => {
       return json;
     };
 
-    const withoutProp = serialise(withProvider(<CardNumberField />));
-    const withUndefined = serialise(withProvider(<CardNumberField styles={undefined} />));
-    const withEmpty = serialise(withProvider(<CardNumberField styles={{}} />));
+    const withoutProp = serialise(withProvider(<CardNumberField {...FULL_UI} />));
+    const withUndefined = serialise(withProvider(<CardNumberField {...FULL_UI} styles={undefined} />));
+    const withEmpty = serialise(withProvider(<CardNumberField {...FULL_UI} styles={{}} />));
 
     expect(withUndefined).toEqual(withoutProp);
     expect(withEmpty).toEqual(withoutProp);
@@ -390,7 +417,7 @@ describe('Phase 1 contracts still hold', () => {
 
   it('the ref still exposes exactly focus and blur, and both reach the input', () => {
     const ref = React.createRef<VaultFieldHandle>();
-    const renderer = mount(withProvider(<CardNumberField ref={ref} styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField ref={ref} {...FULL_UI} styles={merchantStyles} />));
 
     expect(Object.keys(ref.current!).sort()).toEqual(['blur', 'focus']);
     expect((ref.current as any).getValue).toBeUndefined();
@@ -436,7 +463,7 @@ describe('Phase 1 contracts still hold', () => {
   });
 
   it('library-owned behaviour is unchanged while styled', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={merchantStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={merchantStyles} />));
     const input = cardNumberInput(renderer);
 
     /* Formatting still groups, and the test ID is untouched. */
@@ -507,7 +534,7 @@ const allCardNumberContainers = (renderer: Renderer) =>
 describe('styles do not leak between providers', () => {
   it('two providers with different sentinels keep them entirely separate', () => {
     const renderer = mount(
-      twoProviders(<CardNumberField styles={ALPHA} />, <CardNumberField styles={BETA} />),
+      twoProviders(<CardNumberField {...FULL_UI} styles={ALPHA} />, <CardNumberField {...FULL_UI} styles={BETA} />),
     );
 
     const containers = allCardNumberContainers(renderer).map((n) => flat(n.props.style));
@@ -533,14 +560,14 @@ describe('styles do not leak between providers', () => {
 
   it('an unstyled field beside a styled one is untouched — no provider-wide broadcast', () => {
     /* Baseline: both unstyled. */
-    const baseline = mount(twoProviders(<CardNumberField />, <CardNumberField />));
+    const baseline = mount(twoProviders(<CardNumberField {...FULL_UI} />, <CardNumberField {...FULL_UI} />));
     const baselineRight = JSON.stringify(
       allCardNumberContainers(baseline).map((n) => flat(n.props.style)),
     );
     ReactTestRenderer.act(() => baseline.unmount());
 
     /* Now style only the LEFT one. The right one must be identical to baseline. */
-    const renderer = mount(twoProviders(<CardNumberField styles={ALPHA} />, <CardNumberField />));
+    const renderer = mount(twoProviders(<CardNumberField {...FULL_UI} styles={ALPHA} />, <CardNumberField {...FULL_UI} />));
     const containers = allCardNumberContainers(renderer).map((n) => flat(n.props.style));
     expect(containers).toHaveLength(2);
 
@@ -561,7 +588,7 @@ describe('styles do not leak between providers', () => {
 
   it('the error slot is per-field too: one field errors with its own colour, the other is clean', () => {
     const renderer = mount(
-      twoProviders(<CardNumberField styles={ALPHA} />, <CardNumberField styles={BETA} />),
+      twoProviders(<CardNumberField {...FULL_UI} styles={ALPHA} />, <CardNumberField {...FULL_UI} styles={BETA} />),
     );
 
     /* Drive ONLY the alpha field into a validation error. */
@@ -588,8 +615,8 @@ describe('styles do not leak between providers', () => {
       renderer = ReactTestRenderer.create(
         <HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
           {/* two card-number fields, differently styled — still a duplicate */}
-          <CardNumberField styles={ALPHA} />
-          <CardNumberField styles={BETA} />
+          <CardNumberField {...FULL_UI} styles={ALPHA} />
+          <CardNumberField {...FULL_UI} styles={BETA} />
           <CardExpiryField />
           <CardCVCField />
         </HyperswitchVaultFormProvider>,
@@ -676,7 +703,7 @@ const interpolationOutputRange = (renderer: Renderer): number[] | undefined => {
 
 describe('the animated label keeps its interpolation', () => {
   it('with no merchant style the default animation is unchanged', () => {
-    const renderer = mount(withProvider(<CardNumberField />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} />));
 
     expect(containsAnimatedNode(animatedLabelHostStyle(renderer))).toBe(false);
     expect(flat(animatedLabelHostStyle(renderer)).fontSize).toBe(16);
@@ -687,7 +714,7 @@ describe('the animated label keeps its interpolation', () => {
   });
 
   it('the resting endpoint comes from placeholder.fontSize', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={{placeholder: {fontSize: 41}}} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={{placeholder: {fontSize: 41}}} />));
 
     expect(interpolationOutputRange(renderer)).toEqual([41, 11]);
     /* the merchant value is the animation floor, not a static shadow */
@@ -697,7 +724,7 @@ describe('the animated label keeps its interpolation', () => {
   });
 
   it('the floating endpoint comes from label.fontSize', () => {
-    const renderer = mount(withProvider(<CardNumberField styles={{label: {fontSize: 7}}} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={{label: {fontSize: 7}}} />));
 
     /* The endpoint lives in the interpolation config, so it is provable without driving the
      * animation — and reading the config is a stronger assertion than sampling one frame. */
@@ -709,7 +736,7 @@ describe('the animated label keeps its interpolation', () => {
 
   it('both endpoints together, and the interpolation is still live', () => {
     const renderer = mount(
-      withProvider(<CardNumberField styles={{placeholder: {fontSize: 22}, label: {fontSize: 9}}} />),
+      withProvider(<CardNumberField {...FULL_UI} styles={{placeholder: {fontSize: 22}, label: {fontSize: 9}}} />),
     );
 
     expect(interpolationOutputRange(renderer)).toEqual([22, 9]);
@@ -724,7 +751,7 @@ describe('the animated label keeps its interpolation', () => {
   it('the non-fontSize half of the same style is still delivered', () => {
     const renderer = mount(
       withProvider(
-        <CardNumberField styles={{placeholder: {fontSize: 33, color: '#7C3AED', letterSpacing: 3}}} />,
+        <CardNumberField {...FULL_UI} styles={{placeholder: {fontSize: 33, color: '#7C3AED', letterSpacing: 3}}} />,
       ),
     );
 
@@ -744,7 +771,7 @@ describe('the animated label keeps its interpolation', () => {
     });
 
     /* registered */
-    const a = mount(withProvider(<CardNumberField styles={{placeholder: sheet.resting, label: sheet.floating}} />));
+    const a = mount(withProvider(<CardNumberField {...FULL_UI} {...FULL_UI} styles={{placeholder: sheet.resting, label: sheet.floating}} />));
     expect(interpolationOutputRange(a)).toEqual([28, 8]);
     expect(flat(animatedLabelHostStyle(a)).color).toBe('#111111');
     expect(containsAnimatedNode(animatedLabelHostStyle(a))).toBe(false);
@@ -752,7 +779,7 @@ describe('the animated label keeps its interpolation', () => {
 
     /* array — the LAST fontSize wins the flatten, as React Native itself would resolve it */
     const b = mount(
-      withProvider(<CardNumberField styles={{placeholder: [sheet.resting, {fontSize: 35}]}} />),
+      withProvider(<CardNumberField {...FULL_UI} {...FULL_UI} styles={{placeholder: [sheet.resting, {fontSize: 35}]}} />),
     );
     expect(interpolationOutputRange(b)).toEqual([35, 11]);
     expect(containsAnimatedNode(animatedLabelHostStyle(b))).toBe(false);
@@ -762,6 +789,7 @@ describe('the animated label keeps its interpolation', () => {
     const c = mount(
       withProvider(
         <CardNumberField
+          {...FULL_UI}
           styles={{
             placeholder: [[sheet.resting], [null, {letterSpacing: 4}], undefined, false as const],
           }}
@@ -777,7 +805,7 @@ describe('the animated label keeps its interpolation', () => {
   it('a null / undefined / empty slot is a clean no-op', () => {
     for (const slot of [null, undefined, {}, false as const, []]) {
       const renderer = mount(
-        withProvider(<CardNumberField styles={{placeholder: slot as VaultFieldStyles['placeholder']}} />),
+        withProvider(<CardNumberField {...FULL_UI} {...FULL_UI} styles={{placeholder: slot as VaultFieldStyles['placeholder']}} />),
       );
       expect(interpolationOutputRange(renderer)).toEqual([16, 11]);
       expect(containsAnimatedNode(animatedLabelHostStyle(renderer))).toBe(false);
@@ -795,7 +823,7 @@ describe('the animated label keeps its interpolation', () => {
       label: {fontSize: 5},
     } as unknown as VaultFieldStyles;
 
-    const renderer = mount(withProvider(<CardNumberField styles={jsStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={jsStyles} />));
 
     /* no AnimatedNode leaks to the host — i.e. AnimatedStyle did NOT collapse */
     expect(containsAnimatedNode(animatedLabelHostStyle(renderer))).toBe(false);
@@ -809,7 +837,7 @@ describe('the animated label keeps its interpolation', () => {
 
   it('a non-numeric fontSize is stripped and never becomes an endpoint', () => {
     const junk = {placeholder: {fontSize: '41px'}} as unknown as VaultFieldStyles;
-    const renderer = mount(withProvider(<CardNumberField styles={junk} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={junk} />));
 
     /* library defaults survive; the junk value cannot reach the element */
     expect(interpolationOutputRange(renderer)).toEqual([16, 11]);
@@ -821,7 +849,7 @@ describe('the animated label keeps its interpolation', () => {
 
   it('no static fontSize survives anywhere in the animated label style tree', () => {
     const renderer = mount(
-      withProvider(<CardNumberField styles={{placeholder: {fontSize: 41}, label: {fontSize: 5}}} />),
+      withProvider(<CardNumberField {...FULL_UI} {...FULL_UI} styles={{placeholder: {fontSize: 41}, label: {fontSize: 5}}} />),
     );
 
     /* Walk the RAW style prop given to Animated.Text: no plain-number fontSize may appear. */
@@ -895,8 +923,8 @@ describe('expiry field: every slot it declares reaches a real element', () => {
 
   const withExpiry = () => (
     <HyperswitchVaultFormProvider session={session} environment="sandbox">
-      <CardNumberField />
-      <CardExpiryField styles={expiryStyles} />
+      <CardNumberField {...FULL_UI} />
+      <CardExpiryField {...EXPIRY_UI} styles={expiryStyles} />
       <CardCVCField />
     </HyperswitchVaultFormProvider>
   );
@@ -965,9 +993,9 @@ describe('expiry field: every slot it declares reaches a real element', () => {
 describe('CVC field: every slot reaches a real element, accessory included', () => {
   const withCvc = () => (
     <HyperswitchVaultFormProvider session={session} environment="sandbox">
-      <CardNumberField />
+      <CardNumberField {...FULL_UI} />
       <CardExpiryField />
-      <CardCVCField styles={SLOTS} />
+      <CardCVCField {...CVC_UI} styles={SLOTS} />
     </HyperswitchVaultFormProvider>
   );
 
@@ -984,14 +1012,15 @@ describe('CVC field: every slot reaches a real element, accessory included', () 
     expect(roots.some((s) => s.backgroundColor === '#111827')).toBe(true);
 
     /*
-     * The CVC accessory is the icon Pressable inside the CVC's own bordered box. CardPressable
-     * hands React Native a style FUNCTION (`_ => style`), so it has to be resolved before reading.
+     * The CVC accessory is the icon container inside the CVC's own bordered box. It is a plain
+     * View — the icon has no action, so it is not a Pressable and holds a plain style object.
      */
     const accessory = containerBy(renderer, CVC_TEST_ID)
-      .findAll((n) => n.type === Pressable)
-      .map((n) => flat(typeof n.props.style === 'function' ? n.props.style({pressed: false}) : n.props.style))
+      .findAll((n) => n.type === View)
+      .map((n) => flat(n.props.style))
       .filter((s) => s.backgroundColor === '#F59E0B');
     expect(accessory).toHaveLength(1);
+    expect(renderer.root.findAll((n) => n.type === Pressable)).toHaveLength(0);
     expect(accessory[0].width).toBe(77);
 
     ReactTestRenderer.act(() => renderer.unmount());
@@ -1047,7 +1076,8 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
         <HyperswitchVault.CardForm
           session={session}
           environment="sandbox"
-          splitCardFields={split}
+          layout="inline"
+          fieldArrangement={split ? 'separate' : 'fused'}
           fieldStyles={FORM_STYLES}
         />,
       );
@@ -1065,7 +1095,7 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
 
     it(`${layout} layout — omitting fieldStyles renders byte-identically to before`, () => {
       const bare = mount(
-        <HyperswitchVault.CardForm session={session} environment="sandbox" splitCardFields={split} />,
+        <HyperswitchVault.CardForm session={session} environment="sandbox" layout="inline" fieldArrangement={split ? 'separate' : 'fused'} />,
       );
       const bareTree = serialise(bare);
       ReactTestRenderer.act(() => bare.unmount());
@@ -1075,7 +1105,8 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
           <HyperswitchVault.CardForm
             session={session}
             environment="sandbox"
-            splitCardFields={split}
+            layout="inline"
+          fieldArrangement={split ? 'separate' : 'fused'}
             fieldStyles={value}
           />,
         );
@@ -1086,7 +1117,14 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
   }
 
   it('the fused layout keeps its joined borders and squared inner corners by default', () => {
-    const renderer = mount(<HyperswitchVault.CardForm session={session} environment="sandbox" />);
+    const renderer = mount(
+      <HyperswitchVault.CardForm
+        session={session}
+        environment="sandbox"
+        layout="inline"
+        fieldArrangement="fused"
+      />,
+    );
 
     const number = flat(containerBy(renderer, CARD_NUMBER_TEST_ID).props.style);
     const expiry = flat(containerBy(renderer, EXPIRY_TEST_ID).props.style);
@@ -1106,7 +1144,7 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
 
   it('the split layout keeps full borders and rounded corners on every field', () => {
     const renderer = mount(
-      <HyperswitchVault.CardForm session={session} environment="sandbox" splitCardFields />,
+      <HyperswitchVault.CardForm session={session} environment="sandbox" layout="inline" fieldArrangement="separate" />,
     );
 
     for (const id of [CARD_NUMBER_TEST_ID, EXPIRY_TEST_ID, CVC_TEST_ID]) {
@@ -1124,6 +1162,8 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
+        layout="inline"
+        fieldArrangement="fused"
         fieldStyles={{cardNumber: {container: {borderBottomLeftRadius: 24, borderBottomWidth: 9}}}}
       />,
     );
@@ -1146,7 +1186,12 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
         .map((s) => s.flexDirection);
 
     const ltr = mount(
-      <HyperswitchVault.CardForm session={session} environment="sandbox" fieldStyles={FORM_STYLES} />,
+      <HyperswitchVault.CardForm
+        session={session}
+        environment="sandbox"
+        layout="inline"
+        fieldStyles={FORM_STYLES}
+      />,
     );
     expect(rowDirection(ltr)).toContain('row');
     expect(rowDirection(ltr)).not.toContain('row-reverse');
@@ -1157,6 +1202,7 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
         session={session}
         environment="sandbox"
         localisation={{isRtl: true}}
+        layout="inline"
         fieldStyles={FORM_STYLES}
       />,
     );
@@ -1171,7 +1217,8 @@ describe('ready-made form: fieldStyles routes each record to its own field', () 
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        splitCardFields
+        layout="inline"
+        fieldArrangement="separate"
         fieldStyles={{expiry: {container: {height: 64}}}}
       />,
     );
@@ -1197,6 +1244,13 @@ describe('ready-made form: error placement and error-style selection', () => {
     cvc: {error: {color: '#CC0003'}},
   };
 
+  /* Inline error rendering is opt-in now; the error EVENT is unaffected either way. */
+  const inlineErrors = {
+    cardNumber: {errorDisplay: 'inline'},
+    expiry: {errorDisplay: 'inline'},
+    cvc: {errorDisplay: 'inline'},
+  } as const;
+
   const errorColours = (renderer: Renderer) =>
     renderer.root
       .findAll((n) => String(n.type) === 'Text')
@@ -1211,7 +1265,7 @@ describe('ready-made form: error placement and error-style selection', () => {
 
   it('fused layout — the ONE shared error line uses the owning field\'s error slot', () => {
     const renderer = mount(
-      <HyperswitchVault.CardForm session={session} environment="sandbox" fieldStyles={errorStyles} />,
+      <HyperswitchVault.CardForm session={session} environment="sandbox" layout="inline" fieldArrangement="fused" fieldStyles={errorStyles} fieldOptions={inlineErrors} />,
     );
 
     invalidate(renderer, EXPIRY_TEST_ID, '13/99');
@@ -1223,7 +1277,7 @@ describe('ready-made form: error placement and error-style selection', () => {
 
   it('fused layout — the card number outranks the others when several are invalid', () => {
     const renderer = mount(
-      <HyperswitchVault.CardForm session={session} environment="sandbox" fieldStyles={errorStyles} />,
+      <HyperswitchVault.CardForm session={session} environment="sandbox" layout="inline" fieldArrangement="fused" fieldStyles={errorStyles} fieldOptions={inlineErrors} />,
     );
 
     invalidate(renderer, CARD_NUMBER_TEST_ID, '4242');
@@ -1238,8 +1292,10 @@ describe('ready-made form: error placement and error-style selection', () => {
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        splitCardFields
+        layout="inline"
+        fieldArrangement="separate"
         fieldStyles={errorStyles}
+        fieldOptions={inlineErrors}
       />,
     );
 
@@ -1299,7 +1355,7 @@ describe('legacy alias names have the identical styling capability', () => {
 
 describe('invalid font-size values from untyped JavaScript are ignored', () => {
   const endpointsFor = (styles: unknown) => {
-    const renderer = mount(withProvider(<CardNumberField styles={styles as VaultFieldStyles} />));
+    const renderer = mount(withProvider(<CardNumberField {...FULL_UI} styles={styles as VaultFieldStyles} />));
     const range = interpolationOutputRange(renderer);
     ReactTestRenderer.act(() => renderer.unmount());
     return range;
@@ -1331,6 +1387,7 @@ describe('invalid font-size values from untyped JavaScript are ignored', () => {
     const renderer = mount(
       withProvider(
         <CardNumberField
+          {...FULL_UI}
           styles={{placeholder: {fontSize: -18, color: '#123456'}} as unknown as VaultFieldStyles}
         />,
       ),
@@ -1382,12 +1439,12 @@ describe('refs and isolation hold for all three fields while styled', () => {
     const renderer = mount(
       <View>
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
-          <CardNumberField />
+          <CardNumberField {...FULL_UI} />
           <CardExpiryField styles={{container: {borderColor: '#AA1111'}}} />
           <CardCVCField styles={{container: {borderColor: '#AA2222'}}} />
         </HyperswitchVaultFormProvider>
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
-          <CardNumberField />
+          <CardNumberField {...FULL_UI} />
           <CardExpiryField styles={{container: {borderColor: '#BB1111'}}} />
           <CardCVCField styles={{container: {borderColor: '#BB2222'}}} />
         </HyperswitchVaultFormProvider>

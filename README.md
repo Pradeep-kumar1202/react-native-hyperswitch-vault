@@ -32,8 +32,22 @@ import {
 
 const formRef = useRef<HyperswitchVaultFormHandle>(null);
 
-<HyperswitchVaultForm ref={formRef} session={session} environment="sandbox" />;
+<HyperswitchVaultForm
+  ref={formRef}
+  session={session}
+  environment="sandbox"
+  fieldOptions={{
+    cardNumber: {placeholder: 'Card number', brandIconMode: 'standard'},
+    expiry: {placeholder: 'MM/YY'},
+    cvc: {placeholder: 'CVC', cvcIcon: 'default'},
+  }}
+/>;
 ```
+
+**`fieldOptions` is not optional decoration — it is how you get a visible form.** With no visual
+configuration the library renders three empty, neutral inputs and nothing else: no placeholder, no
+label, no icon, no error text, and no space reserved for any of them. The library owns the card
+values; you own how the checkout looks. See [Field options](#field-options).
 
 **4. Submit when your button is pressed**
 
@@ -109,8 +123,9 @@ The rules:
   whatever your layout needs. Focus auto-advance stays semantic (number → expiry → CVC) no matter
   where you place them.
 - **`appearance` and `localisation` live on the provider** and flow to every field. There is no
-  `splitCardFields` here — layout is yours — and fields take no style props of their own in this
-  release.
+  `layout` or `fieldArrangement` here — the React Native layout around the fields is yours. Each
+  field takes its own `styles` and its own options (`placeholder`, `labelBehavior`, `errorDisplay`,
+  `brandIconMode` / `cvcIcon`, and the accessibility props) directly as props.
 - **`onStateChange` on the provider** reports the same safe aggregate as the ready-made form
   (`complete`, per-field validity, detected `brand` — never a card value). `complete` also
   requires all three fields to be mounted, so a hidden field can never look valid.
@@ -181,7 +196,9 @@ namespace pulls in all five components. There is no `HyperswitchVault.useForm` y
 | `appearance` | `VaultFormAppearance` | no | colours, radius, border width, font, input height — every field optional |
 | `fieldStyles` | `VaultFormFieldStyles` | no | per-field React Native styles, grouped as `{cardNumber, expiry, cvc}` — see [Styling](#styling) |
 | `disabled` | `boolean` | no | makes the three inputs genuinely non-interactive (not merely dimmed) |
-| `splitCardFields` | `boolean` | no | `false` (default) renders one bordered block with expiry and CVC sharing a row; `true` renders three separately bordered fields, each error under its own field |
+| `fieldOptions` | `VaultFormFieldOptions` | no | which visual elements each field renders — see [Field options](#field-options) |
+| `layout` | `"stacked" \| "inline"` | no | `"stacked"` (default) gives every field its own row; `"inline"` puts expiry and CVC side by side |
+| `fieldArrangement` | `"separate" \| "fused"` | no | `"separate"` (default) gives every field its own bordered box; `"fused"` joins them into one block |
 | `localisation` | `VaultFormLocalisation` | no | translated labels, translated validation messages and `isRtl` — every field optional, merged over the English defaults |
 | `accessible` | `boolean` | no | forwarded to each of the three inputs individually |
 | `onStateChange` | `(state: CardFormState) => void` | no | validity only — never a card value. Kept permanently; not renamed |
@@ -202,6 +219,171 @@ The exact published surface, export by export, is recorded in
 **[docs/public-api-baseline.md](docs/public-api-baseline.md)**. The merchant API contract is
 **[ADR-0002](docs/adr/0002-merchant-public-api-contract.md)**; its implementation-status table says
 which sections exist today.
+
+### Field options
+
+Two independent axes, and it is worth keeping them straight:
+
+```text
+fieldOptions  →  which visual elements exist
+styles        →  how the enabled elements look
+```
+
+A style never decides whether an element exists. `styles.placeholder` says how the placeholder
+looks; only `fieldOptions.cardNumber.placeholder` decides whether there is one.
+
+#### Zero-configuration defaults
+
+```tsx
+<HyperswitchVault.CardForm session={session} environment="sandbox" />
+```
+
+renders **three empty, neutral inputs and nothing else**:
+
+| | default |
+|---|---|
+| `placeholder` | `undefined` — no placeholder text |
+| `label` | `undefined` — no label text |
+| `labelBehavior` | `'none'` — no label element, no animation |
+| `errorDisplay` | `'none'` — validation runs and errors are **emitted**, but nothing is rendered |
+| `brandIconMode` | `'hidden'` |
+| `cvcIcon` | `'none'` |
+| `layout` | `'stacked'` |
+| `fieldArrangement` | `'separate'` |
+
+No element is hidden-but-reserved: there is no empty label row and no blank error line holding
+space. Accessibility is the one thing that stays on — see [Accessibility](#accessibility).
+
+#### On the ready-made form
+
+One grouped prop. There are deliberately no flat props like `cardNumberPlaceholder` or
+`showCvcIcon`.
+
+```tsx
+<HyperswitchVault.CardForm
+  session={session}
+  environment="sandbox"
+  layout="inline"
+  fieldOptions={{
+    cardNumber: {placeholder: 'Card number', labelBehavior: 'none', brandIconMode: 'standard', errorDisplay: 'inline'},
+    expiry: {placeholder: 'MM/YY', errorDisplay: 'inline'},
+    cvc: {placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline'},
+  }}
+/>
+```
+
+#### On individual fields
+
+Options are ordinary props — you are placing one field, so you pass its options directly.
+
+```tsx
+<CardNumberField placeholder="Card number" label="Card number" labelBehavior="floating" brandIconMode="standard" />
+<CardExpiryField placeholder="MM/YY" label="Expiration date" labelBehavior="static" />
+<CardCVCField placeholder="CVC" cvcIcon="default" errorDisplay="inline" />
+```
+
+Each field takes only the options it can honour: `brandIconMode` is card-number only, `cvcIcon` is CVC
+only, and the expiry field has neither. Passing one to the wrong field is a compile error, the same
+rule that keeps `accessory` off the expiry style type.
+
+#### Labels and placeholders
+
+| `labelBehavior` | renders |
+|---|---|
+| `'none'` (default) | no label element. `placeholder` shows inside the empty input, vertically centred. No space reserved. |
+| `'static'` | `label` as a plain text element above the field. `placeholder` still shows inside the empty input — they do not overlap. No animation. |
+| `'floating'` | the animated label: `placeholder` is the resting text, `label` the floating text. No separate placeholder is drawn, so the two never overlap. |
+
+With `'floating'` and neither text supplied, **nothing is rendered** — the library does not invent a
+display string. Merchant `fontSize` on the `placeholder` and `label` style slots still sets the two
+animation endpoints, and registered styles, arrays and nested arrays all work as before.
+
+The placeholder is a library-rendered `Text`, not React Native's native `placeholder` prop. That is
+what makes the `styles.placeholder` slot below mean what it says: a native placeholder honours only
+its colour — font family, size, line height and alignment all come from the `TextInput` — so a
+`StyleProp<TextStyle>` over a native placeholder would have been a promise the implementation could
+not keep. It behaves the way a native placeholder does: visible while the value is empty, focused
+or not, gone the moment there is input, back after `reset()`. It is non-interactive and hidden from
+assistive technology, because the field's own `accessibilityLabel` already announces it, and it can
+never become the field's value.
+
+#### Errors emitted versus errors rendered
+
+These are independent, and the default separates them:
+
+```tsx
+errorDisplay: 'none'   // default
+```
+
+Validation still runs, field status still changes, and the safe error still reaches you through
+`onStateChange` and `onFormStateChange`. The library simply renders nothing — no message, no
+container, no reserved space. Set `errorDisplay: 'inline'` to have the library render the same safe
+error it already emits.
+
+Error **eligibility** is a function of interaction state, not of whether anything is on screen:
+
+| | error eligible? |
+|---|---|
+| initial, empty field | no |
+| typing while focused | no |
+| blurred while incomplete | **yes** |
+| after an invalid submit | **yes** |
+| corrected | no |
+| after `reset()` | no |
+
+#### Icons
+
+The card-brand mark has **one** control, `brandIconMode`, with four values:
+
+| `brandIconMode` | renders |
+|---|---|
+| `'hidden'` (default) | nothing at all — no artwork, no accessory container, no reserved space |
+| `'standard'` | static artwork for the detected brand |
+| `'animated'` | the same artwork with the brand-change animation |
+| `'hideGeneric'` | recognized brands only — the accessory container is present, but stays empty until a brand is detected |
+
+It resolves in one place, and the order never depends on which surface you are on:
+
+```
+fieldOptions.cardNumber.brandIconMode  (or brandIconMode on CardNumberField)
+  → appearance.brandIconMode
+  → 'hidden'
+```
+
+The field-level value wins whenever it is supplied, including when it is `'hidden'` — setting
+`appearance.brandIconMode: 'animated'` form-wide and `brandIconMode="hidden"` on one field turns
+that field's mark off, not on. Omit the field option entirely to inherit `appearance`.
+
+```tsx
+// form-wide default, one field opted out
+<HyperswitchVault.CardForm
+  appearance={{brandIconMode: 'animated'}}
+  fieldOptions={{cardNumber: {brandIconMode: 'hidden'}}}
+/>
+```
+
+`cvcIcon: 'default'` renders the built-in CVC guidance artwork; `'none'` (default) renders nothing.
+It has no form-wide counterpart.
+
+Both accessories are **decorative**. They render a non-interactive `View` — not a pressable — carry
+no action, and are hidden from the accessibility tree, because they repeat information the field's
+own `accessibilityLabel` already announces.
+
+For custom brand artwork, read `brand` from the safe state events and render your own component
+outside the field.
+
+#### Accessibility
+
+Accessibility is not visual, so it is **not** switched off by the blank default. Every field is
+announced with a sensible label:
+
+| field | default `accessibilityLabel` |
+|---|---|
+| card number | `Card number` |
+| expiry | `Expiration date` |
+| CVC | `Security code` |
+
+Override them — and `accessibilityHint` and `testID` — per field when your copy differs.
 
 ### Styling
 
@@ -255,10 +437,15 @@ Every slot is optional and takes a real React Native `StyleProp` — a plain obj
 | `root` | `StyleProp<ViewStyle>` | the field's outermost wrapper, which contains the input box **and** its error message |
 | `container` | `StyleProp<ViewStyle>` | the bordered input box |
 | `input` | `StyleProp<TextStyle>` | the `TextInput` itself |
-| `placeholder` | `StyleProp<TextStyle>` | the label text while the field is empty and unfocused |
+| `placeholder` | `StyleProp<TextStyle>` | the placeholder text shown while the field is empty — the whole `TextStyle` applies |
 | `label` | `StyleProp<TextStyle>` | the same text once it floats (focused, or filled) |
 | `error` | `StyleProp<TextStyle>` | the validation message |
 | `accessory` | `StyleProp<ViewStyle>` | the icon container to the right of the input |
+
+**A style slot only applies when the option that creates its element is on.** `placeholder` needs
+placeholder text, `label` needs label text, `error` needs `errorDisplay: 'inline'` and an eligible
+error, and `accessory` needs `brandIconMode`/`cvcIcon` enabled. That conditional absence is intentional:
+the slot is not a silent no-op, it simply has nothing to style until you ask for the element.
 
 **The expiry field has no `accessory` slot**, because it renders no icon. Rather than accept the
 property and silently do nothing with it, `VaultExpiryStyles` simply does not have it, and passing

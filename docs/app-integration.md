@@ -142,7 +142,9 @@ function SaveCard({session}: {session: MerchantSession}) {
 | `environment` | `VaultEnvironment` | yes | See section 2. |
 | `appearance` | `VaultFormAppearance` | no | See section 6. |
 | `localisation` | `VaultFormLocalisation` | no | See section 7. |
-| `splitCardFields` | `boolean` | no | `false` (default) is one bordered block, expiry and CVC sharing a row, errors below the block. `true` is three separately bordered fields, each error under its own field. |
+| `fieldOptions` | `VaultFormFieldOptions` | no | which visual elements each field renders. With none, the form is three empty neutral inputs. |
+| `layout` | `"stacked" \| "inline"` | no | `"stacked"` (default) gives each field its own row; `"inline"` puts expiry and CVC side by side. |
+| `fieldArrangement` | `"separate" \| "fused"` | no | `"separate"` (default) gives each field its own bordered box; `"fused"` joins them. |
 | `disabled` | `boolean` | no | Makes the inputs non-interactive. |
 | `accessible` | `boolean` | no | Passed to each `TextInput`. |
 | `onStateChange` | `(state: CardFormState) => void` | no | See section 8. |
@@ -217,7 +219,7 @@ Views you wrap them in.
 
 ### Provider props
 
-Identical to Flow A **except**: `children` is required, and there is no `splitCardFields` — layout
+Identical to Flow A **except**: `children` is required, and there is no `layout` or `fieldArrangement` — layout
 is yours.
 
 | Prop | Type | Required |
@@ -338,15 +340,22 @@ to the built-in default.
 | `placeholderTextSizeAdjust` | `number` | added to placeholder and label size before scaling |
 | `errorTextSizeAdjust` | `number` | added to the 12pt error size before scaling |
 | `errorMessageSpacing` | `number` | space between a field and its error |
-| `brandIconMode` | `VaultFormBrandIconMode` | the card brand mark |
+| `brandIconMode` | `VaultFormBrandIconMode` | form-wide default for the card brand mark |
 
 ```ts
 type VaultFormBrandIconMode = 'standard' | 'animated' | 'hidden' | 'hideGeneric';
 ```
 
-`standard` (default) shows the detected brand, otherwise a generic card mark; `animated` cycles
-brand placeholders until one is detected; `hidden` shows no mark; `hideGeneric` shows a detected
-brand only.
+`hidden` (default) shows no mark and reserves no space; `standard` shows the detected brand,
+otherwise a generic card mark; `animated` cycles brand placeholders until one is detected;
+`hideGeneric` shows a detected brand only.
+
+This is the form-wide default. `fieldOptions.cardNumber.brandIconMode` — or `brandIconMode` on a
+standalone `CardNumberField` — is the same union and wins whenever it is supplied:
+
+```
+field brandIconMode  →  appearance.brandIconMode  →  'hidden'
+```
 
 Card brand artwork ships with the package. There is no network fetch for icons and no
 `react-native-svg` dependency.
@@ -384,9 +393,14 @@ type CardFormState = {
   cardNumberValid: boolean;
   expiryValid: boolean;
   cvcValid: boolean;
-  brand: string;        // detected scheme name, empty until one is detected
+  brand: CardBrand;     // canonical union; 'unknown' until a scheme is detected
 };
 ```
+
+`brand` is the same `CardBrand` union that the per-field `onStateChange` and `onFormStateChange`
+carry, so the same card produces the identical value on every event surface. It was a bare `string`
+here and emitted the detector's display casing (`"Visa"`), which disagreed with the canonical token
+(`"visa"`) every other surface emitted.
 
 Use `complete` to enable your submit button. It carries no card value — no PAN, no BIN, no last4,
 no expiry.

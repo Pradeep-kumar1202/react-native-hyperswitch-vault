@@ -50,7 +50,12 @@ const cardAppearance: VaultFormAppearance = {
   errorColor: '#DC2626',
   borderRadius: 12,
   inputHeight: 52,
-  brandIconMode: 'animated',
+  /*
+   * Deliberately NO brandIconMode. This screen is the zero-configuration icon case: with neither a
+   * field option nor a form-wide one, the brand mark resolves to 'hidden'. It previously set
+   * 'animated' here, which is an explicit opt-in — and is why a mark appeared on a
+   * `<CardNumberWidget placeholder="Card Number" />` that had asked for nothing.
+   */
 };
 
 type Phase =
@@ -155,17 +160,10 @@ export function CustomLayoutCheckout() {
               onStateChange={setCardState}>
 
 
-              {/* <Section title="Security code" sdk> */}
-                <CardCVCWidget />
-              {/* </Section> */}
-
-              {/* <Section title="Card number" sdk> */}
-                <CardNumberWidget ref={numberRef} />
-              {/* </Section> */}
-
-              {/* <Section title="Expiry" sdk> */}
-                <CardExpiryWidget styles={{}}/>
-              {/* </Section> */}
+              {/* The exact reported integration: a placeholder and nothing else. */}
+              <CardNumberWidget placeholder="Card Number" />
+              <CardExpiryWidget placeholder="Expiry" />
+              <CardCVCWidget placeholder="CVC" />
 
 
 
@@ -176,7 +174,9 @@ export function CustomLayoutCheckout() {
                 <Pill label="expiry" ok={cardState?.expiryValid} />
                 <Pill label="cvc" ok={cardState?.cvcValid} />
                 <View style={styles.flex} />
-                <Text style={styles.stateBrand}>{cardState?.brand || '—'}</Text>
+                <Text style={styles.stateBrand}>
+                  {!cardState || cardState.brand === 'unknown' ? '—' : cardState.brand}
+                </Text>
               </View>
 
               <View style={styles.controls}>
