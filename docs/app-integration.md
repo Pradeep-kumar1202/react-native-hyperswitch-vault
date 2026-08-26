@@ -480,20 +480,21 @@ There is deliberately no getter for a field value, on either handle.
 
 Hyperswitch is a PCI DSS Level 1 Service Provider.
 
-**Scope: the standalone root-entry flow only** — Flow A (`HyperswitchVaultForm`) and Flow B
-(`HyperswitchVaultFormProvider` with the card-number, expiry and CVC fields).
+The boundary, stated exactly:
 
-Raw card values are processed inside library-managed React Native state running in the merchant
-application process. In those two flows the supported merchant API does not expose those values
-through merchant callbacks, handles, public form state, submission results or library logs, and the
-standalone flow does not send them to the merchant backend. This is an API/data-flow guarantee, not
-native-process isolation, physical memory zeroization, automatic PCI compliance or a PCI-scope
-determination.
+> PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
+> state and are transmitted only by the library's internal tokenization transport. The merchant
+> receives safe UI state and the resulting token.
 
-**It does not extend to `/vault`, which accepts raw card details by design** —
-`confirmPaymentMethodSession` takes a `cardDetails` record holding the PAN, expiry and CVC, so any
-caller of that entry is handling raw card data directly. Nor does it extend to `/embedded`, where
-the host owns the values.
+There is one entry point and one flow — Flow A (`HyperswitchVaultForm`) and Flow B
+(`HyperswitchVaultFormProvider` with the card-number, expiry and CVC fields) are two layouts of the
+same flow — so the guarantee has no carve-out. The library renders the fields, keeps the values in
+its own state, tokenizes them itself, and returns a token.
+
+**What this is not.** It is an API and data-flow guarantee. It is **not** native-process isolation,
+**not** physical memory zeroization, **not** automatic PCI compliance or a PCI-scope determination,
+and **not** protection from malicious code executing inside the merchant's own application process —
+anything running there can reach React Native's internals regardless of this package.
 
 Merchants remain responsible for their own integration, applicable PCI obligations and required
 assessment; only their own assessor, evaluating the whole integration, can determine scope.

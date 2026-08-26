@@ -144,12 +144,7 @@ if (!existsSync(declDir)) {
     'last4', 'last4Digits', 'paymentMethodData', 'authorization', 'sdkAuthorization', 'sessionId',
     'paymentMethodSessionId', 'nativeEvent', 'target',
   ];
-  /*
-   * `cardNumber` / `cvc` / `expiry` are allowed as MEMBER NAMES only when the member's type is a
-   * per-field record — a state snapshot, a style record or an options record. A member of those
-   * names typed `string` is a card value and still fails.
-   */
-  const isFieldRecord = (type) => /State$|Styles$|Options$|state\b|styles\b|options\b/.test(type);
+  const isStateRecord = (type) => /State$|Styles$|state\b|styles\b/.test(type);
 
   const controlled = declared.filter(({ name }) => CONTROLLED.includes(name));
   check(
@@ -160,7 +155,7 @@ if (!existsSync(declDir)) {
   const rawData = declared.filter(
     ({ name, type }) =>
       RAW_DATA.includes(name) ||
-      ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !isFieldRecord(type))
+      ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !isStateRecord(type))
   );
   check(
     rawData.length === 0,

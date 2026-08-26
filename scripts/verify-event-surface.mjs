@@ -5,7 +5,7 @@
  * The runtime half of this proof — that an emitted snapshot really contains no card value — is
  * example/__tests__/fieldEvents.test.tsx, which walks every captured object recursively. This is the
  * other half: that the published TYPE cannot describe one either, checked against the PACKED
- * tarball, and that `/embedded` does not gain the standalone callbacks.
+ * tarball.
  *
  * A type check alone would not be enough (a field typed `any` would satisfy any assertion), so the
  * consumer compile below carries negative controls and is verified non-vacuous.
@@ -121,14 +121,6 @@ check(
   /onFormStateChange/.test(readFileSync(path.join(declDir, 'HyperswitchVaultFormProvider.gen.d.ts'), 'utf8')),
   'the provider (custom layout) declares onFormStateChange too'
 );
-
-/* ── /embedded must not gain any of it ─────────────────────────────────────── */
-
-console.log('\n/embedded keeps its own controlled-field contract');
-const embeddedDecl = readFileSync(path.join(declDir, 'embedded.d.ts'), 'utf8');
-for (const name of ['onStateChange', 'onFormStateChange', 'vaultFormState', 'cardNumberState', 'cardBrand', 'VaultFieldState']) {
-  check(!embeddedDecl.includes(name), `/embedded does not expose ${name}`);
-}
 
 /* ── Consumer compile, with non-vacuous negative controls ──────────────────── */
 

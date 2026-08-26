@@ -25,7 +25,7 @@ import path from 'node:path';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-if (!existsSync(path.join(root, 'dist/esm/embedded.js'))) {
+if (!existsSync(path.join(root, 'dist/esm/index.js'))) {
   console.error('[verify-tarball] FAIL: dist/ is missing. Run `yarn build` first.');
   process.exit(1);
 }
@@ -90,14 +90,8 @@ for (const e of listing) {
 for (const required of [
   'dist/esm/index.js',
   'dist/cjs/index.js',
-  'dist/esm/embedded.js',
-  'dist/cjs/embedded.js',
-  'dist/esm/vault.js',
-  'dist/cjs/vault.js',
-  'dist/types/vault.d.ts',
   'dist/types/public.d.ts',
   'dist/types/merchantTypes.d.ts',
-  'dist/types/embedded.d.ts',
   'README.md',
   'LICENSE',
   'THIRD-PARTY-NOTICES.md',
@@ -153,7 +147,7 @@ for (const [what, re] of bundleChecks) {
 }
 
 /*
- * NO FORM LIBRARY may appear in any entry. The card fields are controlled: hyperswitch-client-core
+ * NO FORM LIBRARY may appear in the entry. The merchant card fields are library-controlled
  * keeps its own react-final-form and passes values in, and the standalone entries use an internal
  * reducer. A form library reappearing in the published bundles would mean the refactor regressed.
  */
@@ -161,7 +155,7 @@ if (/createForm|ReactFinalForm/.test(bundle)) {
   failures.push('the packed bundles contain a form-library implementation');
 }
 for (const format of ['esm', 'cjs']) {
-  for (const entry of ['index', 'embedded', 'vault']) {
+  for (const entry of ['index']) {
     const rel = `dist/${format}/${entry}.js`;
     const source = readFileSync(path.join(pkgRoot, rel), 'utf8');
     if (/['"](react-final-form|final-form)['"]/.test(source)) {

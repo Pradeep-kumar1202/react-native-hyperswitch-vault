@@ -1,8 +1,22 @@
+/*
+ * INTERNAL. The payment-method-session confirmation transport.
+ *
+ * This module is deliberately NOT part of the public surface. It has no genType annotations, so no
+ * declaration is emitted for it; it is not re-exported from `public.ts`; and there is no package
+ * subpath that reaches it. Its code lives inside the root runtime bundle because the merchant card
+ * form cannot tokenize without it — but a merchant has no supported or physical path to call it.
+ *
+ * That is the point of the merchant-only contract: the card values travel from library-owned state
+ * straight into this module and out to the vault. They are never handed to, nor accepted from, the
+ * merchant.
+ *
+ * A previous revision published this as the `/vault` subpath so a caller could bring their own card
+ * UI. That entry was removed in the merchant-only scope reset; the transport itself was kept,
+ * unchanged, including its concurrency and unknown-outcome handling.
+ */
 
-@genType
 type vaultEnvironment = [#production | #sandbox | #integration]
 
-@genType
 type cardDetails = {
   cardNumber: string,
 
@@ -12,10 +26,9 @@ type cardDetails = {
   cvc: string,
 }
 
-@genType.import(("./dom-types", "AbortSignalType"))
+/* Opaque to ReScript; a real AbortSignal at runtime, produced by makeAbortController. */
 type abortSignal
 
-@genType
 type confirmRequest = {
   sdkAuthorization: string,
   environment: vaultEnvironment,
@@ -26,7 +39,6 @@ type confirmRequest = {
   signal?: abortSignal,
 }
 
-@genType
 type vaultCardMetadata = {
   last4Digits: string,
 
@@ -35,13 +47,11 @@ type vaultCardMetadata = {
   expiryYear: string,
 }
 
-@genType
 type vaultConfirmResult = {
   token: string,
   card: vaultCardMetadata,
 }
 
-@genType
 type vaultErrorCode = [
   | #invalid_authorization
   | #missing_session_id
@@ -52,7 +62,6 @@ type vaultErrorCode = [
   | #missing_token
 ]
 
-@genType
 type vaultError = {
   code: vaultErrorCode,
 
@@ -64,7 +73,7 @@ type vaultError = {
   unknownOutcome: bool,
 }
 
-@genType @tag("status")
+@tag("status")
 type confirmOutcome =
   | @as("success") Success({result: vaultConfirmResult})
   | @as("failure") Failure({error: vaultError})
@@ -346,7 +355,6 @@ type timerId
 @val external setTimeout: (unit => unit, int) => timerId = "setTimeout"
 @val external clearTimeout: timerId => unit = "clearTimeout"
 
-@genType
 let confirmPaymentMethodSession = async (request: confirmRequest): confirmOutcome => {
   switch request.card->validateCard {
   | Some(invalid) => invalid

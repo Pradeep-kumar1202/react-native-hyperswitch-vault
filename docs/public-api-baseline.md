@@ -1,5 +1,13 @@
 # Public API baseline — current reality
 
+> **Merchant-only scope reset (2026-08-25).** This package is now exclusively a merchant-facing card
+> tokenization library. The `/embedded` controlled fields, the public `/vault` transport subpath and
+> every client-core integration surface were removed. Passages below that describe them are
+> historical: they record how the package used to be built, not what it publishes now. The current
+> surface is the package root only.
+
+
+
 **Date**: 2026-08-24 (Phase 0 baseline) · 2026-08-25 (updated for Phase 1)
 **Commit inspected**: `911f17f` (`master`)
 **Scope**: what the package exports **today**. Nothing here is a proposal.
@@ -13,16 +21,14 @@ shipped, so the two must never be read as one.
 > aliases `VaultFieldHandle` / `VaultFormHandle`, and the `HyperswitchVault` convenience namespace.
 > They are **aliases of the existing components**, not new implementations — §2.1 records the
 > identity guarantee and how it is verified. No existing export, prop, handle, result or behaviour
-> changed, and `/embedded` and `/vault` are byte-identical to the Phase 0 baseline.
+> changed, and the two now-removed subpaths were byte-identical to the Phase 0 baseline.
 >
 > **Phase 2B update (2026-08-25).** ADR-0002 §9 layer 2 is now implemented: a `styles` prop on all
 > three fields and a grouped `fieldStyles` prop on the ready-made form, adding **5 type exports**
 > (§2.2). No value export was added or removed, and no existing prop, handle, result or behaviour
 > changed. Two documented deviations from §9's text: `helperText` is not published (no helper-text
 > element is rendered) and `VaultExpiryStyles` omits `accessory` (the expiry field renders no icon).
-> `/embedded` gains nothing — its declaration contains no `styles` at all, gated by
-> `verify-consumers.mjs` — and `/vault` is proven React-free by execution in
-> `verify-vault-isolation.mjs`.
+> Neither of the two now-removed subpaths gained any of it.
 >
 > **Phase 3 update (2026-08-25).** ADR-0002 §4, §4a and §5 are now implemented: an `onStateChange`
 > callback on each of the three fields and an additive `onFormStateChange` on both form components,
@@ -30,7 +36,7 @@ shipped, so the two must never be read as one.
 > its `CardFormState` payload unchanged — this is additive, not a rename. No value export changed.
 > The published event types carry no card value at any depth, gated statically by
 > `verify-event-surface.mjs` against the packed tarball and at runtime by a recursive walk over
-> every emitted snapshot in `example/__tests__/fieldEvents.test.tsx`. `/embedded` gains nothing.
+> every emitted snapshot in `example/__tests__/fieldEvents.test.tsx`.
 
 **Evidence markers**
 
@@ -49,27 +55,26 @@ time; every `[dist]` claim below was cross-checked against its `[gen]` source.
 
 ## 1. Entry points and the export map
 
-Three entries, no root re-export between them **[pkg]**:
+**One executable entry** **[pkg]**:
 
 | Subpath | `types` | ESM / React Native | CJS |
 |---|---|---|---|
 | `.` | `dist/types/public.d.ts` | `dist/esm/index.js` | `dist/cjs/index.js` |
-| `./embedded` | `dist/types/embedded.d.ts` | `dist/esm/embedded.js` | `dist/cjs/embedded.js` |
-| `./vault` | `dist/types/vault.d.ts` | `dist/esm/vault.js` | `dist/cjs/vault.js` |
-| `./package.json` | — | — | — |
+| `./package.json` | — | — | — (metadata only) |
 
 `main` / `module` / `react-native` / `types` also point at the root entry **[pkg]**. Both formats
 use the `.js` extension deliberately (a consumer webpack config routes unknown extensions through
 `asset/resource`, which silently empties a `.mjs`/`.cjs` entry) — `rollup.config.mjs` **[src]**.
 
-**The root entry does not re-export `/embedded` or `/vault`.** `src/public.ts` **[src]** imports
-only `HyperswitchVaultForm.gen`, `HyperswitchVaultFormProvider.gen`, the three widget `.gen` files
-and `merchantTypes`.
+Two further subpaths existed until the merchant-only scope reset and were **removed**, together
+with the entry files and declarations behind them. Any deep path into `dist/` is refused by the
+export map for the same reason.
 
-Since Phase 1 this boundary is **asserted, not merely conventional**: `scripts/verify-consumers.mjs`
-pins the exact export list of each entry against the packed tarball, and checks in both directions —
-that `/embedded` and `/vault` expose none of the merchant facade, and that the root exposes exactly
-its nine documented values and nothing else **[run]**.
+This boundary is **asserted, not merely conventional**: `scripts/verify-merchant-only.mjs` pins the
+export map, proves the removed subpaths do not resolve from a packed tarball, and checks that the
+root exposes exactly its nine documented values and nothing else **[run]**. Since the merchant-only
+reset, `scripts/verify-publishable.mjs` runs the same export-map and declaration assertions inside
+`prepack`, so the boundary is also checked on the publication path **[run]**.
 
 ---
 
@@ -314,7 +319,17 @@ code path retries.
 
 ---
 
-## 3. `/embedded` — first-party / client-core controlled fields
+## 3–4. Historical / removed design — the `/embedded` and `/vault` entries
+
+> **Removed.** Neither subpath exists in the package any more: the export map, the entry modules,
+> the bundles and the declarations were all deleted in the merchant-only scope reset. Nothing below
+> is current guidance — it is kept only as the record of what the package used to publish, and why
+> the reset removed it. Merchants have one entry point: the package root.
+
+<details>
+<summary>The removed surface, as it stood before the reset</summary>
+
+**3. `/embedded` — first-party / client-core controlled fields** *(removed)*
 
 Source of truth: `src/embedded.ts` **[src]** → `dist/types/embedded.d.ts` **[dist]**.
 
@@ -336,7 +351,7 @@ not a readable TypeScript shape.
 **Not for ordinary merchants.** Nothing in the code prevents a merchant importing `/embedded`; the
 boundary is documentation-only today.
 
-### Ownership boundary with `hyperswitch-client-core`
+**Ownership boundary with `hyperswitch-client-core`**
 
 Verified in `/Users/pradeep.kumar/Documents/hyperswitch-client-core` (branch `main`, HEAD
 `1eea95c`, with uncommitted vault work in the tree):
@@ -355,7 +370,7 @@ the field presentation and the transport. That boundary is unchanged by anything
 
 ---
 
-## 4. `/vault` — low-level transport
+**4. `/vault` — low-level transport** *(removed)*
 
 Source of truth: `src/vault.ts` **[src]** → `dist/types/vault.d.ts` **[dist]**.
 
@@ -387,6 +402,8 @@ Endpoint is fixed by environment (`VaultConfirm.vaultBaseUrl` **[src]**):
 `Authorization`. None of that is configurable from any entry.
 
 ---
+
+</details>
 
 ## 5. Dependencies and bundle boundaries **[pkg]**
 
@@ -458,20 +475,8 @@ merchant session prop
 ```
 
 `CardFormView` is on the ready-made path **only**. The layer actually shared by every path —
-standalone ready-made, standalone custom and `/embedded` — is **`CardFieldLogic` + `CardFields` +
+the ready-made form and the custom layout — is **`CardFieldLogic` + `CardFields` +
 `CardInput`**, with `CardStateReducer` shared by the two standalone paths.
-
-### client-core (boundary only, not redesigned here)
-
-```
-client-core's own ReactFinalForm.Form
-  → CardElement.res: five useField registrations (number, exp month, exp year, network, cvc)
-  → /embedded CardNumberField / CardExpiryField / CardCvcField   (fully controlled)
-  → client-core payment / vault orchestration
-  → /vault confirmPaymentMethodSession  (when the vault path is taken)
-```
-
----
 
 ## 7. Behaviour observed in source — recorded, not changed
 
@@ -526,8 +531,7 @@ status, no logs and no analytics events reach merchant code from the root entry.
 
 **Scope of everything in this subsection: the standalone root-entry flow only** — that is
 `HyperswitchVaultForm`, and `HyperswitchVaultFormProvider` with the card-number, expiry and CVC
-field components. It does **not** describe `/embedded` (where the host owns the values and passes
-them in) or `/vault` (see below).
+field components. There is one entry point and one flow, so it has no carve-out.
 
 Raw card values are processed inside **library-managed React Native state running in the merchant
 application process**. Concretely, PAN, expiry and CVC live in `CardStateReducer` state
@@ -549,9 +553,9 @@ Two things must **not** be said, because the implementation does not support the
 handed to merchant-authored code by any supported API), and that anything is zeroized from memory
 (nothing erases React state or native input buffers).
 
-**`/vault` is outside all of this, by design.** `confirmPaymentMethodSession` takes a `cardDetails`
-record containing the PAN, expiry and CVC **[gen]**. Any caller of that entry is handling raw card
-data directly and none of the guarantees above apply to it. See §4.
+PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
+state and are transmitted only by the library's internal tokenization transport. The merchant
+receives safe UI state and the resulting token.
 
 ---
 
