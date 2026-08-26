@@ -229,8 +229,10 @@ explicitly and make sure it matches the environment your **server** created the 
 |---|---|---|
 | `appearance` | `VaultFormAppearance` | colours, radius, border width, font, input height — every field optional |
 | `disabled` | `boolean` | makes the inputs genuinely non-interactive |
-| `splitCardFields` | `boolean` | `false` (default) is one bordered block, expiry and CVC sharing a row — one compact block. `true` gives three separately bordered fields, each error beneath its own field. |
-| `onStateChange` | `(state: CardFormState) => void` | `{complete, cardNumberValid, expiryValid, cvcValid, brand}` — validity only, never a card value. Use `complete` to enable your button. |
+| `fieldOptions` | `VaultFormFieldOptions` | which visual elements each field renders. With none, the form is three empty neutral inputs — see the README. |
+| `layout` | `VaultFormLayout` | `"stacked"` (default) gives each field its own row; `"inline"` puts expiry and CVC side by side. |
+| `fieldArrangement` | `VaultFieldArrangement` | `"separate"` (default) gives each field its own bordered box; `"fused"` joins them. |
+| `onStateChange` | `(state: CardFormState) => void` | `{complete, cardNumberValid, expiryValid, cvcValid, brand}` — validity only, never a card value. `brand` is the canonical `CardBrand` union, identical on every event surface. Use `complete` to enable your button. |
 
 ### 3.5 The ref handle
 

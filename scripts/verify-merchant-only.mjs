@@ -130,12 +130,15 @@ const FORBIDDEN_PROPS = [
   'paymentMethodData', 'authorization', 'sdkAuthorization', 'sessionId',
   'paymentMethodSessionId', 'nativeEvent', 'target',
 ];
-/* `cardNumber` / `cvc` name the per-field STATE records; anything else by those names is a value. */
-const STATE_RECORD_TYPES = /State$|Styles$|state\b|styles\b/;
+/*
+ * `cardNumber` / `cvc` / `expiry` name per-field RECORDS (state, styles, options). A member of
+ * those names typed as anything else — a string, a number — is a card value and fails.
+ */
+const FIELD_RECORD_TYPES = /State$|Styles$|Options$|state\b|styles\b|options\b/;
 
 const leaks = declaredProps.filter(({ name, type }) => {
   if (FORBIDDEN_PROPS.includes(name)) return true;
-  if ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !STATE_RECORD_TYPES.test(type)) return true;
+  if ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !FIELD_RECORD_TYPES.test(type)) return true;
   return false;
 });
 check(
@@ -227,13 +230,15 @@ import {
 export const ok = (
   <HyperswitchVault.CardForm session={{} as never} environment="sandbox"
     fieldStyles={{cardNumber: {container: {borderWidth: 1}}}}
+    layout="stacked" fieldArrangement="separate"
+    fieldOptions={{cardNumber: {placeholder: 'Card number', brandIconMode: 'standard'}}}
     onFormStateChange={(s: VaultFormState) => [s.fieldsReady, s.canSubmit, s.brand]} />
 );
 export const custom = (
   <HyperswitchVaultFormProvider session={{} as never} environment="sandbox">
-    <CardNumberField styles={{input: {fontSize: 16}}} onStateChange={(s) => s.brand} />
-    <CardExpiryField onStateChange={(s) => s.status} />
-    <CardCVCField onStateChange={(s) => s.status} />
+    <CardNumberField styles={{input: {fontSize: 16}}} placeholder="Card number" brandIconMode="standard" onStateChange={(s) => s.brand} />
+    <CardExpiryField labelBehavior="static" label="Expiration date" onStateChange={(s) => s.status} />
+    <CardCVCField cvcIcon="default" errorDisplay="inline" onStateChange={(s) => s.status} />
   </HyperswitchVaultFormProvider>
 );
 export const token = async (ref: React.RefObject<VaultFormHandle>) => {

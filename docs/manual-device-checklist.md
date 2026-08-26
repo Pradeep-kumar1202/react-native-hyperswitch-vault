@@ -555,6 +555,10 @@ pixel has been rendered.
 | `labelBehavior="none"`, typing | the typed text keeps exactly the placeholder's baseline — no jump when the placeholder goes |
 | `appearance.inputHeight` 32 / 48 / 72 | the placeholder stays centred at every height |
 | max OS font scale with a placeholder | placeholder and typed text stay centred and unclipped |
+| `labelBehavior="none"`, empty field | the placeholder sits on the vertical centre line of the box, not below it |
+| `labelBehavior="none"`, typing | the typed text keeps exactly the placeholder's baseline — no jump when the placeholder goes |
+| `appearance.inputHeight` 32 / 48 / 72 | the placeholder stays centred at every height |
+| max OS font scale with a placeholder | placeholder and typed text stay centred and unclipped |
 | `layout="stacked"` vs `"inline"` | stacked gives three rows; inline puts expiry and CVC side by side, and reverses under RTL |
 | `fieldArrangement="fused"` at inline | shared edges read as one line on both platforms |
 | `errorDisplay="none"` with an invalid field | nothing appears and the layout does not shift |

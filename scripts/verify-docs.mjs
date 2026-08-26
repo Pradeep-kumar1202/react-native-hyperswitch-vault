@@ -90,6 +90,67 @@ const headingLevel = (line) => (/^(#{1,6}) /.exec(line)?.[1].length ?? 0);
 /* Fenced code blocks are examples of merchant code; they are scanned too — a code sample importing
  * a removed subpath is exactly the defect this gate is for. */
 
+/*
+ * TABLE SHAPE.
+ *
+ * Not a Markdown parser — a cell count. A row that drops a column renders its description in the
+ * wrong place and leaves the last column empty, which is what happened when `splitCardFields` was
+ * replaced by three two-cell rows in the merchant guide. Comparing each row's pipe count against
+ * its own header catches that without understanding Markdown.
+ *
+ * Rows inside fenced code blocks are skipped, and so are rows whose cells contain an escaped pipe,
+ * because the count is then no longer the column count.
+ */
+const checkTables = (file, lines) => {
+  const offences = [];
+  let fenced = false;
+  let header = null;      /* { line, cells } */
+  let expectSeparator = false;
+
+  const cellCount = (line) => line.replace(/\\\|/g, '').split('|').length - 1;
+
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (/^```/.test(line)) {
+      fenced = !fenced;
+      header = null;
+      return;
+    }
+    if (fenced) return;
+
+    const isRow = line.startsWith('|') && line.endsWith('|') && line.length > 2;
+    if (!isRow) {
+      header = null;
+      expectSeparator = false;
+      return;
+    }
+    if (/^\|[\s:|-]+\|$/.test(line)) {          /* the |---|---| separator */
+      if (header && cellCount(line) !== header.cells) {
+        offences.push(`${file}:${i + 1} separator has ${cellCount(line)} columns, header has ${header.cells}`);
+      }
+      expectSeparator = false;
+      return;
+    }
+    if (!header) {
+      header = { line: i + 1, cells: cellCount(line) };
+      expectSeparator = true;
+      return;
+    }
+    if (expectSeparator) return;
+    const cells = cellCount(line);
+    if (cells !== header.cells) {
+      offences.push(
+        `${file}:${i + 1} row has ${cells} column(s), the header on line ${header.line} has ${header.cells}: ${line.slice(0, 60)}`
+      );
+    }
+  });
+
+  check(
+    offences.length === 0,
+    `${file} tables have a consistent column count${offences.length ? `\n        ${offences.slice(0, 4).join('\n        ')}` : ''}`
+  );
+};
+
 console.log('Current merchant documentation');
 
 for (const file of CURRENT) {
@@ -116,6 +177,7 @@ for (const file of CURRENT) {
     }
   });
   check(offences.length === 0, `${file} describes only the current surface${offences.length ? `\n        ${offences.slice(0, 4).join('\n        ')}` : ''}`);
+  checkTables(file, lines);
 }
 
 console.log('\nHistorical records are labelled as such');
