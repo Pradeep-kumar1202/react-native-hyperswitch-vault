@@ -48,6 +48,15 @@ type formFieldStyles = CardFieldStyles.formFieldStyles
 type vaultFormState = VaultPublicState.vaultFormState
 
 @genType
+type formFieldOptions = CardFieldOptions.formFieldOptions
+
+@genType
+type formLayout = CardFieldOptions.formLayout
+
+@genType
+type fieldArrangement = CardFieldOptions.fieldArrangement
+
+@genType
 let make = React.forwardRef((
   props: {
     "session": vaultSession,
@@ -55,12 +64,19 @@ let make = React.forwardRef((
     "appearance": option<appearance>,
     "disabled": option<bool>,
 
-    "splitCardFields": option<bool>,
+    /*
+     * `layout` and `fieldArrangement` replaced `splitCardFields: bool`. That boolean conflated
+     * "do expiry and CVC share a row" with "are the borders joined", and could not express the
+     * new default of three stacked, separately-bordered fields.
+     */
+    "layout": option<formLayout>,
+    "fieldArrangement": option<fieldArrangement>,
     "localisation": option<localisation>,
     "accessible": option<bool>,
     "onStateChange": option<cardFormState => unit>,
     "onFormStateChange": option<vaultFormState => unit>,
     "fieldStyles": option<formFieldStyles>,
+    "fieldOptions": option<formFieldOptions>,
   },
   ref,
 ) => {
@@ -84,8 +100,10 @@ let make = React.forwardRef((
 
   <VaultWidgetContext.ContextProvider value={Some(host.contextValue)}>
     <CardFormView
-      splitCardFields={props["splitCardFields"]->Option.getOr(false)}
+      layout=?{props["layout"]}
+      fieldArrangement=?{props["fieldArrangement"]}
       fieldStyles=?{props["fieldStyles"]}
+      fieldOptions=?{props["fieldOptions"]}
     />
   </VaultWidgetContext.ContextProvider>
 })

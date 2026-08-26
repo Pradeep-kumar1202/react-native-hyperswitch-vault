@@ -271,6 +271,10 @@ export function rejectsBadNewValues() {
 /* ── Phase A3: brand icon modes ──────────────────────────────────────────── */
 
 import type {VaultFormBrandIconMode} from '../dist/types/public';
+import type {
+  VaultBrandIconMode as VaultBrandIconModeAlias,
+  VaultCardNumberOptions as VaultCardNumberOptionsAlias,
+} from '../dist/types/public';
 
 export const allModes: VaultFormBrandIconMode[] = ['standard', 'animated', 'hidden', 'hideGeneric'];
 
@@ -285,9 +289,26 @@ export function withEachMode() {
   ));
 }
 
-/* Default stays standard: the mode is optional at every level. */
+/* The mode is optional at every level; omitting it everywhere resolves to 'hidden'. */
 export const noMode: VaultFormAppearance = {};
 export const modeOnly: VaultFormAppearance = {brandIconMode: 'standard'};
+
+/*
+ * ONE control, published under two names for two audiences: `VaultFormBrandIconMode` names the
+ * `appearance` token, `VaultBrandIconMode` names the field option. They must stay the SAME type —
+ * if they ever drift, a merchant could not move a value from one to the other, and the precedence
+ * chain would stop being expressible. These two assignments fail the moment they diverge.
+ */
+export const formNameTakesFieldValue: VaultFormBrandIconMode =
+  'hideGeneric' satisfies VaultBrandIconModeAlias;
+export const fieldNameTakesFormValue: VaultBrandIconModeAlias =
+  'animated' satisfies VaultFormBrandIconMode;
+
+/* The superseded display type is gone from the published surface. */
+// @ts-expect-error - VaultBrandIconDisplay was removed when the two controls were merged
+export type RemovedBrandIconDisplay = import('../dist/types/public').VaultBrandIconDisplay;
+// @ts-expect-error - the boolean-ish field option it fed was removed with it
+export const removedFieldOption: VaultCardNumberOptionsAlias = {brandIcon: 'auto'};
 
 // @ts-expect-error - "Standard" is not one of the four modes; the union is lower-camel
 export const wrongCase: VaultFormBrandIconMode = 'Standard';
@@ -475,7 +496,8 @@ export function canonicalFormTakesEveryExistingProp() {
       appearance={{primaryColor: '#0570DE', brandIconMode: 'animated'}}
       localisation={fullyTranslated}
       disabled={false}
-      splitCardFields
+      layout="inline"
+      fieldArrangement="fused"
       accessible
       onStateChange={(state: CardFormState) => void state.complete}
     />
@@ -518,8 +540,8 @@ export const noBareStyleOnNumber = <CardNumberField style={{flex: 1}} />;
 // @ts-expect-error - render slots are a later phase
 export const noRenderSlot = <CardNumberField renderBrandIcon={() => null} />;
 
-// @ts-expect-error - safe native config is a later phase
-export const noNativeConfig = <CardCVCField testID="cvc" />;
+/* `testID` is now a published field option, alongside the accessibility props. */
+export const cvcTestID = <CardCVCField testID="cvc" />;
 
 // @ts-expect-error - the namespace is closed; there is no cardholder field
 export const noNamespaceCardHolder = HyperswitchVault.CardHolder;
@@ -962,3 +984,106 @@ export const stylesAndEvents = (
     onStateChange={(s) => s.status}
   />
 );
+
+
+/* ══ Field options: which visual elements exist ═════════════════════════════════════════════ */
+
+import type {
+  VaultLabelBehavior, VaultErrorDisplay, VaultBrandIconMode, VaultCVCIconDisplay,
+  VaultFieldOptions, VaultCardNumberOptions, VaultExpiryOptions, VaultCVCOptions,
+  VaultFormFieldOptions, VaultFormLayout, VaultFieldArrangement,
+} from '../dist/types/public';
+
+/* Closed literal unions, never broad strings. */
+export const lb: VaultLabelBehavior[] = ['none', 'static', 'floating'];
+export const ed: VaultErrorDisplay[] = ['none', 'inline'];
+export const bi: VaultBrandIconMode[] = ['hidden', 'standard', 'animated', 'hideGeneric'];
+export const ci: VaultCVCIconDisplay[] = ['none', 'default'];
+export const fl: VaultFormLayout[] = ['stacked', 'inline'];
+export const fa: VaultFieldArrangement[] = ['separate', 'fused'];
+
+declare const someText: string;
+// @ts-expect-error - labelBehavior is a closed union, not string
+export const lbNotString: VaultLabelBehavior = someText;
+// @ts-expect-error - 'inline' is not a label behaviour
+export const lbWrongMember: VaultLabelBehavior = 'inline';
+// @ts-expect-error - errorDisplay is a closed union
+export const edWrongMember: VaultErrorDisplay = 'hidden';
+// @ts-expect-error - layout is a closed union
+export const flWrongMember: VaultFormLayout = 'grid';
+
+/* Flattened options on the independent fields. */
+export const numberOptioned = (
+  <CardNumberField
+    placeholder="Card number"
+    label="Card number"
+    labelBehavior="floating"
+    errorDisplay="inline"
+    brandIconMode="standard"
+    accessibilityLabel="Card number"
+    accessibilityHint="16 digits"
+    testID="card-number"
+  />
+);
+export const expiryOptioned = (
+  <CardExpiryField placeholder="MM/YY" label="Expiration date" labelBehavior="static" errorDisplay="none" />
+);
+export const cvcOptioned = (
+  <CardCVCField placeholder="CVC" label="Security code" labelBehavior="none" errorDisplay="inline" cvcIcon="default" />
+);
+
+/* Each icon option belongs to exactly one field. */
+// @ts-expect-error - the expiry field has no brandIconMode
+export const noExpiryBrandIcon = <CardExpiryField brandIconMode="standard" />;
+// @ts-expect-error - the expiry field has no cvcIcon
+export const noExpiryCvcIcon = <CardExpiryField cvcIcon="default" />;
+// @ts-expect-error - the card number has no cvcIcon
+export const noNumberCvcIcon = <CardNumberField cvcIcon="default" />;
+// @ts-expect-error - the CVC field has no brandIconMode
+export const noCvcBrandIcon = <CardCVCField brandIconMode="standard" />;
+// @ts-expect-error - the expiry option type has no accessory-style member
+export const noExpiryAccessoryOption: VaultExpiryOptions = {accessory: 'auto'};
+// @ts-expect-error - the base option type has no brandIconMode
+export const baseHasNoBrandIcon: VaultFieldOptions = {brandIconMode: 'standard'};
+
+/* The grouped form prop, and no flat props. */
+export const grouped: VaultFormFieldOptions = {
+  cardNumber: {placeholder: 'Card number', brandIconMode: 'standard', errorDisplay: 'inline'},
+  expiry: {placeholder: 'MM/YY'},
+  cvc: {placeholder: 'CVC', cvcIcon: 'default'},
+};
+export const optionedForm = (
+  <HyperswitchVault.CardForm session={session} environment="sandbox" layout="stacked" fieldArrangement="separate" fieldOptions={grouped} />
+);
+// @ts-expect-error - the expiry group inherits the narrower option type
+export const groupedRejectsExpiryBrandIcon: VaultFormFieldOptions = {expiry: {brandIconMode: 'standard'}};
+/* eslint-disable-next-line -- one line so the directive lands on the erroring expression */
+// @ts-expect-error - flat per-field props are deliberately not offered
+export const noFlatPlaceholderProp = <HyperswitchVault.CardForm session={session} environment="sandbox" cardNumberPlaceholder="Card number" />;
+/* eslint-disable-next-line -- one line so the directive lands on the erroring expression */
+// @ts-expect-error - splitCardFields was replaced by layout + fieldArrangement
+export const noSplitCardFields = <HyperswitchVault.CardForm session={session} environment="sandbox" splitCardFields />;
+
+/* Aliases and the namespace carry the identical option props. */
+export const optionsOnLegacyName = <CardNumberWidget placeholder="Card number" brandIconMode="standard" />;
+export const optionsViaNamespace = <HyperswitchVault.CardNumber labelBehavior="floating" label="Card" />;
+export const optionsViaNamespaceCvc = <HyperswitchVault.CVC cvcIcon="default" />;
+
+/* Options and styles compose; neither disturbs the other. */
+export const optionsAndStyles = (
+  <CardNumberField placeholder="Card number" brandIconMode="standard" styles={{container: {borderWidth: 2}, accessory: {width: 40}}} />
+);
+
+/* The consolidated brand-icon control: one union, no second on/off type. */
+// @ts-expect-error - `brandIcon` was removed; the one control is `brandIconMode`
+export const noBrandIconProp = <CardNumberField brandIcon="auto" />;
+// @ts-expect-error - and it is gone from the option record too
+export const noBrandIconMember: VaultCardNumberOptions = {brandIcon: 'auto'};
+// @ts-expect-error - 'auto' was never a brandIconMode member
+export const noAutoMember: VaultBrandIconMode = 'auto';
+// @ts-expect-error - and 'none' is spelled 'hidden'
+export const noNoneMember: VaultBrandIconMode = 'none';
+
+/* The appearance-level spelling and the field-level one are the same union. */
+export const sameUnionA: VaultBrandIconMode = {} as VaultFormBrandIconMode;
+export const sameUnionB: VaultFormBrandIconMode = {} as VaultBrandIconMode;

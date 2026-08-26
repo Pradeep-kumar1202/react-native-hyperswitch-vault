@@ -24,7 +24,7 @@ plainly rather than leaving you to find out during an integration.
 │   │  <HyperswitchVaultForm />          │  ← us               │
 │   │  card number · expiry · CVC        │                     │
 │   └────────────────────────────────────┘                     │
-│         ↑ shaped by appearance / splitCardFields / disabled   │
+│  ↑ shaped by appearance / fieldOptions / layout / disabled    │
 │                                                              │
 │   your submit button                       ← you             │
 │   your error placement, your wording       ← you             │
@@ -101,7 +101,11 @@ const appearance = {
 
 Six further tokens tune spacing and typography: `gap` (the 12pt gap between fields in split layout),
 `fontScale`, `placeholderTextSizeAdjust`, `errorTextSizeAdjust`, `errorMessageSpacing` and
-`brandIconMode` (`standard` | `animated` | `hidden` | `hideGeneric`).
+`brandIconMode` (`standard` | `animated` | `hidden` | `hideGeneric`, default `hidden`).
+
+`brandIconMode` is the form-wide default for the card-brand mark only. A per-field
+`fieldOptions.cardNumber.brandIconMode` (or `brandIconMode` on `CardNumberField`) overrides it
+whenever it is supplied, including when it is supplied as `'hidden'`.
 
 **Fixed, not exposed:** any shadow, and per-field styling of any kind — `appearance` is form-wide.
 If a design needs those, it needs a change to the library, not a workaround.
@@ -110,16 +114,16 @@ If a design needs those, it needs a change to the library, not a workaround.
 
 ## Layer 3 — Layout
 
-`splitCardFields`:
+Two independent props, not one boolean:
 
-- `false` (default) — one bordered block, expiry and CVC sharing the row beneath the card number.
-  This is what a card-only hyperswitch-client-core payment sheet looks like.
-- `true` — three separately bordered fields, and each field's error moves directly beneath that
-  field instead of below the whole block.
+- `layout`: `'stacked'` (default) — three rows — or `'inline'`, which puts expiry and CVC side by
+  side beneath the card number.
+- `fieldArrangement`: `'separate'` (default) — each field its own bordered box — or `'fused'`,
+  which collapses the shared edges so the group reads as one control.
 
-That second half matters more than the borders: in split layout, error messages sit next to what
-they describe, which is usually the better choice on a long form and the worse choice in a compact
-sheet.
+They are separate because they answer separate questions. Where the fields sit is a layout
+decision; whether they look like one control or three is a visual one, and a merchant can want
+either combination. A single boolean forced them together and made one of them unreachable.
 
 ---
 
@@ -152,7 +156,7 @@ The contract you can rely on:
   diagnostic travels in the result, nothing is logged. A widget outside the provider throws with
   a message that names both.
 - **Errors render per widget**, directly beneath the field they describe — the same presentation
-  as `splitCardFields: true`. There is no `splitCardFields` on the provider; layout is yours.
+  as `fieldArrangement: "separate"`. Neither prop exists on the provider; layout is yours.
 - **`appearance` and `localisation` sit on the provider** and flow to every widget. Widgets take
   no per-widget style props (first release).
 - **Focus auto-advance keeps the semantic order** number → expiry → CVC regardless of where you
@@ -248,7 +252,9 @@ Honest list. None of these are hard to add; none are available today.
 2. **Per-field style props do not exist.** Appearance is form-wide; a widget takes no `style`,
    `containerStyle` or `textStyle`.
 3. **Focus auto-advance cannot be turned off.**
-4. **Field-level error placement** is a consequence of `splitCardFields`, not an independent choice.
+4. **Field-level error placement** follows `fieldArrangement`: `separate` renders each field's
+   message beneath it, `fused` renders one shared line. Whether anything renders at all is
+   `fieldOptions.*.errorDisplay`, which defaults to `none`.
 5. **Card scanning** and the **co-badged network picker** are excluded from the standalone form.
    Both need host capabilities — a native module, and a viewport-aware popover — and including them
    would cost the "no native module, no Pod install, no Codegen" property.

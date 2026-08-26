@@ -208,6 +208,38 @@ let emptySlot: animatedTextSlot = {fontSize: None, rest: None}
  */
 let usableFontSize = (value: float) => Float.isFinite(value) && value > 0. ? Some(value) : None
 
+/*
+ * HORIZONTAL ALIGNMENT, read off the merchant's `input` slot.
+ *
+ * React Native's native placeholder inherits the TextInput's `textAlign`; the library-rendered
+ * placeholder overlay is a separate element, so it has to be told. Without this a merchant who sets
+ * `styles.input: {textAlign: "center"}` gets a centred value and a left-aligned placeholder, and
+ * the text jumps sideways the moment they start typing.
+ *
+ * READ direction, so it goes through `flattenStyleProp` first — see Unsafe. An unrecognised value
+ * (including one from an untyped JavaScript consumer) yields None and the default alignment.
+ */
+let textAlignOf = (slot: option<textStyleProp>): option<
+  [#auto | #left | #right | #center | #justify],
+> =>
+  slot->Option.flatMap(style =>
+    switch style->Unsafe.textStyleToStyle->flattenStyleProp->Nullable.toOption {
+    | None => None
+    | Some(flat) =>
+      switch flat
+      ->Unsafe.flatStyleToDict
+      ->Dict.get("textAlign")
+      ->Option.flatMap(JSON.Decode.string) {
+      | Some("auto") => Some(#auto)
+      | Some("left") => Some(#left)
+      | Some("right") => Some(#right)
+      | Some("center") => Some(#center)
+      | Some("justify") => Some(#justify)
+      | _ => None
+      }
+    }
+  )
+
 let splitAnimatedText = (slot: option<textStyleProp>): animatedTextSlot =>
   switch slot {
   | None => emptySlot

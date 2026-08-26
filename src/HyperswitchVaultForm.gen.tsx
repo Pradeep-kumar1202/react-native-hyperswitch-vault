@@ -15,9 +15,15 @@ import type {cardFormState as VaultFormOptions_cardFormState} from './VaultFormO
 
 import type {expiryStyles as CardFieldStyles_expiryStyles} from './CardFieldStyles.gen';
 
+import type {fieldArrangement as CardFieldOptions_fieldArrangement} from './CardFieldOptions.gen';
+
 import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
 
+import type {formFieldOptions as CardFieldOptions_formFieldOptions} from './CardFieldOptions.gen';
+
 import type {formFieldStyles as CardFieldStyles_formFieldStyles} from './CardFieldStyles.gen';
+
+import type {formLayout as CardFieldOptions_formLayout} from './CardFieldOptions.gen';
 
 import type {localisationLabels as VaultFormOptions_localisationLabels} from './VaultFormOptions.gen';
 
@@ -71,17 +77,25 @@ export type formFieldStyles = CardFieldStyles_formFieldStyles;
 
 export type vaultFormState = VaultPublicState_vaultFormState;
 
+export type formFieldOptions = CardFieldOptions_formFieldOptions;
+
+export type formLayout = CardFieldOptions_formLayout;
+
+export type fieldArrangement = CardFieldOptions_fieldArrangement;
+
 export type Props = {
   readonly accessible?: boolean; 
   readonly appearance?: appearance; 
   readonly disabled?: boolean; 
   readonly environment: vaultEnvironment; 
+  readonly fieldArrangement?: fieldArrangement; 
+  readonly fieldOptions?: formFieldOptions; 
   readonly fieldStyles?: formFieldStyles; 
+  readonly layout?: formLayout; 
   readonly localisation?: localisation; 
   readonly onFormStateChange?: (_1:vaultFormState) => void; 
   readonly onStateChange?: (_1:cardFormState) => void; 
-  readonly session: vaultSession; 
-  readonly splitCardFields?: boolean
+  readonly session: vaultSession
 };
 
 export const make: React.ComponentType<{
@@ -89,10 +103,12 @@ export const make: React.ComponentType<{
   readonly appearance?: appearance; 
   readonly disabled?: boolean; 
   readonly environment: vaultEnvironment; 
+  readonly fieldArrangement?: fieldArrangement; 
+  readonly fieldOptions?: formFieldOptions; 
   readonly fieldStyles?: formFieldStyles; 
+  readonly layout?: formLayout; 
   readonly localisation?: localisation; 
   readonly onFormStateChange?: (_1:vaultFormState) => void; 
   readonly onStateChange?: (_1:cardFormState) => void; 
-  readonly session: vaultSession; 
-  readonly splitCardFields?: boolean
+  readonly session: vaultSession
 }> = HyperswitchVaultFormJS.make as any;

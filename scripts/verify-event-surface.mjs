@@ -102,13 +102,13 @@ check(
 );
 for (const [name, payload] of [['CardNumberField', 'cardNumberState'], ['CardExpiryField', 'expiryState'], ['CardCVCField', 'cvcState']]) {
   check(
-    new RegExp(`${name}: VaultStyledFieldComponent<[A-Za-z]+, ${payload}>`).test(publicDecl),
+    new RegExp(`${name}: VaultStyledFieldComponent<[A-Za-z]+, [A-Za-z]+, ${payload}>`).test(publicDecl),
     `${name} is bound to its own narrowed payload (${payload})`
   );
 }
 for (const [name, payload] of [['CardNumberWidget', 'cardNumberState'], ['CardExpiryWidget', 'expiryState'], ['CardCVCWidget', 'cvcState']]) {
   check(
-    new RegExp(`${name}: VaultStyledFieldComponent<[A-Za-z]+, ${payload}>`).test(publicDecl),
+    new RegExp(`${name}: VaultStyledFieldComponent<[A-Za-z]+, [A-Za-z]+, ${payload}>`).test(publicDecl),
     `the legacy ${name} spelling carries the identical payload`
   );
 }
@@ -151,7 +151,7 @@ import {
 } from '${PKG}';
 
 /* POSITIVE */
-export const a = <CardNumberField onStateChange={(s) => [s.field, s.status, s.focused, s.brand, s.error]} />;
+export const a = <CardNumberField placeholder="Card number" onStateChange={(s) => [s.field, s.status, s.focused, s.brand, s.error]} />;
 export const b = <CardExpiryField onStateChange={(s) => [s.field, s.status, s.focused, s.error]} />;
 export const c = <CardCVCField onStateChange={(s) => [s.field, s.status, s.focused, s.error]} />;
 export const d = <HyperswitchVault.CardForm session={{} as never} environment="sandbox"

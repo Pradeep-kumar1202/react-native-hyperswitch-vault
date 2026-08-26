@@ -45,7 +45,13 @@ let useHost = (
   let errorSpacing =
     appearance->Option.flatMap(a => a.VaultFormOptions.errorMessageSpacing)->Option.getOr(4.)
   let brandIconMode =
-    appearance->Option.flatMap(a => a.VaultFormOptions.brandIconMode)->Option.getOr(#standard)
+    appearance
+    ->Option.flatMap(a => a.VaultFormOptions.brandIconMode)
+    /*
+     * `#hidden`, not `#standard`. The zero-configuration form renders no artwork; a merchant who
+     * wants one asks for it, either form-wide here or per field.
+     */
+    ->Option.getOr(#hidden)
 
   let validators: CardStateReducer.validators = {
     cardNumber: VaultFormOptions.makeCardNumberValidator(messages),
@@ -75,7 +81,8 @@ let useHost = (
         cardNumberValid: numberValid,
         expiryValid,
         cvcValid,
-        brand: info.brand->Option.getOr(""),
+        /* Through the one mapping table, so this surface agrees with every other one. */
+        brand: info.brand->Option.getOr("")->VaultPublicState.brandOf,
       })
     )
     None

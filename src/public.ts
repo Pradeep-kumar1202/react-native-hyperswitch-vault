@@ -25,6 +25,19 @@ import type {
   expiryStyles,
   formFieldStyles,
 } from './CardFieldStyles.gen';
+import type {
+  labelBehavior,
+  errorDisplay,
+  brandIconMode as fieldBrandIconMode,
+  cvcIconDisplay,
+  fieldOptions,
+  cardNumberOptions,
+  expiryOptions,
+  cvcOptions,
+  formFieldOptions,
+  formLayout,
+  fieldArrangement,
+} from './CardFieldOptions.gen';
 import { make as RawCardExpiryWidget } from './CardExpiryWidget.gen';
 import { make as RawCardCVCWidget } from './CardCVCWidget.gen';
 import type {
@@ -66,8 +79,24 @@ type VaultFormComponent<P> = React.ForwardRefExoticComponent<
  * Note `children` is absent from every field type: the generated Props carries it, but it has never
  * been part of the published field surface.
  */
-type VaultStyledFieldComponent<S, E> = React.ForwardRefExoticComponent<
-  { styles?: S; onStateChange?: (state: E) => void } & React.RefAttributes<widgetHandle>
+/*
+ * ── Field options: which visual elements exist ────────────────────────────────
+ *
+ * Separate from `styles`, which says how the enabled elements look. With no options a field renders
+ * an empty, neutral input: no placeholder, no label, no animation, no icon, no error text and no
+ * space reserved for any of them.
+ *
+ * The option props are FLATTENED onto the component rather than nested, because a merchant placing
+ * one field writes `<CardNumberField placeholder="Card number" />`. The grouped `fieldOptions`
+ * record exists on the ready-made form, where three fields are addressed at once.
+ *
+ * Each field's option set is its own type: only the card number has `brandIconMode`, only the CVC has
+ * `cvcIcon`, and the expiry has neither — the same rule that already keeps `accessory` off the
+ * expiry style type.
+ */
+type VaultStyledFieldComponent<S, O, E> = React.ForwardRefExoticComponent<
+  { styles?: S; onStateChange?: (state: E) => void } & O &
+    React.RefAttributes<widgetHandle>
 >;
 
 /* ── Existing published names — unchanged ─────────────────────────────────── */
@@ -84,12 +113,21 @@ export type HyperswitchVaultFormProviderProps = ProviderProps;
 export const HyperswitchVaultFormProvider =
   RawHyperswitchVaultFormProvider as unknown as VaultFormComponent<ProviderProps>;
 
-export const CardNumberWidget =
-  RawCardNumberWidget as unknown as VaultStyledFieldComponent<fieldStyles, cardNumberState>;
-export const CardExpiryWidget =
-  RawCardExpiryWidget as unknown as VaultStyledFieldComponent<expiryStyles, expiryState>;
-export const CardCVCWidget =
-  RawCardCVCWidget as unknown as VaultStyledFieldComponent<fieldStyles, cvcState>;
+export const CardNumberWidget = RawCardNumberWidget as unknown as VaultStyledFieldComponent<
+  fieldStyles,
+  cardNumberOptions,
+  cardNumberState
+>;
+export const CardExpiryWidget = RawCardExpiryWidget as unknown as VaultStyledFieldComponent<
+  expiryStyles,
+  expiryOptions,
+  expiryState
+>;
+export const CardCVCWidget = RawCardCVCWidget as unknown as VaultStyledFieldComponent<
+  fieldStyles,
+  cvcOptions,
+  cvcState
+>;
 
 /*
  * ── Canonical field names (ADR-0002 §1) ──────────────────────────────────────
@@ -123,6 +161,36 @@ export type VaultCardNumberStyles = fieldStyles;
 export type VaultExpiryStyles = expiryStyles;
 export type VaultCVCStyles = fieldStyles;
 export type VaultFormFieldStyles = formFieldStyles;
+
+/*
+ * ── Field option types ───────────────────────────────────────────────────────
+ *
+ * All generated from CardFieldOptions.res — imported, never re-declared, so the published shape
+ * cannot drift from what the library actually reads. Every union is closed and literal.
+ */
+export type VaultLabelBehavior = labelBehavior;
+export type VaultErrorDisplay = errorDisplay;
+export type VaultCVCIconDisplay = cvcIconDisplay;
+
+/*
+ * ONE brand-icon control. `VaultBrandIconMode` is the same union `appearance.brandIconMode` has
+ * always used — it already had a `hidden` member, so a second on/off type would have been a second
+ * way to spell "off". It is published under both names because `VaultFormBrandIconMode` is the
+ * existing appearance-level spelling and merchants may already reference it.
+ *
+ * Precedence, resolved in exactly one place:
+ *   fieldOptions.cardNumber.brandIconMode  →  appearance.brandIconMode  →  'hidden'
+ */
+export type VaultBrandIconMode = fieldBrandIconMode;
+
+export type VaultFieldOptions = fieldOptions;
+export type VaultCardNumberOptions = cardNumberOptions;
+export type VaultExpiryOptions = expiryOptions;
+export type VaultCVCOptions = cvcOptions;
+export type VaultFormFieldOptions = formFieldOptions;
+
+export type VaultFormLayout = formLayout;
+export type VaultFieldArrangement = fieldArrangement;
 
 /*
  * ── Merchant state events (ADR-0002 §4, §4a, §5) ─────────────────────────────

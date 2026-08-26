@@ -7,6 +7,8 @@ import type {MerchantSession as $$vaultSession} from './merchantTypes';
 
 import type {brandIconMode as CardIcons_brandIconMode} from './CardIcons.gen';
 
+import type {cardBrand as VaultPublicState_cardBrand} from './VaultPublicState.gen';
+
 import type {safeVaultErrorCode as VaultResult_safeVaultErrorCode} from './VaultResult.gen';
 
 import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.gen';
@@ -71,7 +73,7 @@ export type cardFormState = {
   readonly cardNumberValid: boolean; 
   readonly expiryValid: boolean; 
   readonly cvcValid: boolean; 
-  readonly brand: string
+  readonly brand: VaultPublicState_cardBrand
 };
 
 export type vaultCardMetadata = VaultConfirm_vaultCardMetadata;

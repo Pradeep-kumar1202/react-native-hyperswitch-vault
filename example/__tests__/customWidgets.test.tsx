@@ -166,14 +166,19 @@ function Layout(props: HarnessProps) {
       environment="sandbox"
       onStateChange={props.onState}>
       <View>
-        {showNumber && <CardNumberWidget ref={props.numberRef} />}
-        {duplicate === 'number' && <CardNumberWidget />}
+        {/*
+          * Inline error RENDERING is opt-in since the merchant UI reset; this harness asserts what
+          * is on screen beneath each widget, so it asks for it. Validation and the error EVENT are
+          * unchanged either way.
+          */}
+        {showNumber && <CardNumberWidget ref={props.numberRef} errorDisplay="inline" />}
+        {duplicate === 'number' && <CardNumberWidget errorDisplay="inline" />}
       </View>
       <>
         <View>
-          {showExpiry && <CardExpiryWidget />}
-          {duplicate === 'expiry' && <CardExpiryWidget />}
-          {showCvc && <CardCVCWidget />}
+          {showExpiry && <CardExpiryWidget errorDisplay="inline" />}
+          {duplicate === 'expiry' && <CardExpiryWidget errorDisplay="inline" />}
+          {showCvc && <CardCVCWidget errorDisplay="inline" />}
           {duplicate === 'cvc' && <CardCVCWidget />}
         </View>
       </>
@@ -380,7 +385,8 @@ describe('unmount and the aggregate state', () => {
     await type(tree, 'CardNumberInputTestId', CARD_NUMBER);
     expect(last(states).cardNumberValid).toBe(true);
     expect(last(states).complete).toBe(false);
-    expect(last(states).brand).toBe('Visa');
+    /* canonical CardBrand token, identical on every event surface */
+    expect(last(states).brand).toBe('visa');
 
     await type(tree, 'ExpiryInputTestId', EXPIRY);
     expect(last(states).expiryValid).toBe(true);
@@ -391,7 +397,7 @@ describe('unmount and the aggregate state', () => {
       cardNumberValid: true,
       expiryValid: true,
       cvcValid: true,
-      brand: 'Visa',
+      brand: 'visa',
     });
   });
 });

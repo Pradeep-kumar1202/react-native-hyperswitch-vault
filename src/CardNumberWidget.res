@@ -4,6 +4,19 @@ let make = React.forwardRef((
   props: {
     "children": option<React.element>,
     "styles": option<CardFieldStyles.fieldStyles>,
+    /*
+     * Flattened field options. A merchant writes `<CardNumberField placeholder="Card number" />`
+     * rather than nesting a record — the grouped `fieldOptions` shape is for the ready-made form,
+     * where three fields have to be addressed at once.
+     */
+    "placeholder": option<string>,
+    "label": option<string>,
+    "labelBehavior": option<CardFieldOptions.labelBehavior>,
+    "errorDisplay": option<CardFieldOptions.errorDisplay>,
+    "accessibilityLabel": option<string>,
+    "accessibilityHint": option<string>,
+    "testID": option<string>,
+    "brandIconMode": option<CardFieldOptions.brandIconMode>,
     "onStateChange": option<VaultPublicState.cardNumberState => unit>,
   },
   ref,
@@ -27,11 +40,27 @@ let make = React.forwardRef((
     blur: () => VaultCardController.blurRef(controller.cardRef),
   })
 
+  let options: CardFieldOptions.cardNumberOptions = {
+    placeholder: ?props["placeholder"],
+    label: ?props["label"],
+    labelBehavior: ?props["labelBehavior"],
+    errorDisplay: ?props["errorDisplay"],
+    accessibilityLabel: ?props["accessibilityLabel"],
+    accessibilityHint: ?props["accessibilityHint"],
+    testID: ?props["testID"],
+    brandIconMode: ?props["brandIconMode"],
+  }
+
   <BoundCardFields.Number
     ctx
     styles=?{props["styles"]}
-    iconRight=CardInput.CustomIcon(
-      <CardIcons detectedScheme=controller.values.brand mode=ctx.brandIconMode />,
-    )
+    options
+    iconRight={switch CardFieldOptions.resolveBrandIconMode(
+      Some(options),
+      ~formWide=ctx.brandIconMode,
+    ) {
+    | #hidden => CardInput.NoIcon
+    | mode => CardInput.CustomIcon(<CardIcons detectedScheme=controller.values.brand mode />)
+    }}
   />
 })

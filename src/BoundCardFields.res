@@ -31,7 +31,10 @@ module Number = {
     ~borderBottomRightRadius: option<float>=?,
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
+    /* Which visual elements exist. Absent => the blank default field. */
+    ~options: option<CardFieldOptions.cardNumberOptions>=?,
   ) => {
+    let resolved = CardFieldOptions.resolveCardNumber(options)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.CardNumberKind,
@@ -49,8 +52,7 @@ module Number = {
       error=?controller.visibleErrors.cardNumber
       isValid=controller.fieldOk.cardNumber
       renderError={renderError->Option.getOr(defaultRenderError)}
-      label=ctx.labels.cardNumberPlaceholder
-      floatingLabel=ctx.labels.cardNumberFloatingLabel
+      options=resolved
       common={ctx->VaultWidgetContext.commonFor}
       onAnalytics=ctx.onAnalytics
       reference=controller.cardRef
@@ -72,9 +74,14 @@ module Expiry = {
     ~borderTopLeftRadius: option<float>=?,
     ~borderTopRightRadius: option<float>=?,
     ~borderBottomRightRadius: option<float>=?,
+    ~borderBottomWidth: option<float>=?,
+    ~borderBottomLeftRadius: option<float>=?,
     /* Widened from `expiryStyles` by the caller; `accessory` is absent for this field. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
+    /* Which visual elements exist. Absent => the blank default field. */
+    ~options: option<CardFieldOptions.expiryOptions>=?,
   ) => {
+    let resolved = CardFieldOptions.resolveExpiry(options)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.ExpiryKind,
@@ -91,8 +98,7 @@ module Expiry = {
       error=?controller.visibleErrors.expiry
       isValid=controller.fieldOk.expiry
       renderError={renderError->Option.getOr(defaultRenderError)}
-      label=ctx.labels.expiryPlaceholder
-      floatingLabel=ctx.labels.expiryFloatingLabel
+      options=resolved
       common={ctx->VaultWidgetContext.commonFor}
       onAnalytics=ctx.onAnalytics
       reference=controller.expiryRef
@@ -101,6 +107,8 @@ module Expiry = {
       ?borderTopLeftRadius
       ?borderTopRightRadius
       ?borderBottomRightRadius
+      ?borderBottomWidth
+      ?borderBottomLeftRadius
     />
   }
 }
@@ -118,7 +126,10 @@ module Cvc = {
     ~borderBottomLeftRadius: option<float>=?,
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
+    /* Which visual elements exist. Absent => the blank default field. */
+    ~options: option<CardFieldOptions.cvcOptions>=?,
   ) => {
+    let resolved = CardFieldOptions.resolveCvc(options)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.CvcKind,
@@ -141,8 +152,7 @@ module Cvc = {
       error=?controller.visibleErrors.cvc
       isValid=controller.fieldOk.cvc
       renderError={renderError->Option.getOr(defaultRenderError)}
-      label=ctx.labels.cvcPlaceholder
-      floatingLabel=ctx.labels.cvcFloatingLabel
+      options=resolved
       common={ctx->VaultWidgetContext.commonFor}
       onAnalytics=ctx.onAnalytics
       reference=controller.cvcRef
@@ -154,18 +164,22 @@ module Cvc = {
       borderBottomRightRadius=ctx.theme.borderRadius
       borderBottomWidth=ctx.theme.borderWidth
       borderRightWidth=ctx.theme.borderWidth
-      iconRight=CardInput.CustomIcon(
-        <View
-          style={Style.s({
-            height: 46.->Style.dp,
-            display: #flex,
-            flexDirection: #row,
-            justifyContent: #center,
-            alignItems: #center,
-          })}>
-          <CardIcons.Cvc size=32. />
-        </View>,
-      )
+      iconRight={switch CardFieldOptions.cvcIconOf(options) {
+      | #none => CardInput.NoIcon
+      | #default =>
+        CardInput.CustomIcon(
+          <View
+            style={Style.s({
+              height: 46.->Style.dp,
+              display: #flex,
+              flexDirection: #row,
+              justifyContent: #center,
+              alignItems: #center,
+            })}>
+            <CardIcons.Cvc size=32. />
+          </View>,
+        )
+      }}
     />
   }
 }
