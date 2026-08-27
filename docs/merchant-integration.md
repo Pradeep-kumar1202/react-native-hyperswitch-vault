@@ -242,6 +242,10 @@ promise is still pending, as `busy` does above.
 React Native has no document origin, so unlike the web SDK this cannot be inferred — pass it
 explicitly and make sure it matches the environment your **server** created the session in.
 
+Self-hosting instead of using a public host? Override it with `vaultEndpoint` — see the row in the
+table below. `environment` is still required: it remains the fallback and it decides whether a
+plain-`http` loopback base is tolerated.
+
 ### 3.4 Optional props
 
 | Prop | Type | Notes |
@@ -253,6 +257,7 @@ explicitly and make sure it matches the environment your **server** created the 
 | `layout` | `VaultFormLayout` | `"stacked"` (default) gives each field its own row; `"inline"` puts expiry and CVC side by side. |
 | `fieldArrangement` | `VaultFieldArrangement` | `"separate"` (default) gives each field its own bordered box; `"fused"` joins them. |
 | `localisation` | `VaultFormLocalisation` | validation message overrides and RTL |
+| `vaultEndpoint` | `VaultEndpointConfig` | `{baseUrl}` for a self-hosted deployment — where `tokenize()` posts the payment-method-session confirm. Validated like every other base: `https` required (`http` only on a loopback host, and never in production), no credentials, no query, no fragment; a path prefix is kept and a trailing slash trimmed. Invalid means `unsupported_configuration` with nothing sent, never a silent fallback. Absent means the `environment` host. |
 
 ### 3.5 The cardholder name
 

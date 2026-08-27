@@ -69,6 +69,13 @@ The package serves two consumers with different rights.
   `hyperswitch-sdk-utils` submodule. Merchants can override label and message **strings** only.
 - The transport is fixed: environment-selected host, `POST
   /v1/payment-method-sessions/{id}/confirm`, fixed headers, fixed body. No merchant knob touches it.
+  **Superseded in part.** The route and body are still fixed, and `tokenize()` still exposes no
+  merchant knob over the headers, but the *host* is now configurable: the optional `vaultEndpoint`
+  prop overrides the environment host for self-hosted deployments
+  (`VaultEndpoint.resolveVaultBaseUrl`). It is validated before use, and an invalid base returns
+  `unsupported_configuration` with nothing sent, so the fallback is never silent. See
+  [ADR-0004](0004-library-owns-every-new-card-flow.md) for why the host had to become
+  host-supplied.
 - `retryableForStatus` returns `false` unconditionally; nothing retries.
 - React Final Form is **absent from published output** — no runtime `dependencies`, no RFF peer, no
   RFF import in `dist/**` or `src/**`, one Rollup configuration for all three entries. Standalone

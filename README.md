@@ -317,6 +317,30 @@ The complete inventory is in [control-surface.md](docs/control-surface.md) and
 
 ---
 
+## Self-hosted deployments
+
+`environment` selects a public Hyperswitch host. A self-hosted deployment overrides it with
+`vaultEndpoint`, which is where `tokenize()` posts the payment-method-session confirm:
+
+```tsx
+<HyperswitchVaultForm
+  session={session}
+  environment="sandbox"
+  vaultEndpoint={{baseUrl: 'https://payments.your-company.example/api'}}
+/>;
+```
+
+The base is validated exactly like every other one: `https` required — `http` only on a loopback host
+(`localhost`, `127.0.0.1`, `10.0.2.2`) and never in production — no credentials, no query string,
+no fragment. A path prefix is kept (`/api` above) and a trailing slash is trimmed.
+A base that fails validation returns `unsupported_configuration` **with nothing sent** — it is never
+silently replaced by the public host. Omit the prop and the `environment` host is used.
+
+`vaultEndpoint` covers the vault call only. In Flows 2 and 3 the payment confirm has its own
+`endpoint` on the `confirmPayment()` input; set both when you self-host.
+
+---
+
 ## Lifecycle
 
 - **Replacing the `session` prop** aborts in-flight work and discards any cached token. Fetch a
