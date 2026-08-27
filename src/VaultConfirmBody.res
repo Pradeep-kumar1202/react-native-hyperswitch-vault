@@ -189,6 +189,7 @@ let directCardSubtree = (
   ~card: VaultConfirm.cardDetails,
   ~cardholderName: option<string>,
   ~cardNetwork: option<string>,
+  ~nickName: option<string>,
 ): JSON.t =>
   [
     ("card_number", card.cardNumber->Validation.clearSpaces->JSON.Encode.string),
@@ -203,6 +204,11 @@ let directCardSubtree = (
    * without adding information.
    */
   ->Array.concat(VaultConfirm.optionalEntry("card_network", cardNetwork->cardNetworkToWire))
+  /*
+   * With no payment-method-session in this flow, the card object of the payment confirm is the
+   * only place the saved-card nickname can go — which is where client-core's classic body put it.
+   */
+  ->Array.concat(VaultConfirm.optionalEntry("nick_name", nickName))
   ->Dict.fromArray
   ->JSON.Encode.object
 
@@ -223,6 +229,7 @@ type cardPayload =
       card: VaultConfirm.cardDetails,
       cardholderName: option<string>,
       cardNetwork: option<string>,
+      nickName: option<string>,
     })
 
 /*
@@ -246,8 +253,8 @@ let build = (
   | TokenPayload({mode: #vault_card, token, metadata}) =>
     Some(("vault_card", vaultCardSubtree(~token, ~metadata)))
   | TokenPayload({mode: #payment_token}) => None
-  | DirectPayload({card, cardholderName, cardNetwork}) =>
-    Some(("card", directCardSubtree(~card, ~cardholderName, ~cardNetwork)))
+  | DirectPayload({card, cardholderName, cardNetwork, nickName}) =>
+    Some(("card", directCardSubtree(~card, ~cardholderName, ~cardNetwork, ~nickName)))
   }
 
   let finalPaymentMethodData =

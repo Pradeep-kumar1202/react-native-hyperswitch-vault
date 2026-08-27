@@ -95,6 +95,11 @@ let make = React.forwardRef((
     "enabledCardSchemes": option<array<string>>,
     "eligibility": option<eligibilityConfig>,
     /*
+     * Where `tokenize()` posts the payment-method-session confirm. A self-hosted deployment sets
+     * it; absent means the public-cloud host of `environment`. Validated like every other base.
+     */
+    "vaultEndpoint": option<VaultEndpoint.vaultEndpointConfig>,
+    /*
      * `#collect` (the default, unchanged for existing merchants), `#external` when the host owns
      * the field and supplies the value on the confirm input, or `#omit` when there is no name.
      */
@@ -111,6 +116,7 @@ let make = React.forwardRef((
     ~accessible=props["accessible"],
     ~enabledCardSchemes=props["enabledCardSchemes"]->Option.getOr([]),
     ~eligibility=props["eligibility"],
+    ~vaultEndpoint=props["vaultEndpoint"],
     ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
   )
 

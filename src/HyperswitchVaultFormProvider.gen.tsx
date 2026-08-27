@@ -15,6 +15,8 @@ import type {eligibilityConfig as VaultFormOptions_eligibilityConfig} from './Va
 
 import type {localisation as VaultFormOptions_localisation} from './VaultFormOptions.gen';
 
+import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './VaultEndpoint.gen';
+
 import type {vaultEnvironment as VaultFormOptions_vaultEnvironment} from './VaultFormOptions.gen';
 
 import type {vaultSession as VaultFormOptions_vaultSession} from './VaultFormOptions.gen';
@@ -31,7 +33,8 @@ export type Props = {
   readonly enabledCardSchemes?: string[]; 
   readonly environment: VaultFormOptions_vaultEnvironment; 
   readonly localisation?: VaultFormOptions_localisation; 
-  readonly session?: VaultFormOptions_vaultSession
+  readonly session?: VaultFormOptions_vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };
 
 export const make: React.ComponentType<{
@@ -44,5 +47,6 @@ export const make: React.ComponentType<{
   readonly enabledCardSchemes?: string[]; 
   readonly environment: VaultFormOptions_vaultEnvironment; 
   readonly localisation?: VaultFormOptions_localisation; 
-  readonly session?: VaultFormOptions_vaultSession
+  readonly session?: VaultFormOptions_vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 }> = HyperswitchVaultFormProviderJS.make as any;

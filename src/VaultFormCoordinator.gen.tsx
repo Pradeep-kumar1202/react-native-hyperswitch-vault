@@ -31,5 +31,6 @@ export type paymentConfirmInput = {
   readonly email?: string; 
   readonly eligibilityRequired?: boolean; 
   readonly appId?: string; 
-  readonly endpoint?: VaultEndpoint_vaultEndpointConfig
+  readonly endpoint?: VaultEndpoint_vaultEndpointConfig; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };

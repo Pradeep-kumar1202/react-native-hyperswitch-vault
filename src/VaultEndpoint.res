@@ -1,24 +1,19 @@
 /*
  * INTERNAL. Validation for a host-supplied base URL.
  *
- * A merchant may need to point the FINAL confirm at their own environment. That is a legitimate
- * configuration knob and an obvious exfiltration vector, so the value is validated rather than
- * trusted: whatever survives here receives a payment-intent credential in an `Authorization` header.
+ * ── THE HOST OWNS THE ENDPOINT ─────────────────────────────────────────────────
+ * The host that mounts the form is the authority on where its backend lives: client-core resolves
+ * `hyperswitchConfig.customEndpoints` or its build-time environment host, and a standalone merchant
+ * may run a self-hosted deployment. Every request the library sends therefore takes its base from
+ * the host, and only falls back to the public-cloud host of the selected environment when the host
+ * says nothing at all.
  *
- * Rejected, and why:
- *   - non-https, except the two loopback hosts and only outside production — a plaintext hop would
- *     put the credential on the wire;
- *   - userinfo in the authority (`https://user:pass@host`) — it is a credential-shaped payload that
- *     many URL parsers and log scrubbers handle inconsistently;
- *   - any path, query or fragment — the library appends its own path, and a base with a path would
- *     let a caller reshape the final endpoint;
- *   - an unparseable value.
+ * Rejected: non-https (except loopback outside production); userinfo; query; fragment; unparseable.
+ * A PATH PREFIX IS ACCEPTED (`https://checkout.hyperswitch.io/api`), normalised (trailing slashes
+ * removed) and returned as part of the base; the library still appends its own route after it.
  *
- * An invalid endpoint is a MISCONFIGURATION, not a bad session: it surfaces as
- * `#unsupported_configuration`, so a merchant is told to fix their setup rather than being sent to
- * mint a fresh session that would fail identically.
- *
- * The PMS host is NOT configurable — call 1 always goes to the environment-selected vault host.
+ * Two bases exist because two backends MAY exist: `resolveBaseUrl` serves the payment calls
+ * (eligibility, final confirm) and `resolveVaultBaseUrl` the payment-method-session confirm.
  */
 
 @genType
@@ -45,10 +40,9 @@ let allowsCleartext = (environment: VaultConfirm.vaultEnvironment) =>
   | #production => false
   }
 
-/*
- * Returns the validated ORIGIN, never the caller's string: anything the parser normalised away
- * cannot come back. `None` means "no override" and the environment default is used.
- */
+/* `/api/` → `/api`, `/` → ``. The parser has already normalised dot segments and encoding. */
+let normalisePath = (path: string) => path->String.replaceRegExp(%re("/\/+$/"), "")
+
 let validateEndpoint = (
   endpoint: option<vaultEndpointConfig>,
   ~environment: VaultConfirm.vaultEnvironment,
@@ -76,13 +70,11 @@ let validateEndpoint = (
               (protocol === "http:" && isLoopback && environment->allowsCleartext)
           let hasCredentials =
             url->urlUsername->String.length > 0 || url->urlPassword->String.length > 0
-          let path = url->urlPathname
-          let hasPath = path->String.length > 0 && path !== "/"
           let hasQuery = url->urlSearch->String.length > 0
           let hasHash = url->urlHash->String.length > 0
 
-          if schemeOk && !hasCredentials && !hasPath && !hasQuery && !hasHash {
-            Ok(Some(url->urlOrigin))
+          if schemeOk && !hasCredentials && !hasQuery && !hasHash {
+            Ok(Some(url->urlOrigin ++ url->urlPathname->normalisePath))
           } else {
             Error()
           }
@@ -91,7 +83,6 @@ let validateEndpoint = (
     }
   }
 
-/* The default final-confirm host per environment, mirroring the vault host selection. */
 let defaultBaseUrl = (environment: VaultConfirm.vaultEnvironment) =>
   switch environment {
   | #production => "https://checkout.hyperswitch.io/api"
@@ -99,12 +90,20 @@ let defaultBaseUrl = (environment: VaultConfirm.vaultEnvironment) =>
   | #sandbox => "https://beta.hyperswitch.io/api"
   }
 
-let resolveBaseUrl = (
-  endpoint: option<vaultEndpointConfig>,
-  ~environment: VaultConfirm.vaultEnvironment,
-): result<string, unit> =>
+let resolveBaseUrl = (endpoint, ~environment: VaultConfirm.vaultEnvironment): result<string, unit> =>
   switch endpoint->validateEndpoint(~environment) {
   | Error() => Error()
   | Ok(None) => Ok(environment->defaultBaseUrl)
-  | Ok(Some(origin)) => Ok(origin)
+  | Ok(Some(base)) => Ok(base)
+  }
+
+/* The payment-method-session confirm base. Same validation; its own default. */
+let resolveVaultBaseUrl = (endpoint, ~environment: VaultConfirm.vaultEnvironment): result<
+  string,
+  unit,
+> =>
+  switch endpoint->validateEndpoint(~environment) {
+  | Error() => Error()
+  | Ok(None) => Ok(environment->VaultConfirm.vaultBaseUrl)
+  | Ok(Some(base)) => Ok(base)
   }

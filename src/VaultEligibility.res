@@ -71,9 +71,7 @@ type eligibilityRequest = {
 let eligibilityUrl = (~baseUrl, ~paymentId) =>
   `${baseUrl}/payments/${paymentId->encodeURIComponent}/eligibility`
 
-/* Matches `Utils.getHeader`: the scheme prefix is stripped, and the header is sent even if blank. */
-let appIdHeader = (appId: option<string>) =>
-  appId->Option.getOr("")->String.replace(".hyperswitch://", "")
+let appIdHeader = VaultConfirm.appIdHeader
 
 let buildBody = (~cardNumber: string): string =>
   [

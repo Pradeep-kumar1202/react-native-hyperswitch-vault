@@ -75,6 +75,8 @@ type finalConfirmRequest = {
   baseUrl: string,
   paymentId: string,
   sdkAuthorization: string,
+  /* Reproduces the `x-app-id` header client-core sends on every backend call. Non-card. */
+  appId?: string,
   /* Fully built by VaultConfirmBody; this module never inspects or amends it. */
   body: JSON.t,
   timeoutMs?: int,
@@ -249,6 +251,8 @@ let confirmPayment = async (request: finalConfirmRequest): navOutcome => {
     headers: [
       ("Content-Type", "application/json"),
       ("Authorization", request.sdkAuthorization),
+      ("x-app-id", request.appId->VaultConfirm.appIdHeader),
+      ("x-redirect-uri", ""),
     ]->Dict.fromArray,
     body: request.body->JSON.stringify,
     signal: ?Some(controller->VaultConfirm.controllerSignal),

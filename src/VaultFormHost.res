@@ -29,6 +29,8 @@ let useHost = (
   ~accessible: option<bool>,
   ~enabledCardSchemes: array<string>,
   ~eligibility: option<VaultFormOptions.eligibilityConfig>,
+  /* Where `tokenize()` posts the payment-method-session confirm. Absent means the environment host. */
+  ~vaultEndpoint: option<VaultEndpoint.vaultEndpointConfig>,
   /*
    * Which arrangement the cardholder name is in. The VIEW uses it to decide whether to render a
    * field; the COORDINATOR uses it to decide whose value goes on the wire and whether a supplied
@@ -162,6 +164,7 @@ let useHost = (
     ~cardDetails=controller.cardDetails,
     ~cardholderName=controller.cardholderName,
     ~cardholderNameMode,
+    ~vaultEndpoint,
     ~cardNetwork=controller.cardNetwork,
     ~cardVersion=controller.cardVersion,
     ~eligibilityVerdict=controller.eligibilityVerdict,

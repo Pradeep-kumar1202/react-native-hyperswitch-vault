@@ -41,6 +41,8 @@ import type {safeVaultErrorCode as VaultResult_safeVaultErrorCode} from './Vault
 
 import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.gen';
 
+import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './VaultEndpoint.gen';
+
 import type {vaultEnvironment as VaultFormOptions_vaultEnvironment} from './VaultFormOptions.gen';
 
 import type {vaultFormHandle as VaultFormOptions_vaultFormHandle} from './VaultFormOptions.gen';
@@ -108,7 +110,8 @@ export type Props = {
   readonly fieldStyles?: formFieldStyles; 
   readonly layout?: formLayout; 
   readonly localisation?: localisation; 
-  readonly session?: vaultSession
+  readonly session?: vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };
 
 export const make: React.ComponentType<{
@@ -124,5 +127,6 @@ export const make: React.ComponentType<{
   readonly fieldStyles?: formFieldStyles; 
   readonly layout?: formLayout; 
   readonly localisation?: localisation; 
-  readonly session?: vaultSession
+  readonly session?: vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 }> = HyperswitchVaultFormJS.make as any;

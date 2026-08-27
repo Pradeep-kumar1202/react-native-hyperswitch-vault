@@ -157,7 +157,14 @@ type paymentConfirmInput = {
   eligibilityRequired?: bool,
   /* Reproduces the `x-app-id` header client-core sends on the eligibility call. Non-card. */
   appId?: string,
+  /* Base for the payment calls: eligibility and the final `/payments/{id}/confirm`. */
   endpoint?: VaultEndpoint.vaultEndpointConfig,
+  /*
+   * Base for the payment-method-session confirm (Flow 2's call 1). Falls back to the component's
+   * `vaultEndpoint` prop, then to the environment host. Kept separate from `endpoint` because a
+   * deployment may front the vault on a different host; client-core passes the same base for both.
+   */
+  vaultEndpoint?: VaultEndpoint.vaultEndpointConfig,
 }
 
 type machinery = {
@@ -191,6 +198,8 @@ let useMachinery = (
   ~cardholderName: unit => string,
   /* Which arrangement this form is in. Decides whose cardholder name, if any, is used. */
   ~cardholderNameMode: CardFieldOptions.cardholderNameMode,
+  /* Where `tokenize()` posts call 1; also the fallback for a confirm input without `vaultEndpoint`. */
+  ~vaultEndpoint: option<VaultEndpoint.vaultEndpointConfig>,
   /* The co-badge pick, present only when the customer was actually offered one. */
   ~cardNetwork: unit => option<string>,
   ~cardVersion: unit => int,
@@ -201,8 +210,18 @@ let useMachinery = (
   ~presenceGate: unit => option<VaultResult.vaultPaymentResult>,
   ~clearLocal: unit => unit,
 ): machinery => {
-  let latestRef = React.useRef((sessionState, environment))
-  latestRef.current = (sessionState, environment)
+  /*
+   * Everything an operation reads at run time goes through this ref, never through the closure.
+   * The imperative handle that exposes `tokenize`/`confirmPayment` is created once, so a value
+   * captured by closure would be the mount-time value for the life of the component — and the
+   * cardholder-name mode in particular changes when the host's field set changes.
+   */
+  let latestRef = React.useRef((sessionState, environment, cardholderNameMode, vaultEndpoint))
+  latestRef.current = (sessionState, environment, cardholderNameMode, vaultEndpoint)
+  let currentCardholderNameMode = () => {
+    let (_, _, mode, _) = latestRef.current
+    mode
+  }
 
   let (isSubmitting, setIsSubmitting) = React.useState(_ => false)
 
@@ -275,7 +294,7 @@ let useMachinery = (
   }
 
   let resolveCardholderName = (~supplied: option<string>): result<option<string>, unit> =>
-    switch cardholderNameMode {
+    switch currentCardholderNameMode() {
     | #collect => supplied->Option.isSome ? Error() : Ok(cardholderName()->nonBlank)
     | #"external" => Ok(supplied->Option.flatMap(nonBlank))
     | #omit => supplied->Option.isSome ? Error() : Ok(None)
@@ -294,7 +313,8 @@ let useMachinery = (
    */
   let mintToken = async (
     ~vaultAuthorization: string,
-    ~environment: VaultConfirm.vaultEnvironment,
+    ~vaultBaseUrl: string,
+    ~appId: option<string>,
     ~nickName: option<string>,
     /* Already resolved against the mode by the caller; this function never reads the field. */
     ~cardholderName: option<string>,
@@ -313,7 +333,8 @@ let useMachinery = (
     | None =>
       let outcome = await VaultConfirm.confirmPaymentMethodSession({
         sdkAuthorization: vaultAuthorization,
-        environment,
+        vaultBaseUrl,
+        appId: ?appId,
         card: cardDetails(),
         cardholderName: ?cardholderName,
         /*
@@ -367,7 +388,7 @@ let useMachinery = (
   /* ── Flow 1 — tokenize only ─────────────────────────────────────────────── */
 
   let runTokenize = async () => {
-    let (sessionState, environment) = latestRef.current
+    let (sessionState, environment, cardholderNameMode, vaultEndpoint) = latestRef.current
 
     switch localGate() {
     | Some(blocked) =>
@@ -383,10 +404,19 @@ let useMachinery = (
       switch sessionState {
       | Unusable(message) => VaultResult.tokenizeFailedWith(#invalid_session, message)
       | Ready(vaultAuthorization) =>
+        switch vaultEndpoint->VaultEndpoint.resolveVaultBaseUrl(~environment) {
+        | Error() =>
+          VaultResult.tokenizeFailedWith(
+            #unsupported_configuration,
+            VaultResult.unsupportedConfigurationMessage,
+          )
+        | Ok(vaultBaseUrl) =>
         let (controller, signal) = openRequest(~vaultAuthorization, ~environment)
         let minted = await mintToken(
           ~vaultAuthorization,
-          ~environment,
+          ~vaultBaseUrl,
+          /* Flow 1 has no host input, so there is no app id to attach. */
+          ~appId=None,
           /* Flow 1 takes no input, so there is no host nickname to attach. */
           ~nickName=None,
           /*
@@ -404,6 +434,7 @@ let useMachinery = (
         switch minted {
         | Ok((token, _metadata)) => VaultResult.tokenizeSuccess(token)
         | Error(error) => VaultResult.tokenizeFromPmsFailure(error)
+        }
         }
       }
     }
@@ -449,7 +480,7 @@ let useMachinery = (
      * direct confirm on a vaulting form, and that decision must be made against the session the
      * component holds NOW — not the one it held when this closure happened to be created.
      */
-    let (sessionState, environment) = latestRef.current
+    let (sessionState, environment, _, propVaultEndpoint) = latestRef.current
 
     /*
      * A JavaScript caller can reach `confirmPayment()` with no argument at all — TypeScript does not
@@ -537,6 +568,21 @@ let useMachinery = (
                 VaultResult.unsupportedConfiguration()
               | Error(message) => VaultResult.invalidSession(message)
               | Ok((tokenMode, identity)) =>
+                /*
+                 * The vault base is resolved only when call 1 will happen, and — like every other
+                 * configuration gate — before anything is opened or sent.
+                 */
+                let vaultBase = switch tokenMode {
+                | None => Ok("")
+                | Some(_) =>
+                  switch args.vaultEndpoint {
+                  | Some(_) => args.vaultEndpoint
+                  | None => propVaultEndpoint
+                  }->VaultEndpoint.resolveVaultBaseUrl(~environment)
+                }
+                switch vaultBase {
+                | Error() => VaultResult.unsupportedConfiguration()
+                | Ok(vaultBaseUrl) =>
                 let (controller, signal) = openRequest(
                   ~vaultAuthorization=identity,
                   ~environment,
@@ -553,6 +599,7 @@ let useMachinery = (
                         card: cardDetails(),
                         cardholderName: resolvedCardholderName,
                         cardNetwork: cardNetwork(),
+                        nickName: VaultPaymentMethodData.nickNameOf(args.paymentMethodData),
                       }),
                       ~paymentMethodType=args.paymentMethodType,
                       ~paymentMethodData=args.paymentMethodData,
@@ -567,6 +614,7 @@ let useMachinery = (
                       baseUrl,
                       paymentId: args.paymentId,
                       sdkAuthorization: args.sdkAuthorization,
+                      appId: ?args.appId,
                       body,
                       signal,
                     })
@@ -576,7 +624,8 @@ let useMachinery = (
                   | Some(confirmTokenMode) =>
                     let minted = await mintToken(
                       ~vaultAuthorization=identity,
-                      ~environment,
+                      ~vaultBaseUrl,
+                      ~appId=args.appId,
                       ~nickName=VaultPaymentMethodData.nickNameOf(args.paymentMethodData),
                       /* Attached to the PMS-confirm card object, so a vaulted card records it. */
                       ~cardholderName=resolvedCardholderName,
@@ -605,6 +654,7 @@ let useMachinery = (
                         baseUrl,
                         paymentId: args.paymentId,
                         sdkAuthorization: args.sdkAuthorization,
+                        appId: ?args.appId,
                         body,
                         signal,
                       })
@@ -615,6 +665,7 @@ let useMachinery = (
 
                 closeRequest(controller)
                 outcome
+                }
               }
             }
           }
