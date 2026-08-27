@@ -3,7 +3,14 @@ open Style
 
 type iconType =
   | NoIcon
+  /* Decoration. Rendered inside a non-interactive container and hidden from the a11y tree. */
   | CustomIcon(React.element)
+  /*
+   * An accessory that CONTAINS CONTROLS — the co-badge network chooser, the scan-card button.
+   * It renders in the same slot but must stay reachable: hiding it the way decoration is hidden
+   * would leave a screen-reader user unable to choose their card's network at all.
+   */
+  | InteractiveIcon(React.element)
 
 let fontSize = 16.
 
@@ -353,20 +360,27 @@ let make = (
         /*
          * A NON-INTERACTIVE container.
          *
-         * Neither accessory has an action: `CardIcons` and `CardIcons.Cvc` render an `Image` and
-         * nothing else, and no call site has ever passed an `onPress`. It used to be wrapped in a
-         * `Pressable` anyway, which made it a touch responder and put a pressable in the tree for
-         * something that does not respond to a press. A plain `View` is what it is.
+         * A decorative accessory has no action: `CardIcons` and `CardIcons.Cvc` render an `Image`
+         * and nothing else. It used to be wrapped in a `Pressable` anyway, which made it a touch
+         * responder and put a pressable in the tree for something that does not respond to a press.
+         * A plain `View` is what it is.
          *
          * `accessibilityElementsHidden` / `importantForAccessibility` keep it out of the
          * accessibility tree entirely: it duplicates information the field's own
          * `accessibilityLabel` already carries, and announcing decoration is noise.
+         *
+         * An accessory that carries CONTROLS uses `InteractiveIcon` below and gets none of this.
          */
         <View
           accessible={false}
           accessibilityElementsHidden={true}
           importantForAccessibility={#"no-hide-descendants"}
           style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
+          element
+        </View>
+      | InteractiveIcon(element) =>
+        /* Same slot, same merchant style hook — but reachable, focusable and announced. */
+        <View style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
           element
         </View>
       }}

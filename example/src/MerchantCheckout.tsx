@@ -25,13 +25,12 @@ import {
 } from 'react-native';
 import {
   HyperswitchVaultForm,
-  type CardFormState,
   type HyperswitchVaultFormHandle,
   type MerchantSession,
   type VaultFormAppearance,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {fetchMerchantSession} from './merchantServer';
+import {fetchMerchantSession, vaultPaymentFrom} from './merchantServer';
 
 /* ── The "store" ─────────────────────────────────────────────────────────── */
 
@@ -75,12 +74,11 @@ type Phase =
   | {kind: 'browsing'}
   | {kind: 'starting'}
   | {kind: 'paying'; session: MerchantSession}
-  | {kind: 'done'; token: string; reference: string};
+  | {kind: 'done'; outcome: 'succeeded' | 'processing'; reference: string};
 
 export function MerchantCheckout() {
   const formRef = useRef<HyperswitchVaultFormHandle>(null);
   const [phase, setPhase] = useState<Phase>({kind: 'browsing'});
-  const [cardState, setCardState] = useState<CardFormState | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   const [storeError, setStoreError] = useState<string | null>(null);
@@ -93,7 +91,6 @@ export function MerchantCheckout() {
     setPhase({kind: 'starting'});
     try {
       const session = await fetchMerchantSession();
-      setCardState(null);
       setPayError(null);
       setPhase({kind: 'paying', session});
     } catch (error) {
@@ -103,25 +100,37 @@ export function MerchantCheckout() {
   }, []);
 
   const onPay = useCallback(async () => {
+    if (phase.kind !== 'paying') {
+      return;
+    }
     setPaying(true);
     setPayError(null);
-    const result: VaultSubmitResult | undefined = await formRef.current?.submit();
+    /*
+     * `submit()` names the payment it is confirming and answers with a navigation decision. The
+     * library owns both network calls, so no payment-method token reaches this screen.
+     */
+    const result: VaultPaymentResult | undefined = await formRef.current?.confirmPayment(
+      vaultPaymentFrom(phase.session),
+    );
     setPaying(false);
     if (!result) {
       return;
     }
-    if (result.status === 'success') {
+    /* The result is discriminated on `status`: only the failure statuses carry an `error`. */
+    if (result.status === 'succeeded' || result.status === 'processing') {
       setPhase({
         kind: 'done',
-
-        token: result.token,
+        outcome: result.status,
         reference: `ARV-${Math.floor(Math.random() * 900000 + 100000)}`,
       });
+    } else if (result.status === 'requires_customer_action') {
+      /* A real storefront drives the action — redirect or 3DS — then confirms with its backend. */
+      setPayError('This card needs one more step. Not implemented in this demo.');
     } else {
       /* Every failure is a typed result, so there is always something honest to show. */
       setPayError(result.error.message);
     }
-  }, []);
+  }, [phase]);
 
   const closeSheet = useCallback(() => {
     if (paying) {
@@ -131,14 +140,18 @@ export function MerchantCheckout() {
   }, [paying]);
 
   const sheetOpen = phase.kind === 'paying';
-  const canPay = Boolean(cardState?.complete) && !paying;
+  /*
+   * The library publishes no form state, so the Pay button is the storefront's own. It stays
+   * enabled: an incomplete card is refused locally, with no network request and a typed message.
+   */
+  const canPay = !paying;
   /* The blue P is the European parking sign, not a logo. */
   const brandMark = useMemo(() => 'P', []);
 
   if (phase.kind === 'done') {
     return (
       <Confirmation
-        token={phase.token}
+        outcome={phase.outcome}
         reference={phase.reference}
         onDone={() => setPhase({kind: 'browsing'})}
       />
@@ -234,12 +247,12 @@ export function MerchantCheckout() {
                   appearance={cardAppearance}
                   layout="inline"
                   fieldOptions={{
+                    cardholderName: {placeholder: 'Name on card', errorDisplay: 'inline'},
                     cardNumber: {placeholder: 'Card number', brandIconMode: 'standard', errorDisplay: 'inline'},
                     expiry: {placeholder: 'MM/YY', errorDisplay: 'inline'},
                     cvc: {placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline'},
                   }}
                   fieldArrangement={SPLIT_CARD_FIELDS ? 'separate' : 'fused'}
-                  onStateChange={setCardState}
                 />
               ) : null}
 
@@ -292,11 +305,11 @@ function SummaryLine({
 }
 
 function Confirmation({
-  token,
+  outcome,
   reference,
   onDone,
 }: {
-  token: string;
+  outcome: 'succeeded' | 'processing';
   reference: string;
   onDone: () => void;
 }) {
@@ -306,13 +319,19 @@ function Confirmation({
         <View style={styles.successBadge}>
           <Text style={styles.successTick}>✓</Text>
         </View>
-        <Text style={styles.successTitle}>Session paid</Text>
+        <Text style={styles.successTitle}>
+          {outcome === 'succeeded' ? 'Session paid' : 'Payment processing'}
+        </Text>
         <Text style={styles.successSub}>
           {STORE} · {reference}
         </Text>
 
         <View style={styles.panel}>
-          <SummaryLine label="Paid" value={money(total)} emphasis />
+          <SummaryLine
+            label={outcome === 'succeeded' ? 'Paid' : 'Pending'}
+            value={money(total)}
+            emphasis
+          />
           <View style={styles.totalDivider} />
           <SummaryLine label="Card saved" value="for future exits" />
           <View style={styles.totalDivider} />
@@ -320,15 +339,9 @@ function Confirmation({
         </View>
 
         {/*
-          Demo affordance: a real storefront would send this to its own backend and never render it.
-          It is here so the token can be read off the device and checked against the dashboard.
+          There is nothing sensitive to display here, by construction. The library performs the
+          final payment confirmation itself, so no payment-method token crosses into the app.
         */}
-        <View style={styles.tokenBox}>
-          <Text style={styles.tokenLabel}>payment_method token — demo only</Text>
-          <Text selectable style={styles.tokenValue}>
-            {token}
-          </Text>
-        </View>
 
         <Pressable accessibilityRole="button" onPress={onDone} style={styles.cta}>
           <Text style={styles.ctaLabel}>Done</Text>
@@ -454,15 +467,4 @@ const styles = StyleSheet.create({
   successTick: {fontSize: 34, color: '#16A34A', fontWeight: '700'},
   successTitle: {fontSize: 24, fontWeight: '700', color: '#0B1220', textAlign: 'center'},
   successSub: {fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: -8},
-
-  tokenBox: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#CBD5E1',
-    gap: 6,
-  },
-  tokenLabel: {color: '#64748B', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5},
-  tokenValue: {color: '#0F172A', fontSize: 13, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace'},
 });

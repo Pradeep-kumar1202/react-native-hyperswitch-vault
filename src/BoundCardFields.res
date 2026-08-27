@@ -64,6 +64,42 @@ module Number = {
   }
 }
 
+module CardholderName = {
+  @react.component
+  let make = (
+    ~ctx: VaultWidgetContext.contextValue,
+    ~renderError: option<string => React.element>=?,
+    ~borderBottomWidth: option<float>=?,
+    ~borderBottomLeftRadius: option<float>=?,
+    ~borderBottomRightRadius: option<float>=?,
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
+    ~options: option<CardFieldOptions.cardholderNameOptions>=?,
+  ) => {
+    let resolved = CardFieldOptions.resolveCardholderName(options)
+    /*
+     * Deliberately NOT registered with the presence gate. The cardholder name is optional, so a
+     * custom layout that omits it must still be able to submit; registering it would make the gate
+     * demand a field the contract says is optional.
+     */
+    let controller = ctx.controller
+    <CardFields.CardholderName
+      ?styles
+      value=controller.values.cardholderName
+      onChange=controller.onCardholderNameChange
+      onFocus={() => controller.onFocus(#cardholderName)}
+      onBlur={() => controller.onBlur(#cardholderName)}
+      renderError=?renderError
+      options=resolved
+      common={ctx->VaultWidgetContext.commonFor}
+      onAnalytics=ctx.onAnalytics
+      reference=controller.cardholderRef
+      ?borderBottomWidth
+      ?borderBottomLeftRadius
+      ?borderBottomRightRadius
+    />
+  }
+}
+
 module Expiry = {
   @react.component
   let make = (

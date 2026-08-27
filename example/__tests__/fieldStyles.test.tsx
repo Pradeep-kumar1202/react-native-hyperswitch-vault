@@ -623,9 +623,9 @@ describe('styles do not leak between providers', () => {
       );
     });
 
-    let result: Awaited<ReturnType<VaultFormHandle['submit']>> | undefined;
+    let result: Awaited<ReturnType<VaultFormHandle['tokenize']>> | undefined;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.tokenize();
     });
 
     expect(result?.status).toBe('not_ready');

@@ -8,31 +8,44 @@ type widgetHandle = {
 @genType
 let make = React.forwardRef((
   props: {
-    "session": VaultFormOptions.vaultSession,
+    /*
+     * OPTIONAL. It backs `tokenize()` only. A form mounted without one still confirms payments —
+     * `confirmPayment` reads its session from `cardSource`, and the direct source needs none.
+     */
+    "session": option<VaultFormOptions.vaultSession>,
     "environment": VaultFormOptions.vaultEnvironment,
     "appearance": option<VaultFormOptions.appearance>,
     "localisation": option<VaultFormOptions.localisation>,
     "disabled": option<bool>,
     "accessible": option<bool>,
-    "onStateChange": option<VaultFormOptions.cardFormState => unit>,
-    "onFormStateChange": option<VaultPublicState.vaultFormState => unit>,
+    "enabledCardSchemes": option<array<string>>,
+    "eligibility": option<VaultFormOptions.eligibilityConfig>,
+    /*
+     * A custom layout renders `<CardholderNameField />` itself, so this does not decide what is on
+     * screen here — it decides whose value the confirmation uses. `#collect` (the default) reads
+     * the field the merchant placed; `#"external"` takes the value from the confirm input and the
+     * merchant should place no field; `#omit` sends none.
+     */
+    "cardholderName": option<CardFieldOptions.cardholderNameMode>,
     "children": React.element,
   },
   ref,
 ) => {
   let host = VaultFormHost.useHost(
-    ~session=props["session"]->VaultFormOptions.sessionToJson,
+    ~session=props["session"]->Option.map(VaultFormOptions.sessionToJson),
     ~environment=props["environment"],
     ~appearance=props["appearance"],
     ~localisation=props["localisation"],
     ~disabled=props["disabled"]->Option.getOr(false),
     ~accessible=props["accessible"],
-    ~onStateChange=props["onStateChange"],
-    ~onFormStateChange=props["onFormStateChange"],
+    ~enabledCardSchemes=props["enabledCardSchemes"]->Option.getOr([]),
+    ~eligibility=props["eligibility"],
+    ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
   )
 
   React.useImperativeHandle0(ref, () => {
-    VaultFormOptions.submit: host.machinery.submit,
+    VaultFormOptions.tokenize: host.machinery.tokenize,
+    confirmPayment: host.machinery.confirmPayment,
     reset: host.machinery.reset,
     focus: host.focusField,
   })

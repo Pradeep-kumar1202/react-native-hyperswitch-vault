@@ -8,8 +8,8 @@
  *
  * The merchant is a stand-in and the styling is a placeholder — not anyone's real brand.
  *
- * Nothing sensitive is shown or logged: the state strip carries booleans and the detected scheme,
- * the session appears only as a counter. The token is rendered for demo reading only.
+ * Nothing sensitive is shown or logged: the session appears only as a counter, and `submit()`
+ * returns a navigation decision rather than a credential, so there is nothing here to render.
  */
 import React, {useCallback, useRef, useState} from 'react';
 import {
@@ -26,17 +26,17 @@ import {
 } from 'react-native';
 import {
   HyperswitchVaultFormProvider,
+  CardholderNameWidget,
   CardNumberWidget,
   CardExpiryWidget,
   CardCVCWidget,
-  type CardFormState,
   type HyperswitchVaultFormHandle,
   type MerchantSession,
   type VaultFormAppearance,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
   type WidgetHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {fetchMerchantSession} from './merchantServer';
+import {fetchMerchantSession, vaultPaymentFrom} from './merchantServer';
 
 const MERCHANT = 'Arrive Group';
 const BRAND = '#0B5FBF';
@@ -62,7 +62,7 @@ type Phase =
   | {kind: 'idle'}
   | {kind: 'starting'}
   | {kind: 'collecting'; session: MerchantSession}
-  | {kind: 'done'; token: string};
+  | {kind: 'done'; outcome: 'succeeded' | 'processing'};
 
 export function CustomLayoutCheckout() {
   const formRef = useRef<HyperswitchVaultFormHandle>(null);
@@ -70,7 +70,6 @@ export function CustomLayoutCheckout() {
 
   const [phase, setPhase] = useState<Phase>({kind: 'idle'});
   const [sessionSerial, setSessionSerial] = useState(0);
-  const [cardState, setCardState] = useState<CardFormState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
   /* The merchant's own field. The SDK neither sees nor sends it. */
@@ -78,7 +77,6 @@ export function CustomLayoutCheckout() {
 
   const start = useCallback(async () => {
     setError(null);
-    setCardState(null);
     setPhase({kind: 'starting'});
     try {
       const session = await fetchMerchantSession();
@@ -91,34 +89,46 @@ export function CustomLayoutCheckout() {
   }, []);
 
   const pay = useCallback(async () => {
+    if (phase.kind !== 'collecting') {
+      return;
+    }
     setPaying(true);
     setError(null);
-    const result: VaultSubmitResult | undefined = await formRef.current?.submit();
+    const result: VaultPaymentResult | undefined = await formRef.current?.confirmPayment(
+      vaultPaymentFrom(phase.session),
+    );
     setPaying(false);
     if (!result) {
       return;
     }
-    if (result.status === 'success') {
-      setPhase({kind: 'done', token: result.token});
+    /* The result is discriminated on `status`: only the failure statuses carry an `error`. */
+    if (result.status === 'succeeded' || result.status === 'processing') {
+      setPhase({kind: 'done', outcome: result.status});
+    } else if (result.status === 'requires_customer_action') {
+      /* A real app drives the action — redirect, 3DS challenge — and then asks its own backend. */
+      setError('This card needs an extra step to finish. Not implemented in this demo.');
     } else {
       setError(result.error.message);
     }
-  }, []);
+  }, [phase]);
 
   if (phase.kind === 'done') {
     return (
       <Success
-        token={phase.token}
+        outcome={phase.outcome}
         onDone={() => {
           setPlate('');
-          setCardState(null);
           setPhase({kind: 'idle'});
         }}
       />
     );
   }
 
-  const canPay = Boolean(cardState?.complete) && !paying;
+  /*
+   * The library publishes no form state, so this is the merchant's own gate. It stays enabled while
+   * idle: an incomplete card is answered with `validation_error` and makes no network request.
+   */
+  const canPay = !paying;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -156,32 +166,21 @@ export function CustomLayoutCheckout() {
               ref={formRef}
               session={phase.session}
               environment="sandbox"
-              appearance={cardAppearance}
-              onStateChange={setCardState}>
+              appearance={cardAppearance}>
 
-
-              {/* The exact reported integration: a placeholder and nothing else. */}
+              {/*
+                * The exact reported integration: a placeholder and nothing else. The cardholder
+                * name is OPTIONAL in a custom layout — a provider with only number, expiry and CVC
+                * submits perfectly well — and is shown here because this checkout wants it.
+                */}
+              <CardholderNameWidget placeholder="Name on card" />
               <CardNumberWidget placeholder="Card Number" />
               <CardExpiryWidget placeholder="Expiry" />
               <CardCVCWidget placeholder="CVC" />
 
-
-
-             
-
-              <View style={styles.stateStrip}>
-                <Pill label="number" ok={cardState?.cardNumberValid} />
-                <Pill label="expiry" ok={cardState?.expiryValid} />
-                <Pill label="cvc" ok={cardState?.cvcValid} />
-                <View style={styles.flex} />
-                <Text style={styles.stateBrand}>
-                  {!cardState || cardState.brand === 'unknown' ? '—' : cardState.brand}
-                </Text>
-              </View>
-
               <View style={styles.controls}>
                 <Chip label="Focus number" onPress={() => numberRef.current?.focus()} />
-                <Chip label="Focus expiry" onPress={() => formRef.current?.focus('expiry')} />
+                <Chip label="Focus name" onPress={() => formRef.current?.focus('cardholderName')} />
                 <Chip label="Reset" onPress={() => formRef.current?.reset()} />
               </View>
 
@@ -232,14 +231,6 @@ function Section({
   );
 }
 
-function Pill({label, ok}: {label: string; ok?: boolean}) {
-  return (
-    <View style={[styles.pill, ok && styles.pillOn]}>
-      <Text style={[styles.pillText, ok && styles.pillTextOn]}>{label}</Text>
-    </View>
-  );
-}
-
 function Chip({label, onPress}: {label: string; onPress: () => void}) {
   return (
     <Pressable
@@ -251,7 +242,13 @@ function Chip({label, onPress}: {label: string; onPress: () => void}) {
   );
 }
 
-function Success({token, onDone}: {token: string; onDone: () => void}) {
+function Success({
+  outcome,
+  onDone,
+}: {
+  outcome: 'succeeded' | 'processing';
+  onDone: () => void;
+}) {
   return (
     <SafeAreaView style={styles.screen}>
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -259,14 +256,16 @@ function Success({token, onDone}: {token: string; onDone: () => void}) {
           <Text style={styles.successTick}>✓</Text>
         </View>
         <Text style={styles.successTitle}>Auto-pay is on</Text>
-        <Text style={styles.successSub}>Drive out without stopping</Text>
+        <Text style={styles.successSub}>
+          {outcome === 'succeeded'
+            ? 'Drive out without stopping'
+            : 'Payment is processing — your backend will hear the outcome'}
+        </Text>
 
-        <View style={styles.tokenBox}>
-          <Text style={styles.tokenLabel}>payment_method token — demo only</Text>
-          <Text selectable style={styles.tokenValue}>
-            {token}
-          </Text>
-        </View>
+        {/*
+          * There is deliberately nothing to display here. The library performs the final payment
+          * confirmation itself, so no payment-method token ever crosses into the app.
+          */}
 
         <Pressable accessibilityRole="button" onPress={onDone} style={styles.cta}>
           <Text style={styles.ctaLabel}>Run it again</Text>
@@ -321,18 +320,6 @@ const styles = StyleSheet.create({
     color: '#0B1220',
   },
 
-  stateStrip: {flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 2},
-  pill: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 999,
-    backgroundColor: '#E9EDF2',
-  },
-  pillOn: {backgroundColor: '#CCFBF1'},
-  pillText: {fontSize: 11.5, fontWeight: '600', color: '#94A3B8'},
-  pillTextOn: {color: BRAND},
-  stateBrand: {fontSize: 12, fontWeight: '700', color: '#0B1220'},
-
   controls: {flexDirection: 'row', gap: 8},
   chip: {
     flex: 1,
@@ -373,18 +360,4 @@ const styles = StyleSheet.create({
   successTick: {fontSize: 32, color: BRAND, fontWeight: '700'},
   successTitle: {fontSize: 22, fontWeight: '700', color: '#0B1220', textAlign: 'center'},
   successSub: {fontSize: 14, color: '#64748B', textAlign: 'center', marginTop: -6},
-  tokenBox: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#F1F5F9',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#CBD5E1',
-    gap: 6,
-  },
-  tokenLabel: {color: '#64748B', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5},
-  tokenValue: {
-    color: '#0F172A',
-    fontSize: 13,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
 });

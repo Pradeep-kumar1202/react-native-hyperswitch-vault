@@ -14,6 +14,7 @@ import {
   CardExpiryField,
   CardCVCField,
   type MerchantSession,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {BareMinimumFields} from '../src/BareMinimumFields';
 
@@ -33,6 +34,8 @@ const b64 = (i: string) => {
 
 const session = {
   session_token: [],
+  payment_id: 'pay_bare_minimum',
+  sdk_authorization: 'intent_auth_bare_minimum',
   vault_details: {
     vault_type: 'hyperswitch',
     vault_data: {
@@ -46,6 +49,17 @@ const session = {
 /* Private test data. Never rendered into an assertion message. */
 const CARD = {number: '4242424242424242', expiry: '12/30', cvc: '123'};
 const TOKEN = 'tok_bare_minimum';
+
+/*
+ * Call 1 mints the token; call 2 is the payment confirm the library now performs itself. The token
+ * exists only between them, inside the library — it is not in call 2's result and not in `onResult`.
+ */
+const MINTED = {
+  associated_payment_methods: [{payment_method_token: {data: TOKEN}}],
+  payment_method_data: {
+    card: {last4_digits: '4242', card_isin: '424242', expiry_month: '12', expiry_year: '2030'},
+  },
+};
 
 let calls: {settle: (body: unknown, status?: number) => void}[] = [];
 
@@ -67,12 +81,10 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-const mount = (onTokenized: (token: string) => void = () => {}) => {
+const mount = (onResult: (result: VaultPaymentResult) => void = () => {}) => {
   let r!: Renderer;
   ReactTestRenderer.act(() => {
-    r = ReactTestRenderer.create(
-      <BareMinimumFields session={session} onTokenized={onTokenized} />,
-    );
+    r = ReactTestRenderer.create(<BareMinimumFields session={session} onResult={onResult} />);
   });
   return r;
 };
@@ -93,7 +105,10 @@ it('renders the three independent fields and nothing optional', () => {
   expect(r.root.findAllByType(CardExpiryField)).toHaveLength(1);
   expect(r.root.findAllByType(CardCVCField)).toHaveLength(1);
 
-  /* three empty inputs, and no field carries an optional presentation prop */
+  /*
+   * Three empty inputs: the cardholder name is OPTIONAL in a custom layout, and this screen does
+   * not mount it. No field carries an optional presentation prop either.
+   */
   expect(inputs(r)).toHaveLength(3);
   for (const i of inputs(r)) expect(i.props.value).toBe('');
   for (const type of [CardNumberField, CardExpiryField, CardCVCField]) {
@@ -103,34 +118,52 @@ it('renders the three independent fields and nothing optional', () => {
   ReactTestRenderer.act(() => r.unmount());
 });
 
-it('the Tokenize button follows canSubmit', () => {
-  const r = mount();
-  expect(button(r).props.disabled).toBe(true);
-  fill(r);
+it('the Pay button is the merchant\'s own state, and an empty form is refused locally', async () => {
+  const seen: VaultPaymentResult[] = [];
+  const r = mount((result) => seen.push(result));
+
+  /* The library publishes no form state, so nothing gates the button but this screen. */
   expect(button(r).props.disabled).toBe(false);
+
+  await ReactTestRenderer.act(async () => {
+    await button(r).props.onPress();
+  });
+
+  /* Refused without a network request at all — no card data can leave on an incomplete form. */
+  expect(calls).toHaveLength(0);
+  expect(seen).toHaveLength(1);
+  expect(seen[0].status).toBe('validation_error');
+
   ReactTestRenderer.act(() => r.unmount());
 });
 
-it('tokenizes successfully and hands back only the token', async () => {
-  const tokens: unknown[] = [];
-  const r = mount((token) => tokens.push(token));
+it('pays successfully, and the result carries no token and no card data', async () => {
+  const seen: VaultPaymentResult[] = [];
+  const r = mount((result) => seen.push(result));
   fill(r);
 
+  let pressed!: Promise<void>;
   await ReactTestRenderer.act(async () => {
-    const pressed = button(r).props.onPress();
-    calls[0].settle({
-      associated_payment_methods: [{payment_method_token: {data: TOKEN}}],
-    });
+    pressed = button(r).props.onPress();
+  });
+  /* Call 1 — the token mint. */
+  expect(calls).toHaveLength(1);
+  await ReactTestRenderer.act(async () => {
+    calls[0].settle(MINTED);
+  });
+  /* Call 2 — the payment confirm the library owns. */
+  expect(calls).toHaveLength(2);
+  await ReactTestRenderer.act(async () => {
+    calls[1].settle({status: 'succeeded'});
     await pressed;
   });
 
-  /* exactly one tokenization request, and the callback received exactly the token */
-  expect(calls).toHaveLength(1);
-  expect(tokens).toEqual([TOKEN]);
-  expect(typeof tokens[0]).toBe('string');
+  /* Exactly the two calls, and success means the PAYMENT succeeded — not that a token was minted. */
+  expect(calls).toHaveLength(2);
+  expect(seen).toEqual([{status: 'succeeded'}]);
 
   /*
-   * The public result is token-only: nothing else reached the merchant.
+   * The public result is a navigation decision: nothing else reached the merchant.
    *
    * The walk covers the callback arguments and the rendered tree MINUS each card field's own
    * `TextInput.value`. That value is what the library draws inside the field it owns, so counting
@@ -145,10 +178,12 @@ it('tokenizes successfully and hands back only the token', async () => {
     if (n.type === 'TextInput') delete props.value;
     return {type: n.type, props, children: strip(n.children)};
   };
-  const observable = JSON.stringify({tokens, rendered: strip(r.toJSON())});
+  const observable = JSON.stringify({seen, rendered: strip(r.toJSON())});
   const SECRETS = [
     CARD.number, '4242 4242 4242 4242', CARD.number.slice(0, 6), CARD.number.slice(-4),
     CARD.expiry, CARD.cvc, 'pk_snd_EXAMPLE_FAKE', 'pms_bare', 'sdk_authorization',
+    /* the minted token existed inside the library, and must not have escaped it */
+    TOKEN, 'tok_',
   ];
   SECRETS.forEach((secret, index) => {
     /* boolean only — the value itself never reaches a failure message */
@@ -160,17 +195,27 @@ it('tokenizes successfully and hands back only the token', async () => {
   ReactTestRenderer.act(() => r.unmount());
 });
 
-it('a refused submit calls nothing back', async () => {
-  const tokens: unknown[] = [];
-  const r = mount((token) => tokens.push(token));
+it('a refused token mint never reports success and makes no second call', async () => {
+  const seen: VaultPaymentResult[] = [];
+  const r = mount((result) => seen.push(result));
   fill(r);
 
+  let pressed!: Promise<void>;
   await ReactTestRenderer.act(async () => {
-    const pressed = button(r).props.onPress();
+    pressed = button(r).props.onPress();
+  });
+  await ReactTestRenderer.act(async () => {
     calls[0].settle({error: {type: 'invalid_request', message: 'nope'}}, 400);
     await pressed;
   });
 
-  expect(tokens).toEqual([]);
+  /* Call 1 failed, so the payment confirm is never attempted. */
+  expect(calls).toHaveLength(1);
+  expect(seen).toHaveLength(1);
+  expect(seen[0].status).not.toBe('succeeded');
+  expect(seen[0].status).toBe('failed');
+  /* and the backend's own prose never reaches the merchant */
+  expect(JSON.stringify(seen)).not.toContain('nope');
+
   ReactTestRenderer.act(() => r.unmount());
 });

@@ -36,6 +36,8 @@ export type cardNumberOptions = {
 
 export type expiryOptions = fieldOptions;
 
+export type cardholderNameOptions = fieldOptions;
+
 export type cvcOptions = {
   readonly placeholder?: string; 
   readonly label?: string; 
@@ -50,8 +52,11 @@ export type cvcOptions = {
 export type formFieldOptions = {
   readonly cardNumber?: cardNumberOptions; 
   readonly expiry?: expiryOptions; 
-  readonly cvc?: cvcOptions
+  readonly cvc?: cvcOptions; 
+  readonly cardholderName?: cardholderNameOptions
 };
+
+export type cardholderNameMode = "collect" | "external" | "omit";
 
 export type formLayout = "stacked" | "inline";
 

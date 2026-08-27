@@ -28,6 +28,8 @@ type cardLabels = {
   cvcPlaceholder: string,
   cvcFloatingLabel: string,
   notEligibleText: string,
+  /* Heading of the co-badge network chooser. */
+  selectCardBrandLabel: string,
   isRtl: bool,
 }
 
@@ -35,6 +37,7 @@ type cardFieldId =
   | CardNumberField
   | ExpiryField
   | CvcField
+  | CardholderNameField
 
 type analyticsEvent =
   | FieldFocused(cardFieldId)
@@ -44,7 +47,13 @@ type cardFieldValues = {
   cardNumber: string,
   expiryDisplay: string,
   cvc: string,
+  cardholderName: string,
+  /* The network in force — the customer's co-badge pick if any, the detected brand otherwise. */
   brand: string,
+  /* The schemes this number matches, filtered to those the merchant accepts. */
+  eligibleSchemes: array<string>,
+  /* Whether to offer the customer a choice between them. */
+  isCoBadged: bool,
 }
 
 type cardFieldErrors = {
@@ -52,6 +61,7 @@ type cardFieldErrors = {
   expiry?: string,
   cvc?: string,
   network?: string,
+  eligibility?: string,
 }
 
 type cardFieldOk = {

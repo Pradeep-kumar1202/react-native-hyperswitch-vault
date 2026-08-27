@@ -1,0 +1,35 @@
+/* TypeScript file generated from VaultConfirmBody.res by genType. */
+
+/* eslint-disable */
+/* tslint:disable */
+
+export type paymentMethodType = "credit" | "debit";
+
+export type paymentType = "new_mandate" | "setup_mandate";
+
+export type acceptanceType = "online" | "offline";
+
+export type confirmTokenMode = "payment_token" | "vault_card";
+
+export type hostBrowserInfo = {
+  readonly userAgent?: string; 
+  readonly acceptHeader?: string; 
+  readonly language?: string; 
+  readonly colorDepth?: number; 
+  readonly screenHeight?: number; 
+  readonly screenWidth?: number; 
+  readonly timeZone?: number; 
+  readonly javaEnabled?: boolean; 
+  readonly javaScriptEnabled?: boolean; 
+  readonly deviceModel?: string; 
+  readonly osType?: string; 
+  readonly osVersion?: string
+};
+
+export type hostOnlineAcceptance = { readonly userAgent?: string };
+
+export type hostCustomerAcceptance = {
+  readonly acceptanceType: acceptanceType; 
+  readonly acceptedAt: string; 
+  readonly online: hostOnlineAcceptance
+};

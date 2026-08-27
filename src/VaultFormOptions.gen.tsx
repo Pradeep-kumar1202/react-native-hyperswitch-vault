@@ -7,13 +7,17 @@ import type {MerchantSession as $$vaultSession} from './merchantTypes';
 
 import type {brandIconMode as CardIcons_brandIconMode} from './CardIcons.gen';
 
-import type {cardBrand as VaultPublicState_cardBrand} from './VaultPublicState.gen';
+import type {paymentConfirmInput as VaultFormCoordinator_paymentConfirmInput} from './VaultFormCoordinator.gen';
 
 import type {safeVaultErrorCode as VaultResult_safeVaultErrorCode} from './VaultResult.gen';
 
 import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.gen';
 
-import type {vaultSubmitResult as VaultResult_vaultSubmitResult} from './VaultResult.gen';
+import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './VaultEndpoint.gen';
+
+import type {vaultPaymentResult as VaultResult_vaultPaymentResult} from './VaultResult.gen';
+
+import type {vaultTokenizeResult as VaultResult_vaultTokenizeResult} from './VaultResult.gen';
 
 export type vaultEnvironment = "production" | "sandbox" | "integration";
 
@@ -46,7 +50,8 @@ export type localisationLabels = {
   readonly expiryPlaceholder?: string; 
   readonly expiryFloatingLabel?: string; 
   readonly cvcPlaceholder?: string; 
-  readonly cvcFloatingLabel?: string
+  readonly cvcFloatingLabel?: string; 
+  readonly selectCardBrandLabel?: string
 };
 
 export type localisationMessages = {
@@ -55,7 +60,9 @@ export type localisationMessages = {
   readonly expiryRequired?: string; 
   readonly expiryInvalid?: string; 
   readonly cvcRequired?: string; 
-  readonly cvcInvalid?: string
+  readonly cvcInvalid?: string; 
+  readonly unsupportedCard?: string; 
+  readonly cardNotEligible?: string
 };
 
 export type localisation = {
@@ -64,25 +71,32 @@ export type localisation = {
   readonly isRtl?: boolean
 };
 
-export type cardFormState = {
-  readonly complete: boolean; 
-  readonly cardNumberValid: boolean; 
-  readonly expiryValid: boolean; 
-  readonly cvcValid: boolean; 
-  readonly brand: VaultPublicState_cardBrand
-};
-
 export type safeVaultErrorCode = VaultResult_safeVaultErrorCode;
 
 export type safeVaultError = VaultResult_safeVaultError;
 
-export type vaultSubmitResult = VaultResult_vaultSubmitResult;
+export type vaultPaymentResult = VaultResult_vaultPaymentResult;
+
+export type vaultTokenizeResult = VaultResult_vaultTokenizeResult;
+
+export type paymentConfirmInput = VaultFormCoordinator_paymentConfirmInput;
+
+export type vaultField = 
+    "cardNumber"
+  | "expiry"
+  | "cvc"
+  | "cardholderName";
+
+export type eligibilityConfig = {
+  readonly paymentId: string; 
+  readonly sdkAuthorization: string; 
+  readonly appId?: string; 
+  readonly endpoint?: VaultEndpoint_vaultEndpointConfig
+};
 
 export type vaultFormHandle = {
-  readonly submit: () => Promise<vaultSubmitResult>; 
+  readonly tokenize: () => Promise<vaultTokenizeResult>; 
+  readonly confirmPayment: (_1:paymentConfirmInput) => Promise<vaultPaymentResult>; 
   readonly reset: () => void; 
-  readonly focus: (_1:
-    "cvc"
-  | "cardNumber"
-  | "expiry") => void
+  readonly focus: (_1:vaultField) => void
 };

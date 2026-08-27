@@ -34,6 +34,23 @@ type confirmRequest = {
   environment: vaultEnvironment,
   card: cardDetails,
 
+  /* Library-owned field value. Omitted from the request entirely when blank. */
+  cardholderName?: string,
+
+  /*
+   * The customer's co-badge choice, already filtered to a value the backend's `CardNetwork` enum
+   * accepts. Omitted when the card carries one network, or when the detected scheme has no enum
+   * member — see `VaultConfirmBody.cardNetworkToWire`.
+   */
+  cardNetwork?: string,
+
+  /*
+   * Names the SAVED card, so it belongs to this call only. `VaultPaymentMethodData.nickNameOf` is
+   * the sole reader of the host's `nickName`, and the final-confirm encoder has no branch that can
+   * emit it — one merchant string, one request.
+   */
+  nickName?: string,
+
   timeoutMs?: int,
 
   signal?: abortSignal,
@@ -229,7 +246,28 @@ let vaultBaseUrl = (environment: vaultEnvironment) =>
 let confirmUrl = (~environment, ~sessionId) =>
   `${environment->vaultBaseUrl}/v1/payment-method-sessions/${sessionId}/confirm`
 
-let buildConfirmBody = (card: cardDetails) => {
+let optionalEntry = (key, value: option<string>) =>
+  switch value {
+  | Some(text) if text->String.trim->String.length > 0 =>
+    [(key, text->String.trim->JSON.Encode.string)]
+  | _ => []
+  }
+
+let buildConfirmBody = (
+  card: cardDetails,
+  ~cardholderName: option<string>=?,
+  ~nickName: option<string>=?,
+  /*
+   * The customer's co-badge choice. The payment-method-session confirm accepts `card_network` on
+   * the same card object the final confirm does — verified against
+   * `PaymentMethodSessionConfirmRequest.payment_method_data` — so a network the customer picked
+   * reaches the vault too, and the saved card records the network they chose.
+   *
+   * It arrives already filtered to values the backend enum accepts; see
+   * `VaultConfirmBody.cardNetworkToWire`.
+   */
+  ~cardNetwork: option<string>=?,
+) => {
   let cardObject =
     [
       ("card_number", card.cardNumber->Validation.clearSpaces->JSON.Encode.string),
@@ -237,6 +275,9 @@ let buildConfirmBody = (card: cardDetails) => {
       ("card_exp_year", card.expiryYear->requestExpiryYear->JSON.Encode.string),
       ("card_cvc", card.cvc->JSON.Encode.string),
     ]
+    ->Array.concat(optionalEntry("card_holder_name", cardholderName))
+    ->Array.concat(optionalEntry("card_network", cardNetwork))
+    ->Array.concat(optionalEntry("nick_name", nickName))
     ->Dict.fromArray
     ->JSON.Encode.object
 
@@ -393,7 +434,13 @@ let confirmPaymentMethodSession = async (request: confirmRequest): confirmOutcom
           ("Content-Type", "application/json"),
           ("Authorization", request.sdkAuthorization),
         ]->Dict.fromArray,
-        body: request.card->buildConfirmBody->JSON.stringify,
+        body: request.card
+        ->buildConfirmBody(
+          ~cardholderName=?request.cardholderName,
+          ~nickName=?request.nickName,
+          ~cardNetwork=?request.cardNetwork,
+        )
+        ->JSON.stringify,
         signal: ?Some(controller->controllerSignal),
       }
 

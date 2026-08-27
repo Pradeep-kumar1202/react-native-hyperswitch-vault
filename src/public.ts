@@ -13,7 +13,7 @@
 
 import './jsx-global';
 import type * as React from 'react';
-import { make as RawHyperswitchVaultForm, type Props, type vaultFormHandle } from './HyperswitchVaultForm.gen';
+import { make as RawHyperswitchVaultForm, type Props } from './HyperswitchVaultForm.gen';
 import {
   make as RawHyperswitchVaultFormProvider,
   type Props as ProviderProps,
@@ -34,29 +34,134 @@ import type {
   cardNumberOptions,
   expiryOptions,
   cvcOptions,
+  cardholderNameOptions,
   formFieldOptions,
   formLayout,
   fieldArrangement,
 } from './CardFieldOptions.gen';
 import { make as RawCardExpiryWidget } from './CardExpiryWidget.gen';
 import { make as RawCardCVCWidget } from './CardCVCWidget.gen';
-import type {
-  cardBrand,
-  vaultFieldStatus,
-  vaultFieldErrorCode,
-  vaultFieldError,
-  cardNumberState,
-  expiryState,
-  cvcState,
-  vaultSessionStatus,
-  vaultFormFields,
-  vaultFormState,
-} from './VaultPublicState.gen';
+import { make as RawCardholderNameWidget } from './CardholderNameWidget.gen';
+import type { paymentConfirmInput as VaultPaymentConfirmInputInternal } from './VaultFormCoordinator.gen';
+import type { safeVaultError as SafeVaultErrorInternal } from './VaultResult.gen';
+import type { safeNextAction as SafeNextActionInternal } from './VaultNavigation.gen';
+import type { confirmTokenMode as VaultConfirmTokenModeInternal } from './VaultConfirmBody.gen';
+import type { MerchantSession as MerchantSessionInternal } from './merchantTypes';
 
 /* ── Component types ──────────────────────────────────────────────────────── */
 
+/*
+* The handle is re-declared rather than re-exported so the two operations resolve to the narrowed
+ * unions below instead of the wider generated records. The runtime object is unchanged — this only
+ * sharpens what the compiler knows about it.
+ */
+export type VaultField = 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName';
+
+/*
+ * ── TWO OPERATIONS, NOT ONE ──────────────────────────────────────────────────
+ *
+ * Which function you call decides what can come back. `tokenize()` is the only route to a token;
+ * `confirmPayment()` is the only route that charges anything, and its result has no `token` member
+ * at all. A single `submit()` returning one union could not express that: the caller would have had
+ * to reason about which arguments they passed to know whether a payment credential was in hand.
+ */
+export type VaultFormHandleShape = {
+  /** Flow 1 — mint a payment-method token and stop. Takes no input; charges nothing. */
+  tokenize(): Promise<VaultTokenizeResult>;
+  /**
+   * Flows 2 and 3 — confirm the payment. `cardSource` chooses which: `'vault'` tokenizes first and
+   * keeps the token internal, `'direct'` confirms with the library's own card values and mints
+   * nothing. Neither returns a token.
+   */
+  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
+  reset(): void;
+  focus(field: VaultField): void;
+};
+
+/*
+ * ── WHICH CARD CREDENTIAL THE CONFIRM USES ───────────────────────────────────
+ *
+ * A closed union, so the two flows cannot be blurred: there is no way to ask for the vault flow
+ * without a session, and no way to attach vault settings to a direct confirm. Both would otherwise
+ * be silent — the first would fall back to something, the second would be ignored — and both change
+ * the customer's PCI posture, which is not a thing to get wrong quietly.
+ *
+ * The runtime value is the generated `paymentCardSource` record (see the note in
+ * `VaultCardSource.res` for why it is a record and not a ReScript `@tag` variant);
+ * `scripts/verify-card-source.mjs` asserts that this declaration and that record describe the same
+ * runtime shapes.
+ */
+export type VaultPaymentCardSource =
+  | {
+      readonly type_: 'vault';
+      readonly session: MerchantSessionInternal;
+      readonly confirmTokenMode?: VaultConfirmTokenModeInternal;
+    }
+  | { readonly type_: 'direct' };
+
+/**
+ * The confirm input, with `cardSource` narrowed to the union above. Every other member is the
+ * generated one, so this cannot drift from what the library actually reads.
+ */
+export type VaultPaymentConfirmInput = Omit<VaultPaymentConfirmInputInternal, 'cardSource'> & {
+  readonly cardSource: VaultPaymentCardSource;
+};
+
+/*
+ * ── WHO OWNS THE CARDHOLDER NAME ─────────────────────────────────────────────
+ *
+ *   'collect'    the library renders its own bare input and uses what was typed. The default.
+ *   'external'   the library renders NO name field; the value arrives as `cardholderName` on the
+ *                confirm input. For a host that already owns the field, with its own validation,
+ *                localisation and error timing.
+ *   'omit'       the library renders no name field and sends no name.
+ *
+ * The last two look identical on screen and differ entirely in what is sent, which is why they are
+ * distinct: "I will supply it" and "there is none" must not be spelled the same way.
+ *
+ * Supplying `cardholderName` in any mode but 'external' is a configuration error, answered with
+ * `unsupported_configuration` before any request. It is never resolved by precedence, because a
+ * host with two names has no way to know which one was sent.
+ *
+ * Omitting it in 'external' is NOT an error: it means the host's own field was optional and the
+ * customer left it blank, and `card_holder_name` is simply not sent. A host whose field is required
+ * blocks its own submission long before this point.
+ */
+export type VaultCardholderNameMode = 'collect' | 'external' | 'omit';
+
+/*
+ * The ONLY published type with a `token`. Deliberately permitted here, and nowhere else.
+ */
+export type VaultTokenizeResult =
+  | { readonly status: 'success'; readonly token: string }
+  | { readonly status: 'validation_error'; readonly error: SafeVaultErrorInternal }
+  | { readonly status: 'not_ready'; readonly error: SafeVaultErrorInternal }
+  | { readonly status: 'error'; readonly error: SafeVaultErrorInternal };
+
+/*
+ * ── The result, as a discriminated union ─────────────────────────────────────
+ *
+ * The runtime value is the generated `vaultPaymentResult` record — `{status, error?, nextAction?}`.
+ * That record is what the library actually produces (see the note in `VaultResult.res` for why it
+ * is a record and not a ReScript `@tag` variant), but publishing it verbatim would leave `error`
+ * optional on every branch, so a merchant reading `result.error.message` after a `failed` status
+ * would get no help from the compiler.
+ *
+ * This declaration describes the SAME runtime objects with the narrowing a merchant wants:
+ * checking `status` proves what else is there. It is hand-written, so it could in principle drift
+ * from what the library emits — `scripts/verify-result-mapping.mjs` asserts the exact member set
+ * produced for every status and fails if it ever does.
+ */
+export type VaultPaymentResult =
+  | { readonly status: 'succeeded' }
+  | { readonly status: 'processing' }
+  | { readonly status: 'requires_customer_action'; readonly nextAction: SafeNextActionInternal }
+  | { readonly status: 'failed'; readonly error: SafeVaultErrorInternal }
+  | { readonly status: 'validation_error'; readonly error: SafeVaultErrorInternal }
+  | { readonly status: 'not_ready'; readonly error: SafeVaultErrorInternal };
+
 type VaultFormComponent<P> = React.ForwardRefExoticComponent<
-  P & React.RefAttributes<vaultFormHandle>
+  P & React.RefAttributes<VaultFormHandleShape>
 >;
 
 /*
@@ -94,14 +199,21 @@ type VaultFormComponent<P> = React.ForwardRefExoticComponent<
  * `cvcIcon`, and the expiry has neither — the same rule that already keeps `accessory` off the
  * expiry style type.
  */
-type VaultStyledFieldComponent<S, O, E> = React.ForwardRefExoticComponent<
-  { styles?: S; onStateChange?: (state: E) => void } & O &
-    React.RefAttributes<widgetHandle>
+/*
+ * ── No state emission (ADR-0003) ─────────────────────────────────────────────
+ *
+ * A field takes styles, options and a ref — and nothing else. There is deliberately no
+ * `onStateChange`: typing, focusing, blurring, validating and brand detection produce zero
+ * external callbacks, so no card-derived value has a route out of the library.
+ * `scripts/verify-event-surface.mjs` proves the absence against the packed declarations.
+ */
+type VaultStyledFieldComponent<S, O> = React.ForwardRefExoticComponent<
+  { styles?: S } & O & React.RefAttributes<widgetHandle>
 >;
 
 /* ── Existing published names — unchanged ─────────────────────────────────── */
 
-export type HyperswitchVaultFormHandle = vaultFormHandle;
+export type HyperswitchVaultFormHandle = VaultFormHandleShape;
 export type HyperswitchVaultFormProps = Props;
 
 export const HyperswitchVaultForm =
@@ -115,18 +227,28 @@ export const HyperswitchVaultFormProvider =
 
 export const CardNumberWidget = RawCardNumberWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
-  cardNumberOptions,
-  cardNumberState
+  cardNumberOptions
 >;
 export const CardExpiryWidget = RawCardExpiryWidget as unknown as VaultStyledFieldComponent<
   expiryStyles,
-  expiryOptions,
-  expiryState
+  expiryOptions
 >;
 export const CardCVCWidget = RawCardCVCWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
-  cvcOptions,
-  cvcState
+  cvcOptions
+>;
+
+/*
+ * The cardholder name is a LIBRARY-OWNED field like the other three: the merchant styles and
+ * labels it, and has no route to read or set what was typed.
+ *
+ * It is optional. The ready-made form always renders it, full width above the card number; a custom
+ * layout may omit it entirely and `submit()` still succeeds, because it is not part of the presence
+ * gate. When it is left blank the field is omitted from the tokenization request altogether.
+ */
+export const CardholderNameWidget = RawCardholderNameWidget as unknown as VaultStyledFieldComponent<
+  fieldStyles,
+  cardholderNameOptions
 >;
 
 /*
@@ -140,6 +262,7 @@ export const CardCVCWidget = RawCardCVCWidget as unknown as VaultStyledFieldComp
 export const CardNumberField = CardNumberWidget;
 export const CardExpiryField = CardExpiryWidget;
 export const CardCVCField = CardCVCWidget;
+export const CardholderNameField = CardholderNameWidget;
 
 /*
  * ── Handle type aliases (ADR-0002 §3) ────────────────────────────────────────
@@ -187,41 +310,11 @@ export type VaultFieldOptions = fieldOptions;
 export type VaultCardNumberOptions = cardNumberOptions;
 export type VaultExpiryOptions = expiryOptions;
 export type VaultCVCOptions = cvcOptions;
+export type VaultCardholderNameOptions = cardholderNameOptions;
 export type VaultFormFieldOptions = formFieldOptions;
 
 export type VaultFormLayout = formLayout;
 export type VaultFieldArrangement = fieldArrangement;
-
-/*
- * ── Merchant state events (ADR-0002 §4, §4a, §5) ─────────────────────────────
- *
- * All generated from VaultPublicState.res — imported, never re-declared, so the published shape
- * cannot drift from the value the library actually emits.
- *
- * `VaultFieldState` is published as the UNION of the three narrowed records rather than the ADR's
- * single record with `brand?: CardBrand // cardNumber only`. That comment becomes structural: the
- * card-number state has a REQUIRED `brand`, and the expiry and CVC states have no `brand` member at
- * all, so a merchant cannot read one where the library never produces it. Discriminating on
- * `state.field` narrows correctly, and every narrowed record is assignable to the ADR's base shape.
- *
- * None of these carries a card value. There is no `value`, `rawValue`, `formattedValue`, length,
- * BIN, `last4`, `expiryMonth`/`expiryYear`, `cvc`, authorization, session id, token, `nativeEvent`
- * or `target` anywhere in the tree. `submit()` remains the only route to a token.
- */
-export type CardBrand = cardBrand;
-export type VaultField = cardNumberState['field'] | expiryState['field'] | cvcState['field'];
-export type VaultFieldStatus = vaultFieldStatus;
-export type VaultFieldErrorCode = vaultFieldErrorCode;
-export type VaultFieldError = vaultFieldError;
-
-export type VaultCardNumberState = cardNumberState;
-export type VaultExpiryState = expiryState;
-export type VaultCVCState = cvcState;
-export type VaultFieldState = cardNumberState | expiryState | cvcState;
-
-export type VaultSessionStatus = vaultSessionStatus;
-export type VaultFormFields = vaultFormFields;
-export type VaultFormState = vaultFormState;
 
 /*
  * ── Convenience namespace (ADR-0002 §2) ──────────────────────────────────────
@@ -236,6 +329,7 @@ export declare const HyperswitchVault: {
   readonly CardNumber: typeof CardNumberField;
   readonly Expiry: typeof CardExpiryField;
   readonly CVC: typeof CardCVCField;
+  readonly CardholderName: typeof CardholderNameField;
 };
 
 /* ── Public type re-exports ───────────────────────────────────────────────── */
@@ -245,12 +339,58 @@ export type {
   localisation as VaultFormLocalisation,
   localisationLabels as VaultFormLabels,
   localisationMessages as VaultFormValidationMessages,
-  vaultSubmitResult as VaultSubmitResult,
   safeVaultError as SafeVaultError,
   safeVaultErrorCode as SafeVaultErrorCode,
-  cardFormState as CardFormState,
   appearance as VaultFormAppearance,
   vaultEnvironment as VaultEnvironment,
 } from './HyperswitchVaultForm.gen';
+
+export type { vaultPaymentStatus as VaultPaymentStatus, vaultTokenizeStatus as VaultTokenizeStatus } from './VaultResult.gen';
+
+/*
+ * ── Confirm input and result (ADR-0003, as corrected by ADR-0004) ────────────
+ *
+ * `confirmPayment(args)` runs every network call inside the library and resolves to a navigation
+ * decision. Every input type below is non-card and closed: `VaultHostPaymentMethodData` names
+ * `billing` and `nickName` and nothing else, so a card field cannot be expressed, let alone passed.
+ *
+ * `VaultPaymentConfirmInput` is declared above rather than re-exported, so that `cardSource`
+ * narrows to the discriminated union.
+ */
+export type { cardSourceType as VaultCardSourceType } from './VaultCardSource.gen';
+
+/*
+ * Live eligibility. Optional, and entirely non-card — it only tells the library WHERE to ask about
+ * the PAN it already holds, so the "card not accepted" message can appear while the customer types
+ * instead of only at confirm time.
+ */
+export type { eligibilityConfig as VaultEligibilityConfig } from './VaultFormOptions.gen';
+
+export type {
+  hostPaymentMethodData as VaultHostPaymentMethodData,
+  hostBilling as VaultHostBilling,
+  hostBillingAddress as VaultHostBillingAddress,
+  hostPhone as VaultHostPhone,
+} from './VaultPaymentMethodData.gen';
+
+export type {
+  confirmTokenMode as VaultConfirmTokenMode,
+  paymentMethodType as VaultPaymentMethodType,
+  paymentType as VaultPaymentType,
+  acceptanceType as VaultAcceptanceType,
+  hostBrowserInfo as VaultHostBrowserInfo,
+  hostCustomerAcceptance as VaultHostCustomerAcceptance,
+  hostOnlineAcceptance as VaultHostOnlineAcceptance,
+} from './VaultConfirmBody.gen';
+
+export type { vaultEndpointConfig as VaultEndpointConfig } from './VaultEndpoint.gen';
+
+export type {
+  nextActionType as VaultNextActionType,
+  safeNextAction as VaultNextAction,
+  safeThreeDs as VaultThreeDsData,
+  safeDdc as VaultDdcData,
+  safeSessionToken as VaultSessionTokenData,
+} from './VaultResult.gen';
 
 export type { MerchantSession } from './merchantTypes';

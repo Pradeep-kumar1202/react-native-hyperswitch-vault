@@ -157,14 +157,77 @@ if (!existsSync(declDir)) {
     `no controlled value/onChange declaration ships (${controlled.slice(0, 3).map((d) => `${d.file}:${d.name}`).join(', ') || 'none'})`
   );
 
+  /*
+   * ── THE CONFIRM-INPUT EXEMPTION ────────────────────────────────────────────
+   *
+   * `sdkAuthorization` and `paymentMethodData` are forbidden as things the library HANDS OUT, and
+   * that is what this list is for. They are also, necessarily, things the host HANDS IN on
+   * `confirmPayment()`: the payment-intent credential and the non-card billing data.
+   *
+   * The exemption is therefore pinned to the one declaration file that describes that input, AND to
+   * the exact narrow type each must have. Widening `paymentMethodData` to `JSON`/`any`/an index
+   * signature — the actual risk — still fails here, because the exemption checks the type, not just
+   * the name.
+   */
+  const INPUT_DECL = 'VaultFormCoordinator.gen.d.ts';
+  /*
+   * The live-eligibility config is the SECOND legitimate place a host hands the payment-intent
+   * credential in: the library cannot probe an endpoint it has no credential for. It is exempted by
+   * file AND by type, exactly like the confirm input, and it is the only other file that may name
+   * this member.
+   */
+  const ELIGIBILITY_DECL = 'VaultFormOptions.gen.d.ts';
+  const INPUT_EXEMPT = {
+    [INPUT_DECL]: {
+      sdkAuthorization: /^string$/,
+      /* tsc prefixes the imported generated type on emit. */
+      paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
+    },
+    [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/ },
+  };
+  const isExemptInput = ({ file, name, type }) =>
+    INPUT_EXEMPT[file]?.[name]?.test(type.replace(/\s+/g, ''));
+
   const rawData = declared.filter(
-    ({ name, type }) =>
-      RAW_DATA.includes(name) ||
-      ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !isFieldRecord(type))
+    (d) =>
+      !isExemptInput(d) &&
+      (RAW_DATA.includes(d.name) ||
+        ((d.name === 'cardNumber' || d.name === 'cvc' || d.name === 'expiry') && !isFieldRecord(d.type)))
   );
   check(
     rawData.length === 0,
     `no forbidden raw-data property ships (${rawData.slice(0, 3).map((d) => `${d.file}:${d.name}`).join(', ') || 'none'})`
+  );
+
+  /* The exemption must not be vacuous: those two inputs really are declared, with those types. */
+  const inputDecl = decls.get(INPUT_DECL) ?? '';
+  check(
+    /sdkAuthorization:\s*string/.test(inputDecl),
+    'the confirm input declares sdkAuthorization as a plain string'
+  );
+  check(
+    /paymentMethodData\?:\s*(VaultPaymentMethodData_)?hostPaymentMethodData/.test(inputDecl),
+    'the confirm input declares paymentMethodData as the narrow host record'
+  );
+  check(
+    !/\[key:\s*string\]/.test(inputDecl),
+    'the confirm input has no index signature through which card keys could pass'
+  );
+
+  /* The eligibility exemption is likewise not vacuous. */
+  const eligibilityDecl = decls.get(ELIGIBILITY_DECL) ?? '';
+  check(
+    /eligibilityConfig[\s\S]{0,300}?sdkAuthorization:\s*string/.test(eligibilityDecl),
+    'the eligibility config declares sdkAuthorization as a plain string'
+  );
+  /*
+   * The whole reason eligibility could move inside the library is that its request body is built
+   * there from the PAN the library owns. If the config ever grew a card member, the host would be
+   * supplying card data again and the move would have bought nothing.
+   */
+  check(
+    !/eligibilityConfig[\s\S]{0,300}?(cardNumber|card_number|pan|cvc)\s*\??:/.test(eligibilityDecl),
+    'the eligibility config names no card member'
   );
 
   const all = [...decls.values()].join('\n');
@@ -177,14 +240,40 @@ if (!existsSync(declDir)) {
     check(!re.test(all), `no ${label} in any shipped declaration`);
   }
 
-  /* Success must stay token-only. */
-  const result = decls.get('VaultResult.gen.d.ts') ?? '';
-  const successBody = /status:\s*"success";([^}]*)\}/s.exec(result)?.[1] ?? '';
-  const members = [...successBody.matchAll(/readonly\s+([A-Za-z0-9_]+)/g)].map((m) => m[1]).sort();
+  /*
+   * ── THE TOKEN LIVES IN EXACTLY ONE RESULT ──────────────────────────────────
+   *
+   * `tokenize()` is allowed to return one, and it is the only operation that may. The payment
+   * result must not carry one in any branch — that is the whole point of splitting the two
+   * operations, so it is asserted against the published unions rather than trusted.
+   */
+  const publicDecl = decls.get('public.d.ts') ?? '';
+
+  const unionBody = (name) =>
+    new RegExp(`export type ${name} =([\\s\\S]*?)\\n(?=export |declare |$)`).exec(publicDecl)?.[1] ?? '';
+  const tokenizeUnion = unionBody('VaultTokenizeResult');
+  check(tokenizeUnion.length > 0, 'the published surface declares VaultTokenizeResult');
+  const tokenizeSuccess = /status:\s*'success';([^}]*)\}/.exec(tokenizeUnion)?.[1] ?? '';
+  const tokenizeMembers = [...tokenizeSuccess.matchAll(/readonly\s+([A-Za-z0-9_]+)/g)]
+    .map((m) => m[1])
+    .sort();
   check(
-    JSON.stringify(members) === JSON.stringify(['token']),
-    `a successful submit result carries only the token (got: ${members.join(', ') || 'nothing'})`
+    JSON.stringify(tokenizeMembers) === JSON.stringify(['token']),
+    `a successful tokenize result carries only the token (got: ${tokenizeMembers.join(', ') || 'nothing'})`
   );
+
+  const paymentUnion = unionBody('VaultPaymentResult');
+  check(paymentUnion.length > 0, 'the published surface declares VaultPaymentResult');
+  check(!/token/.test(paymentUnion), 'the payment result declares no token in any branch');
+  for (const status of ['succeeded', 'processing', 'requires_customer_action', 'failed', 'validation_error', 'not_ready']) {
+    check(paymentUnion.includes(`'${status}'`), `the payment result declares the "${status}" branch`);
+  }
+
+  /* The generated record backing the payment result must not grow a token either. */
+  const resultDecl = decls.get('VaultResult.gen.d.ts') ?? '';
+  const paymentRecord = /vaultPaymentResult = \{([\s\S]*?)\}/.exec(resultDecl)?.[1] ?? '';
+  check(paymentRecord.length > 0, 'the generated payment record is published');
+  check(!/token/.test(paymentRecord), 'the generated payment record has no token member');
 }
 
 /* ── 4. The runtime bundles that would ship ────────────────────────────────── */

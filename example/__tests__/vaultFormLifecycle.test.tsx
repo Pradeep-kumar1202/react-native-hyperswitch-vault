@@ -5,6 +5,10 @@
  * React Native jest preset, so the behaviour asserted here is the behaviour a merchant gets — not a
  * reading of the source.
  *
+ * ONE submit is now TWO requests: call 1 mints a payment-method token from the card the library
+ * owns, call 2 confirms the payment with it. The token lives only between them; `submit()` resolves
+ * to a navigation decision and never carries it out.
+ *
  * `fetch` is stubbed with a deferred that honours the AbortSignal exactly as a real fetch does
  * (reject with an AbortError once the signal fires), which is what makes the cancellation
  * assertions meaningful. No network call is ever made and no real credential is used: the session
@@ -18,7 +22,7 @@ import {
   HyperswitchVaultForm,
   type HyperswitchVaultFormHandle,
   type MerchantSession,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
 /*
@@ -69,6 +73,7 @@ const CARD_NUMBER = '4242424242424242'; // the published Visa test number
 const EXPIRY = `12${String((new Date().getFullYear() + 3) % 100).padStart(2, '0')}`;
 const CVC = '123';
 
+/* Call 1 — the payment-method-session confirm that mints a token. */
 const confirmResponse = {
   associated_payment_methods: [{payment_method_token: {data: 'tok_fake_0001'}}],
   payment_method_data: {
@@ -80,6 +85,34 @@ const confirmResponse = {
     },
   },
 };
+
+/* Call 2 — the payment confirm the library performs itself. */
+const paymentSucceeded = {status: 'succeeded'};
+
+/* The two NON-CARD values submit() requires. Neither is a real credential. */
+const PAYMENT = {
+  paymentId: 'pay_lifecycle_fake',
+  sdkAuthorization: 'intent_auth_lifecycle_fake',
+};
+
+/*
+ * The confirm input names its own card source. Flow 2 — the sequence this suite exercises — is the
+ * VAULT source, which carries the session the token is minted against; the session prop on the
+ * component backs `tokenize()` and is not what a confirmation reads.
+ */
+const paymentWith = (session: MerchantSession) =>
+  ({...PAYMENT, cardSource: {type_: 'vault' as const, session}});
+
+const PAYMENT_VAULT = paymentWith(sessionWith('pms_fake_0001'));
+
+/*
+ * `Succeeded` and `Processing` carry no payload, so the published union renders them as plain
+ * strings; every other outcome is an object with a `status`. These two readers keep every
+ * assertion below written against one shape.
+ */
+const statusOf = (result: VaultPaymentResult) => result.status;
+
+const errorOf = (result: VaultPaymentResult) => ('error' in result ? result.error : undefined);
 
 /* ── fetch stub ──────────────────────────────────────────────────────────── */
 
@@ -151,7 +184,6 @@ beforeEach(() => {
 type Mounted = {
   tree: Renderer;
   ref: React.RefObject<HyperswitchVaultFormHandle | null>;
-  state: () => {complete: boolean};
 };
 
 /*
@@ -175,7 +207,6 @@ afterEach(async () => {
 
 const mount = async (session: MerchantSession): Promise<Mounted> => {
   const ref = React.createRef<HyperswitchVaultFormHandle>();
-  let latest = {complete: false};
   let tree!: Renderer;
   await ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
@@ -185,21 +216,36 @@ const mount = async (session: MerchantSession): Promise<Mounted> => {
         environment="sandbox"
         /*
          * Inline error RENDERING is opt-in since the merchant UI reset. The lifecycle suite asserts
-         * what is on screen, so it asks for it; nothing about validation or the error EVENT changed.
+         * what is on screen, so it asks for it; nothing about validation changed either way.
          */
         fieldOptions={{
           cardNumber: {errorDisplay: 'inline'},
           expiry: {errorDisplay: 'inline'},
           cvc: {errorDisplay: 'inline'},
         }}
-        onStateChange={next => {
-          latest = next;
-        }}
       />,
     );
   });
   mounted.push(tree);
-  return {tree, ref, state: () => latest};
+  return {tree, ref};
+};
+
+/*
+ * Settles call 1, waits for the payment confirm it triggers, and settles that too. Both have to be
+ * answered now: one press of a merchant's Pay button is two requests.
+ */
+const settlePair = async (
+  first: unknown = confirmResponse,
+  second: unknown = paymentSucceeded,
+  statuses: {first?: number; second?: number} = {},
+) => {
+  const index = calls.length - 1;
+  await ReactTestRenderer.act(async () => {
+    calls[index].settle(first, statuses.first);
+  });
+  await ReactTestRenderer.act(async () => {
+    calls[index + 1].settle(second, statuses.second);
+  });
 };
 
 const input = (tree: Renderer, testID: string) =>
@@ -228,46 +274,57 @@ const textsIn = (tree: Renderer): string[] =>
 /* ── Tests ───────────────────────────────────────────────────────────────── */
 
 describe('duplicate submit', () => {
-  it('returns the same promise instance and issues exactly one request', async () => {
+  it('returns the same promise instance and issues exactly one pair of requests', async () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
     await fillValidCard(tree);
 
-    let first!: Promise<VaultSubmitResult>;
-    let second!: Promise<VaultSubmitResult>;
+    let first!: Promise<VaultPaymentResult>;
+    let second!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      first = ref.current!.submit();
-      second = ref.current!.submit();
+      first = ref.current!.confirmPayment(PAYMENT_VAULT);
+      second = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
 
     expect(second).toBe(first);
     expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain('/payment-method-sessions/pms_fake_0001/confirm');
 
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await first;
     });
 
+    /* The second call is the payment confirm the library owns; it carries the payment id. */
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain('/payments/pay_lifecycle_fake/confirm');
+
     const result = await first;
-    expect(result.status).toBe('success');
-    expect(result.status === 'success' && result.token).toBe('tok_fake_0001');
+    /* Success means the PAYMENT succeeded. There is no token anywhere in the result. */
+    expect(result.status).toBe('succeeded');
+    expect(JSON.stringify(result)).not.toContain('tok_');
     expect(await second).toBe(result);
-    expect(calls).toHaveLength(1);
   });
 
-  it('allows a new request once the first has settled', async () => {
+  it('allows a new request once the first has settled, and does not re-mint the token', async () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
     await fillValidCard(tree);
 
     await ReactTestRenderer.act(async () => {
-      const pending = ref.current!.submit();
-      calls[0].settle(confirmResponse);
-      await pending;
+      ref.current!.confirmPayment(PAYMENT_VAULT);
     });
-
-    await ReactTestRenderer.act(async () => {
-      ref.current!.submit();
-    });
+    await settlePair();
     expect(calls).toHaveLength(2);
+
+    /*
+     * The card and the session are unchanged, so the token minted by call 1 is still valid and is
+     * deliberately REUSED — the payment-method-session confirm has no idempotency key, and
+     * re-confirming it could vault the same card twice. Only the payment confirm runs again.
+     */
+    await ReactTestRenderer.act(async () => {
+      ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    expect(calls).toHaveLength(3);
+    expect(calls[2].url).toContain('/payments/pay_lifecycle_fake/confirm');
   });
 });
 
@@ -280,12 +337,13 @@ describe('reset', () => {
      * this form asks for it; the error EVENT is unaffected either way.
      */
     await type(tree, 'CardNumberInputTestId', '4242424242424241');
-    let result!: VaultSubmitResult;
+    let result!: VaultPaymentResult;
     await ReactTestRenderer.act(async () => {
-      result = await ref.current!.submit();
+      result = await ref.current!.confirmPayment(PAYMENT_VAULT);
     });
-    expect(result.status).toBe('validation_error');
-    expect(result.status !== 'success' && result.error.code).toBe('invalid_card_data');
+    expect(statusOf(result)).toBe('validation_error');
+    expect(errorOf(result)?.code).toBe('invalid_card_data');
+    /* Neither call is made: an invalid card never reaches the network. */
     expect(calls).toHaveLength(0);
     expect(textsIn(tree).some(text => /card/i.test(text) && /invalid|valid/i.test(text))).toBe(true);
 
@@ -309,9 +367,9 @@ describe('reset', () => {
     const typedCardNumber = input(tree, 'CardNumberInputTestId').props.value;
     expect(typedCardNumber).not.toBe('');
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls).toHaveLength(1);
 
@@ -331,12 +389,12 @@ describe('reset', () => {
     /* And the request the merchant already dispatched is untouched: it may already be processed. */
     expect(calls[0].aborted()).toBe(false);
 
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await pending;
     });
-    expect((await pending).status).toBe('success');
-    expect(calls).toHaveLength(1);
+    expect((await pending).status).toBe('succeeded');
+    expect(calls).toHaveLength(2);
 
     /* Once it has settled the form is interactive again and reset() works normally. */
     for (const testID of ['CardNumberInputTestId', 'ExpiryInputTestId', 'CVCInputTestId']) {
@@ -366,13 +424,18 @@ describe('session replacement', () => {
     mounted.push(tree);
     await fillValidCard(tree);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(paymentWith(first));
     });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toContain('pms_fake_OLD');
+    /*
+     * Call 1 authenticates with the VAULT credential from the session — never with the
+     * payment-intent credential the host passed to submit(). They are different secrets.
+     */
     expect(calls[0].options.headers.Authorization).toBe(first.vault_details!.vault_data!.sdk_authorization);
+    expect(calls[0].options.headers.Authorization).not.toBe(PAYMENT.sdkAuthorization);
 
     await ReactTestRenderer.act(() => {
       tree.update(<HyperswitchVaultForm ref={ref} session={second} environment="sandbox" />);
@@ -380,9 +443,12 @@ describe('session replacement', () => {
 
     expect(calls[0].aborted()).toBe(true);
 
-    /* The next submit is a fresh request carrying only the NEW authorization. */
+    /*
+     * The next submit is a fresh request carrying only the NEW authorization: a replaced session
+     * also discards the token minted under the old one, so call 1 genuinely runs again.
+     */
     await ReactTestRenderer.act(async () => {
-      ref.current!.submit();
+      ref.current!.confirmPayment(paymentWith(second));
     });
     expect(calls).toHaveLength(2);
     expect(calls[1].url).toContain('pms_fake_NEW');
@@ -395,8 +461,8 @@ describe('session replacement', () => {
     /* Awaited outside act(): the abort settles this promise through the fetch stub, not through a
      * React update, and act() would sit waiting for a queue that has nothing left in it. */
     const outcome = await pending;
-    expect(outcome.status).toBe('error');
-    expect(outcome.status !== 'success' && outcome.error.code).toBe('unknown_outcome');
+    expect(statusOf(outcome)).toBe('failed');
+    expect(errorOf(outcome)?.code).toBe('unknown_outcome');
   });
 
   it('leaves the replacement request cancellable when the superseded one settles late', async () => {
@@ -421,9 +487,9 @@ describe('session replacement', () => {
     mounted.push(tree);
     await fillValidCard(tree);
 
-    let stale!: Promise<VaultSubmitResult>;
+    let stale!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      stale = ref.current!.submit();
+      stale = ref.current!.confirmPayment(paymentWith(first));
     });
 
     await ReactTestRenderer.act(() => {
@@ -433,13 +499,13 @@ describe('session replacement', () => {
 
     /* The replacement request starts while the superseded one is still unresolved. */
     await ReactTestRenderer.act(async () => {
-      ref.current!.submit();
+      ref.current!.confirmPayment(paymentWith(second));
     });
     expect(calls).toHaveLength(2);
 
     /* Now the superseded one finally settles. */
     calls[0].settleAbort();
-    expect((await stale).status).toBe('error');
+    expect(statusOf(await stale)).toBe('failed');
 
     await ReactTestRenderer.act(() => {
       tree.unmount();
@@ -453,9 +519,9 @@ describe('unmount', () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
     await fillValidCard(tree);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls[0].aborted()).toBe(false);
 
@@ -465,8 +531,8 @@ describe('unmount', () => {
     expect(calls[0].aborted()).toBe(true);
 
     const result = await pending;
-    expect(result.status).toBe('error');
-    expect(result.status !== 'success' && result.error.code).toBe('unknown_outcome');
+    expect(statusOf(result)).toBe('failed');
+    expect(errorOf(result)?.code).toBe('unknown_outcome');
   });
 });
 
@@ -475,6 +541,7 @@ describe('focus', () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
     const handle = ref.current!;
 
+    expect(() => handle.focus('cardholderName')).not.toThrow();
     expect(() => handle.focus('cardNumber')).not.toThrow();
     expect(() => handle.focus('expiry')).not.toThrow();
     expect(() => handle.focus('cvc')).not.toThrow();
@@ -485,32 +552,53 @@ describe('focus', () => {
 
     /* The registration is removed on unmount, so this must not reach into a dead tree. */
     expect(() => handle.focus('cardNumber')).not.toThrow();
+    expect(() => handle.focus('cardholderName')).not.toThrow();
   });
 });
 
 describe('unusable session', () => {
-  it('reports error / invalid_session and sends nothing', async () => {
-    const {ref} = await mount({vault_details: {vault_type: 'external', vault_data: {}}});
+  it('reports failed / invalid_session and sends nothing', async () => {
+    const unusable = {vault_details: {vault_type: 'external', vault_data: {}}} as MerchantSession;
+    const {tree, ref} = await mount(unusable);
+    await fillValidCard(tree);
 
-    let result!: VaultSubmitResult;
+    let result!: VaultPaymentResult;
     await ReactTestRenderer.act(async () => {
-      result = await ref.current!.submit();
+      result = await ref.current!.confirmPayment(paymentWith(unusable));
     });
 
-    expect(result.status).toBe('error');
-    expect(result.status !== 'success' && result.error.code).toBe('invalid_session');
+    expect(statusOf(result)).toBe('failed');
+    expect(errorOf(result)?.code).toBe('invalid_session');
     expect(calls).toHaveLength(0);
+  });
+
+  it('refuses a blank paymentId or sdkAuthorization without touching the network', async () => {
+    const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
+    await fillValidCard(tree);
+
+    for (const args of [
+      {...PAYMENT_VAULT, paymentId: '   '},
+      {...PAYMENT_VAULT, sdkAuthorization: '   '},
+    ]) {
+      let result!: VaultPaymentResult;
+      await ReactTestRenderer.act(async () => {
+        result = await ref.current!.confirmPayment(args);
+      });
+      expect(statusOf(result)).toBe('failed');
+      expect(errorOf(result)?.code).toBe('invalid_session');
+      expect(calls).toHaveLength(0);
+    }
   });
 });
 
 describe('backend failure', () => {
-  it('maps a confirmed non-2xx to error / server_error and never retries', async () => {
+  it('maps a refused token mint to failed / server_error and never confirms the payment', async () => {
     const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
     await fillValidCard(tree);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     await ReactTestRenderer.act(async () => {
       calls[0].settle({error: {code: 'IR_05', message: 'internal detail 4242424242424242'}}, 400);
@@ -518,12 +606,62 @@ describe('backend failure', () => {
     });
 
     const result = await pending;
-    expect(result.status).toBe('error');
-    expect(result.status !== 'success' && result.error.code).toBe('server_error');
+    expect(statusOf(result)).toBe('failed');
+    expect(errorOf(result)?.code).toBe('server_error');
     /* The backend's own message never reaches the merchant. */
     expect(JSON.stringify(result)).not.toContain('4242424242424242');
     expect(JSON.stringify(result)).not.toContain('internal detail');
+    /* Call 1 failed, so there is no token and call 2 is never attempted. */
     expect(calls).toHaveLength(1);
+  });
+
+  it('maps a refused payment confirm to failed / server_error, with no backend prose', async () => {
+    const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
+    await fillValidCard(tree);
+
+    let pending!: Promise<VaultPaymentResult>;
+    await ReactTestRenderer.act(async () => {
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    await settlePair(
+      confirmResponse,
+      {error: {code: 'IR_05', message: 'internal detail 4242424242424242'}},
+      {second: 400},
+    );
+
+    const result = await pending;
+    expect(statusOf(result)).toBe('failed');
+    expect(errorOf(result)?.code).toBe('server_error');
+    expect(JSON.stringify(result)).not.toContain('4242424242424242');
+    expect(JSON.stringify(result)).not.toContain('internal detail');
+    /* And no token leaked out with the failure. */
+    expect(JSON.stringify(result)).not.toContain('tok_');
+    expect(calls).toHaveLength(2);
+  });
+
+  it('reports a customer action without exposing anything but navigation', async () => {
+    const {tree, ref} = await mount(sessionWith('pms_fake_0001'));
+    await fillValidCard(tree);
+
+    let pending!: Promise<VaultPaymentResult>;
+    await ReactTestRenderer.act(async () => {
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    await settlePair(confirmResponse, {
+      status: 'requires_customer_action',
+      next_action: {type: 'redirect_to_url', redirect_to_url: 'https://example.test/3ds'},
+      /* A confirm response legitimately can carry this. It must never be read out. */
+      payment_method_data: {card: {last4_digits: '4242', card_isin: '424242'}},
+    });
+
+    const result = await pending;
+    expect(statusOf(result)).toBe('requires_customer_action');
+    expect(result.status === 'requires_customer_action' ? result.nextAction.redirectUrl : undefined)
+      .toBe('https://example.test/3ds');
+    const serialised = JSON.stringify(result);
+    expect(serialised).not.toContain('tok_');
+    expect(serialised).not.toContain('424242');
+    expect(serialised).not.toContain('4242');
   });
 });
 

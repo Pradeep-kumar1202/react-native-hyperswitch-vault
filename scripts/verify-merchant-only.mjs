@@ -136,9 +136,36 @@ const FORBIDDEN_PROPS = [
  */
 const FIELD_RECORD_TYPES = /State$|Styles$|Options$|state\b|styles\b|options\b/;
 
-const leaks = declaredProps.filter(({ name, type }) => {
-  if (FORBIDDEN_PROPS.includes(name)) return true;
-  if ((name === 'cardNumber' || name === 'cvc' || name === 'expiry') && !FIELD_RECORD_TYPES.test(type)) return true;
+/*
+ * ── THE CONFIRM-INPUT EXEMPTION ──────────────────────────────────────────────
+ *
+ * `sdkAuthorization` and `paymentMethodData` are forbidden as things the library HANDS OUT. They
+ * are also what the host HANDS IN on `confirmPayment()`: the payment-intent credential and the
+ * non-card billing data. The exemption is pinned to that one declaration file AND to the exact
+ * narrow type each must carry, so widening `paymentMethodData` to an open map — the actual risk —
+ * still fails here.
+ */
+const INPUT_DECL = 'VaultFormCoordinator.gen.d.ts';
+/*
+ * The live-eligibility config is the second place a host hands the payment-intent credential IN:
+ * the library cannot probe an endpoint it has no credential for. Same treatment — pinned to one
+ * file and one exact type.
+ */
+const ELIGIBILITY_DECL = 'VaultFormOptions.gen.d.ts';
+const INPUT_EXEMPT = {
+  [INPUT_DECL]: {
+    sdkAuthorization: /^string$/,
+    paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
+  },
+  [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/ },
+};
+const isExemptInput = ({ file, name, type }) =>
+  INPUT_EXEMPT[file]?.[name]?.test(String(type).replace(/\s+/g, ''));
+
+const leaks = declaredProps.filter((d) => {
+  if (isExemptInput(d)) return false;
+  if (FORBIDDEN_PROPS.includes(d.name)) return true;
+  if ((d.name === 'cardNumber' || d.name === 'cvc' || d.name === 'expiry') && !FIELD_RECORD_TYPES.test(d.type)) return true;
   return false;
 });
 check(
@@ -172,13 +199,27 @@ check(
   `the field ref is exactly focus and blur (got: ${handleMembers.join(', ')})`
 );
 
-const resultDecl = decls.get('VaultResult.gen.d.ts') ?? '';
-const successBody = /status:\s*"success";([^}]*)\}/s.exec(resultDecl)?.[1] ?? '';
+/*
+ * The token lives in exactly ONE result. `tokenize()` may return one; the payment result must not
+ * carry one in any branch — that separation is the point of having two operations.
+ */
+const unionBody = (name) =>
+  new RegExp(`export type ${name} =([\\s\\S]*?)\\n(?=export |declare |$)`).exec(publicDecl)?.[1] ?? '';
+
+const tokenizeUnion = unionBody('VaultTokenizeResult');
+check(tokenizeUnion.length > 0, 'the merchant surface publishes VaultTokenizeResult');
+const successBody = /status:\s*'success';([^}]*)\}/.exec(tokenizeUnion)?.[1] ?? '';
 const successMembers = [...successBody.matchAll(/readonly\s+([A-Za-z0-9_]+)/g)].map((m) => m[1]).sort();
 check(
   JSON.stringify(successMembers) === JSON.stringify(['token']),
-  `a successful submit carries only the token (got: ${successMembers.join(', ') || 'nothing'})`
+  `a successful tokenize carries only the token (got: ${successMembers.join(', ') || 'nothing'})`
 );
+
+const paymentUnion = unionBody('VaultPaymentResult');
+check(paymentUnion.length > 0, 'the merchant surface publishes VaultPaymentResult');
+check(!/token/.test(paymentUnion), 'the payment result declares no token in any branch');
+
+const resultDecl = decls.get('VaultResult.gen.d.ts') ?? '';
 check(
   !/httpStatus|body|response|request/i.test(/safeVaultError = \{[^}]*\}/s.exec(resultDecl)?.[0] ?? ''),
   'the safe error carries no request or response body'
@@ -222,8 +263,9 @@ writeFileSync(
 const consumer = `
 import * as React from 'react';
 import {
-  HyperswitchVault, HyperswitchVaultFormProvider, CardNumberField, CardExpiryField, CardCVCField,
-  type VaultFormHandle, type VaultFormState, type VaultSubmitResult,
+  HyperswitchVault, HyperswitchVaultFormProvider,
+  CardNumberField, CardExpiryField, CardCVCField, CardholderNameField,
+  type VaultFormHandle, type VaultTokenizeResult, type VaultPaymentResult,
 } from '${PKG}';
 
 /* POSITIVE — the whole merchant surface still compiles. */
@@ -231,19 +273,40 @@ export const ok = (
   <HyperswitchVault.CardForm session={{} as never} environment="sandbox"
     fieldStyles={{cardNumber: {container: {borderWidth: 1}}}}
     layout="stacked" fieldArrangement="separate"
-    fieldOptions={{cardNumber: {placeholder: 'Card number', brandIconMode: 'standard'}}}
-    onFormStateChange={(s: VaultFormState) => [s.fieldsReady, s.canSubmit, s.brand]} />
+    fieldOptions={{cardNumber: {placeholder: 'Card number', brandIconMode: 'standard'}}} />
 );
 export const custom = (
   <HyperswitchVaultFormProvider session={{} as never} environment="sandbox">
-    <CardNumberField styles={{input: {fontSize: 16}}} placeholder="Card number" brandIconMode="standard" onStateChange={(s) => s.brand} />
-    <CardExpiryField labelBehavior="static" label="Expiration date" onStateChange={(s) => s.status} />
-    <CardCVCField cvcIcon="default" errorDisplay="inline" onStateChange={(s) => s.status} />
+    <CardholderNameField label="Name on card" />
+    <CardNumberField styles={{input: {fontSize: 16}}} placeholder="Card number" brandIconMode="standard" />
+    <CardExpiryField labelBehavior="static" label="Expiration date" />
+    <CardCVCField cvcIcon="default" errorDisplay="inline" />
   </HyperswitchVaultFormProvider>
 );
+
+/* FLOW 1 — tokenize is the one operation that yields a token. */
 export const token = async (ref: React.RefObject<VaultFormHandle>) => {
-  const result: VaultSubmitResult | undefined = await ref.current?.submit();
+  const result: VaultTokenizeResult | undefined = await ref.current?.tokenize();
   return result?.status === 'success' ? result.token : undefined;
+};
+
+/* FLOW 2 — the vault source: tokenize internally, then confirm. Navigation, never a token. */
+export const pay = async (ref: React.RefObject<VaultFormHandle>) => {
+  const result: VaultPaymentResult = await ref.current!.confirmPayment({
+    cardSource: {type_: 'vault', session: {} as never},
+    paymentId: 'pay_1', sdkAuthorization: 'intent',
+    paymentMethodData: {billing: {email: 'a@b.co'}, nickName: 'Card'},
+  });
+  return result.status === 'requires_customer_action' ? result.nextAction.type_ : result.status;
+};
+
+/* FLOW 3 — the direct source: no session, no token, one request. Same result union. */
+export const payDirect = async (ref: React.RefObject<VaultFormHandle>) => {
+  const result: VaultPaymentResult = await ref.current!.confirmPayment({
+    cardSource: {type_: 'direct'},
+    paymentId: 'pay_1', sdkAuthorization: 'intent',
+  });
+  return result.status;
 };
 
 /* NEGATIVE — the removed surfaces must not type-check. */
@@ -257,9 +320,18 @@ export const n3 = <CardNumberField value="4242424242424242" />;
 export const n4 = <CardNumberField onChange={() => {}} />;
 // @ts-expect-error - the transport is not exported
 export const n5 = HyperswitchVault.confirmPaymentMethodSession;
-export const n6 = async (ref: React.RefObject<VaultFormHandle>) => {
-  const r = await ref.current!.submit();
-  // @ts-expect-error - a successful result carries the token and nothing else
+// @ts-expect-error - state emission was removed
+export const n6 = <CardNumberField onStateChange={(s: unknown) => s} />;
+// @ts-expect-error - the ambiguous submit() was replaced by tokenize()/confirmPayment()
+export const n7 = (ref: React.RefObject<VaultFormHandle>) => ref.current!.submit;
+export const n8 = async (ref: React.RefObject<VaultFormHandle>) => {
+  const r = await ref.current!.confirmPayment({cardSource: {type_: 'direct'}, paymentId: 'p', sdkAuthorization: 'a'});
+  // @ts-expect-error - a payment result never carries a token
+  return r.status === 'succeeded' ? r.token : undefined;
+};
+export const n9 = async (ref: React.RefObject<VaultFormHandle>) => {
+  const r = await ref.current!.tokenize();
+  // @ts-expect-error - a tokenize success carries the token and nothing else
   return r.status === 'success' ? r.card : undefined;
 };
 `;

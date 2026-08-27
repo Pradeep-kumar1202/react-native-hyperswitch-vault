@@ -56,9 +56,12 @@ export default function App() {
           bareSession ? (
             <BareMinimumFields
               session={bareSession}
-              onTokenized={token => {
-                /* Send the token to YOUR backend. Never store or display it in the app. */
-                void token;
+              onResult={result => {
+                /*
+                 * A navigation decision, not a credential: `succeeded`, `processing`, a customer
+                 * action to drive, or a typed error. Nothing here needs to be kept secret.
+                 */
+                void result;
               }}
             />
           ) : null
