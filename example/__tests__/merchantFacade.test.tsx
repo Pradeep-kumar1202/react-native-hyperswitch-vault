@@ -29,12 +29,14 @@ import {
   CardNumberWidget,
   CardExpiryWidget,
   CardCVCWidget,
+  CardholderNameWidget,
   type HyperswitchVaultFormHandle,
   type WidgetHandle,
   /* Phase 1 additions */
   CardNumberField,
   CardExpiryField,
   CardCVCField,
+  CardholderNameField,
   HyperswitchVault,
   type VaultFieldHandle,
   type VaultFormHandle,
@@ -61,6 +63,12 @@ const toBase64 = (input: string): string => {
   }
   return out;
 };
+
+/* The two non-card values `submit()` requires. Neither is a real credential. */
+const PAYMENT = {paymentId: 'pay_facade_fake', sdkAuthorization: 'intent_auth_facade_fake'};
+
+/* Flow 2 — the vault source, which is what this facade suite exercises. */
+const paymentWith = (s: MerchantSession) => ({...PAYMENT, cardSource: {type_: 'vault' as const, session: s}});
 
 const session: MerchantSession = {
   session_token: [],
@@ -89,12 +97,18 @@ describe('canonical field names are the existing components', () => {
     ['CardNumberField', CardNumberField, 'CardNumberWidget', CardNumberWidget],
     ['CardExpiryField', CardExpiryField, 'CardExpiryWidget', CardExpiryWidget],
     ['CardCVCField', CardCVCField, 'CardCVCWidget', CardCVCWidget],
+    ['CardholderNameField', CardholderNameField, 'CardholderNameWidget', CardholderNameWidget],
   ])('%s === %s', (_nextName, next, _legacyName, legacy) => {
     expect(next).toBe(legacy);
   });
 
   it('are real forwardRef components, not wrappers around one', () => {
-    for (const component of [CardNumberField, CardExpiryField, CardCVCField]) {
+    for (const component of [
+      CardNumberField,
+      CardExpiryField,
+      CardCVCField,
+      CardholderNameField,
+    ]) {
       expect((component as any).$$typeof).toBe(Symbol.for('react.forward_ref'));
     }
   });
@@ -112,6 +126,7 @@ describe('the HyperswitchVault namespace is a facade over the same objects', () 
     ['CardNumber', () => HyperswitchVault.CardNumber, () => CardNumberField],
     ['Expiry', () => HyperswitchVault.Expiry, () => CardExpiryField],
     ['CVC', () => HyperswitchVault.CVC, () => CardCVCField],
+    ['CardholderName', () => HyperswitchVault.CardholderName, () => CardholderNameField],
   ])('HyperswitchVault.%s is the canonical export', (_name, member, canonical) => {
     expect(member()).toBe(canonical());
   });
@@ -120,13 +135,15 @@ describe('the HyperswitchVault namespace is a facade over the same objects', () 
     expect(HyperswitchVault.CardNumber).toBe(CardNumberWidget);
     expect(HyperswitchVault.Expiry).toBe(CardExpiryWidget);
     expect(HyperswitchVault.CVC).toBe(CardCVCWidget);
+    expect(HyperswitchVault.CardholderName).toBe(CardholderNameWidget);
   });
 
-  it('has exactly the five documented members and no hook yet', () => {
+  it('has exactly the six documented members and no hook yet', () => {
     expect(Object.keys(HyperswitchVault).sort()).toEqual([
       'CVC',
       'CardForm',
       'CardNumber',
+      'CardholderName',
       'Expiry',
       'Form',
     ]);
@@ -218,9 +235,9 @@ describe('rendering through the new names is indistinguishable', () => {
     });
 
     /* All three kinds are mounted exactly once, so submit() must reach validation, not not_ready. */
-    let result: Awaited<ReturnType<VaultFormHandle['submit']>> | undefined;
+    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.confirmPayment(paymentWith(session));
     });
 
     expect(result?.status).toBe('validation_error');
@@ -233,7 +250,7 @@ describe('rendering through the new names is indistinguishable', () => {
 /* ── 3. Handles are unchanged under the new type names ────────────────────── */
 
 describe('handles behave identically under the alias types', () => {
-  it('the form handle still exposes exactly submit / reset / focus', () => {
+  it('the form handle exposes exactly tokenize / confirmPayment / reset / focus', () => {
     const formRef = React.createRef<VaultFormHandle>();
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
@@ -242,8 +259,9 @@ describe('handles behave identically under the alias types', () => {
       );
     });
 
-    expect(Object.keys(formRef.current!).sort()).toEqual(['focus', 'reset', 'submit']);
-    expect(typeof formRef.current!.submit).toBe('function');
+    expect(Object.keys(formRef.current!).sort()).toEqual(['confirmPayment', 'focus', 'reset', 'tokenize']);
+    expect(typeof formRef.current!.tokenize).toBe('function');
+    expect(typeof formRef.current!.confirmPayment).toBe('function');
     expect(typeof formRef.current!.reset).toBe('function');
     expect(typeof formRef.current!.focus).toBe('function');
     /* No raw-value accessor exists under any name. */
@@ -289,7 +307,8 @@ describe('handles behave identically under the alias types', () => {
 
     expect(typeof widgetRef.current!.focus).toBe('function');
     expect(typeof widgetRef.current!.blur).toBe('function');
-    expect(typeof formHandleRef.current!.submit).toBe('function');
+    expect(typeof formHandleRef.current!.tokenize).toBe('function');
+    expect(typeof formHandleRef.current!.confirmPayment).toBe('function');
 
     ReactTestRenderer.act(() => renderer.unmount());
   });
@@ -313,9 +332,9 @@ describe('the mounted-field registry is unaffected by naming', () => {
       );
     });
 
-    let result: Awaited<ReturnType<VaultFormHandle['submit']>> | undefined;
+    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.confirmPayment(paymentWith(session));
     });
 
     expect(result?.status).toBe('not_ready');
@@ -337,9 +356,9 @@ describe('the mounted-field registry is unaffected by naming', () => {
       );
     });
 
-    let result: Awaited<ReturnType<VaultFormHandle['submit']>> | undefined;
+    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.confirmPayment(paymentWith(session));
     });
 
     expect(result?.status).toBe('not_ready');

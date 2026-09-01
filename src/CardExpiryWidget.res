@@ -17,23 +17,22 @@ let make = React.forwardRef((
     "accessibilityLabel": option<string>,
     "accessibilityHint": option<string>,
     "testID": option<string>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
     "onStateChange": option<VaultPublicState.expiryState => unit>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardExpiryWidget")
-  let controller = ctx.controller
 
-  /*
-   * Merchant field state (ADR-0002 §4). The snapshot is derived by the controller and emitted only
-   * when it structurally changes; the callback itself is never stored in controller, registration
-   * or submission state.
-   */
   VaultStateEmitter.use(
-    ~build=() => controller.publicFields.expiry,
+    ~build=() => ctx.publicSnapshot().expiry,
     ~equal=VaultPublicState.expiryEq,
     ~notify=props["onStateChange"],
   )
+  let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {
     HyperswitchVaultFormProvider.focus: () => VaultCardController.focusRef(controller.expiryRef),

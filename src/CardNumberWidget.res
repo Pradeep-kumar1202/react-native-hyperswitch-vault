@@ -17,23 +17,22 @@ let make = React.forwardRef((
     "accessibilityHint": option<string>,
     "testID": option<string>,
     "brandIconMode": option<CardFieldOptions.brandIconMode>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
     "onStateChange": option<VaultPublicState.cardNumberState => unit>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardNumberWidget")
-  let controller = ctx.controller
 
-  /*
-   * Merchant field state (ADR-0002 §4). The snapshot is derived by the controller and emitted only
-   * when it structurally changes; the callback itself is never stored in controller, registration
-   * or submission state.
-   */
   VaultStateEmitter.use(
-    ~build=() => controller.publicFields.cardNumber,
+    ~build=() => ctx.publicSnapshot().cardNumber,
     ~equal=VaultPublicState.cardNumberEq,
     ~notify=props["onStateChange"],
   )
+  let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {
     HyperswitchVaultFormProvider.focus: () => VaultCardController.focusRef(controller.cardRef),
@@ -55,12 +54,16 @@ let make = React.forwardRef((
     ctx
     styles=?{props["styles"]}
     options
-    iconRight={switch CardFieldOptions.resolveBrandIconMode(
-      Some(options),
-      ~formWide=ctx.brandIconMode,
-    ) {
-    | #hidden => CardInput.NoIcon
-    | mode => CardInput.CustomIcon(<CardIcons detectedScheme=controller.values.brand mode />)
-    }}
+    /*
+     * The accessory decides which slot this is — nothing, decoration, or a control — because a
+     * co-badge chooser or a scan button can be warranted even with brand artwork turned off.
+     */
+    iconRight={CardNumberAccessory.iconFor(
+      ~ctx,
+      ~brandIconMode=CardFieldOptions.resolveBrandIconMode(
+        Some(options),
+        ~formWide=ctx.brandIconMode,
+      ),
+    )}
   />
 })

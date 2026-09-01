@@ -51,6 +51,8 @@ type localisationLabels = {
   expiryFloatingLabel?: string,
   cvcPlaceholder?: string,
   cvcFloatingLabel?: string,
+  /* Heading of the co-badge network chooser. */
+  selectCardBrandLabel?: string,
 }
 
 @genType
@@ -61,6 +63,10 @@ type localisationMessages = {
   expiryInvalid?: string,
   cvcRequired?: string,
   cvcInvalid?: string,
+  /* The chosen or detected network is not one the merchant accepts. */
+  unsupportedCard?: string,
+  /* The backend's eligibility step declined this card. */
+  cardNotEligible?: string,
 }
 
 @genType
@@ -70,24 +76,6 @@ type localisation = {
   isRtl?: bool,
 }
 
-/*
- * `brand` is the canonical `CardBrand` union, the SAME type the per-field and form state events
- * carry. It was a bare `string` here, and this surface emitted the detector's own display casing
- * ("Visa") while every other surface emitted the canonical token ("visa") — the same card produced
- * two different values depending on which callback a merchant happened to use. There is one union
- * and one mapping table (`VaultPublicState.brandOf`); nothing else maps brands.
- *
- * An undetected or unrecognised scheme is `#unknown`, where this used to emit `""`.
- */
-@genType
-type cardFormState = {
-  complete: bool,
-  cardNumberValid: bool,
-  expiryValid: bool,
-  cvcValid: bool,
-  brand: VaultPublicState.cardBrand,
-}
-
 @genType
 type safeVaultErrorCode = VaultResult.safeVaultErrorCode
 
@@ -95,13 +83,59 @@ type safeVaultErrorCode = VaultResult.safeVaultErrorCode
 type safeVaultError = VaultResult.safeVaultError
 
 @genType
-type vaultSubmitResult = VaultResult.vaultSubmitResult
+type vaultPaymentResult = VaultResult.vaultPaymentResult
 
 @genType
+type vaultTokenizeResult = VaultResult.vaultTokenizeResult
+
+@genType
+type paymentConfirmInput = VaultFormCoordinator.paymentConfirmInput
+
+@genType
+type vaultField = [#cardNumber | #expiry | #cvc | #cardholderName]
+
+/*
+ * ── LIVE ELIGIBILITY (optional) ──────────────────────────────────────────────
+ *
+ * Eligibility asks the backend whether a BIN is accepted for this payment, so the request needs the
+ * PAN — which now only the library has. Supplying this prop lets the library run that check AS THE
+ * CUSTOMER TYPES and show the "card not accepted" message inline, which is what the classic form
+ * did.
+ *
+ * It is optional and purely about WHEN the check happens. `confirmPayment` re-checks before it
+ * confirms whether or not this prop was given, so omitting it costs the inline message, never the
+ * enforcement.
+ *
+ * Every field is non-card. `sdkAuthorization` is the payment-INTENT credential, the same one the
+ * final confirm uses.
+ */
+@genType
+type eligibilityConfig = {
+  paymentId: string,
+  sdkAuthorization: string,
+  appId?: string,
+  endpoint?: VaultEndpoint.vaultEndpointConfig,
+}
+
+/*
+ * TWO explicit operations, not one ambiguous `submit()`. Which one you call decides what can come
+ * back: `tokenize` is the only route to a token, and `confirmPayment` is the only route that
+ * charges anything. Neither throws for a documented outcome.
+ */
+@genType
 type vaultFormHandle = {
-  submit: unit => promise<vaultSubmitResult>,
+  /*
+   * Flow 1 — mint a payment-method token and stop. Takes no input: there is no payment to
+   * configure, and nothing here charges the customer.
+   */
+  tokenize: unit => promise<vaultTokenizeResult>,
+  /*
+   * Flow 2 — mint a token internally, then confirm the payment with it. Takes NON-CARD inputs only
+   * and resolves to a navigation decision. The intermediate token is never returned.
+   */
+  confirmPayment: paymentConfirmInput => promise<vaultPaymentResult>,
   reset: unit => unit,
-  focus: [#cardNumber | #expiry | #cvc] => unit,
+  focus: vaultField => unit,
 }
 
 let emptyStyle = Style.s({})
@@ -139,7 +173,8 @@ let defaultLabels: CardFormTypes.cardLabels = {
   cvcPlaceholder: "CVC",
   cvcFloatingLabel: "CVC",
 
-  notEligibleText: "",
+  notEligibleText: LocaleDataType.defaultLocale.cardNotEligibleText,
+  selectCardBrandLabel: LocaleDataType.defaultLocale.selectCardBrand,
   isRtl: false,
 }
 
@@ -150,6 +185,8 @@ type resolvedMessages = {
   expiryInvalid: string,
   cvcRequired: string,
   cvcInvalid: string,
+  unsupportedCard: string,
+  cardNotEligible: string,
 }
 
 let resolveLabels = (localisation: option<localisation>): CardFormTypes.cardLabels => {
@@ -166,6 +203,7 @@ let resolveLabels = (localisation: option<localisation>): CardFormTypes.cardLabe
     cvcPlaceholder: pick(l => l.cvcPlaceholder, defaultLabels.cvcPlaceholder),
     cvcFloatingLabel: pick(l => l.cvcFloatingLabel, defaultLabels.cvcFloatingLabel),
     notEligibleText: defaultLabels.notEligibleText,
+    selectCardBrandLabel: pick(l => l.selectCardBrandLabel, defaultLabels.selectCardBrandLabel),
     isRtl: localisation->Option.flatMap(l => l.isRtl)->Option.getOr(defaultLabels.isRtl),
   }
 }
@@ -181,8 +219,39 @@ let resolveMessages = (localisation: option<localisation>): resolvedMessages => 
     expiryInvalid: pick(m => m.expiryInvalid, locale.inValidExpiryErrorText),
     cvcRequired: pick(m => m.cvcRequired, locale.cvcNumberEmptyText),
     cvcInvalid: pick(m => m.cvcInvalid, locale.inValidCVCErrorText),
+    unsupportedCard: pick(m => m.unsupportedCard, locale.unsupportedCardErrorText),
+    cardNotEligible: pick(m => m.cardNotEligible, locale.cardNotEligibleText),
   }
 }
+
+/*
+ * The co-badge network rule, reproducing `Validation.CardNetwork`: the network in force must be one
+ * the merchant accepts.
+ *
+ * `None` when the merchant supplied no scheme list, which is the common case — with nothing to
+ * check against, every detected brand passes, and adding a validator that can never fail would only
+ * cost a comparison per keystroke.
+ */
+let makeNetworkValidator = (
+  ~enabledCardSchemes: array<string>,
+  messages: resolvedMessages,
+): option<option<string> => option<string>> =>
+  enabledCardSchemes->Array.length === 0
+    ? None
+    : Some(
+        (value: option<string>) => {
+          let network = value->Option.getOr("")
+          /*
+           * An empty network is "not detected yet", not "unsupported" — the card-number validator
+           * already owns the empty and malformed cases, and reporting both would show the customer
+           * two errors for one blank field.
+           */
+          network->String.length === 0 ||
+          enabledCardSchemes->Array.some(scheme => scheme === network)
+            ? None
+            : Some(messages.unsupportedCard)
+        },
+      )
 
   let makeCardNumberValidator = (messages: resolvedMessages) => (value: option<string>) => {
     let value = value->Option.getOr("")

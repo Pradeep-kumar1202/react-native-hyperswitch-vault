@@ -12,6 +12,7 @@ type assetTable = {
   interac: Image.Source.t,
   waitcard: Image.Source.t,
   cvv: Image.Source.t,
+  camera: Image.Source.t,
 }
 
 @module("./cardIconAssets.mjs") external assets: assetTable = "cardIconAssets"
@@ -176,6 +177,23 @@ let make = (~detectedScheme: string, ~size: float=30., ~mode: brandIconMode=#sta
         />
       </Animated.View>
     : React.null
+}
+
+/*
+ * The scan-card glyph — client-core's `Icon.res` camera path, rasterised black and TINTED here, so
+ * it takes the merchant's colour exactly as `fill=primaryColor` did there. `tintColor` on a
+ * monochrome PNG is what lets one asset serve every theme without shipping a variant per colour.
+ */
+module Camera = {
+  @react.component
+  let make = (~size: float=20., ~color: string) =>
+    <Image
+      source={assets.camera}
+      resizeMode=#contain
+      tintColor=color
+      style={Style.s({width: size->Style.dp, height: size->Style.dp})}
+      accessible=false
+    />
 }
 
 module Cvc = {

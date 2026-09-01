@@ -52,6 +52,18 @@ let onCvcText = (text: string, ~brand: string): cvcChange => {
 
 type backspaceAction = [#blurSelf | #focusCardNumber | #focusExpiry | #none]
 
+/*
+ * Cardholder names are not a constrained format, so this is deliberately a pass-through: Unicode
+ * letters and marks, spaces, apostrophes and hyphens all survive, a single-word name is fine, and
+ * nothing is uppercased or normalised. Every "cleanup" beyond trimming breaks somebody's real name.
+ *
+ * It does NOT trim, and that is the point: trimming per keystroke would delete the space the
+ * customer just typed between their first and last name, making a two-word name impossible to
+ * enter. Outer whitespace is trimmed once, at the wire boundary, where it cannot fight the
+ * keyboard (`VaultConfirm.optionalEntry`).
+ */
+let onCardholderNameText = (text: string): string => text
+
 let onCardNumberBackspace = (~value: string) => value === "" ? #blurSelf : #none
 let onExpiryBackspace = (~display: string) => display === "" ? #focusCardNumber : #none
 let onCvcBackspace = (~value: string) => value === "" ? #focusExpiry : #none

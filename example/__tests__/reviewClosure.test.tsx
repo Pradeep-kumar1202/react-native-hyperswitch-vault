@@ -27,13 +27,18 @@ import {
   CardNumberWidget,
   CardExpiryWidget,
   CardCVCWidget,
-  type CardBrand,
-  type CardFormState,
   type VaultFormHandle,
-  type VaultFormState,
-  type VaultSubmitResult,
+  type VaultTokenizeResult,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+
+/*
+ * `CardBrand`, `CardFormState`, `VaultFormState` and `VaultSubmitResult` used to be imported here.
+ * All four are gone from the published surface — the first three with the state-emission removal,
+ * the fourth when `submit()` split into `tokenize()` and `confirmPayment()`. Their absence is
+ * asserted by `verify-event-surface.mjs` against the packed declarations; naming them here would
+ * only make this file fail to compile.
+ */
 
 const B = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const b64 = (i: string) => {
@@ -112,8 +117,28 @@ const invalidate = (r: Renderer, id: string, v: string) => {
 };
 
 /* The three bordered input boxes, in render order: number, expiry, cvc. */
-const boxes = (r: Renderer, height = 48) =>
-  r.root.findAll((n) => typeof n.type === 'string' && flat(n.props?.style).height === height);
+/*
+ * Selects the three CARD boxes by identity, not by position.
+ *
+ * This used to index every bordered box in render order, which broke the moment the cardholder-name
+ * field started rendering above the card number: `boxes()[0]` silently became a different field and
+ * the geometry assertions compared the wrong borders. Anchoring on the input testIDs keeps the
+ * helper correct regardless of what else the form renders around them.
+ */
+const boxes = (r: Renderer, height = 48) => {
+  const bordered = r.root.findAll(
+    (n) => typeof n.type === 'string' && flat(n.props?.style).height === height,
+  );
+  const withInput = (testID: string) =>
+    bordered.find((n) =>
+      n.findAll((c: any) => c.props?.testID === testID, {deep: true}).length > 0,
+    );
+  return [
+    withInput('CardNumberInputTestId'),
+    withInput('ExpiryInputTestId'),
+    withInput('CVCInputTestId'),
+  ].filter(Boolean) as any[];
+};
 const edges = (n: any) => {
   const s = flat(n.props.style);
   return {
@@ -488,9 +513,9 @@ describe('§7 the placeholder shares the field\'s processing and disabled state'
     type_(r, ID.number, '4242424242424242');
     type_(r, ID.expiry, '11/29');
     type_(r, ID.cvc, '123');
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultTokenizeResult>;
     ReactTestRenderer.act(() => {
-      pending = ref.current!.submit();
+      pending = ref.current!.tokenize();
     });
     /* mid-flight: the number field is filled, so read the CVC's placeholder instead */
     const dimmed = flat(by(r, ID.number).props.style).opacity;
@@ -517,101 +542,14 @@ describe('§7 the placeholder shares the field\'s processing and disabled state'
 
 /* ── §10 One canonical brand on every event surface ────────────────────────── */
 
-describe('§10 the same card produces the identical brand on every event surface', () => {
-  /* Every member of the published CardBrand union, with a PAN prefix that reaches it. */
-  const PANS: [CardBrand, string][] = [
-    ['visa', '4242424242424242'],
-    ['mastercard', '5555000000000000'],
-    ['americanExpress', '378200000000000'],
-    ['dinersClub', '3600000000000000'],
-    ['discover', '6011000000000000'],
-    ['jcb', '3528000000000000'],
-    ['cartesBancaires', '5075890000000000'],
-    ['interac', '4506000000000000'],
-    ['maestro', '5018000000000000'],
-    ['unionPay', '6280000000000000'],
-    ['rupay', '6521500000000000'],
-    ['sodexo', '6375130000000000'],
-    ['bajaj', '2030400000000000'],
-    ['unknown', ''],
-  ];
-
-  /* The five merchant event surfaces that carry a brand. */
-  const surfaces = (pan: string) => {
-    const got: Record<string, unknown> = {};
-
-    const a: unknown[] = [];
-    const r1 = mount(
-      <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberWidget onStateChange={(s) => a.push(s.brand)} />
-        <CardExpiryWidget />
-        <CardCVCWidget />
-      </HyperswitchVaultFormProvider>,
-    );
-    if (pan) type_(r1, ID.number, pan);
-    got.fieldOnStateChange = a[a.length - 1] ?? 'unknown';
-    ReactTestRenderer.act(() => r1.unmount());
-
-    const b: unknown[] = [];
-    const c: unknown[] = [];
-    const r2 = mount(
-      <HyperswitchVaultFormProvider session={session} environment="sandbox"
-        onStateChange={(s: CardFormState) => b.push(s.brand)}
-        onFormStateChange={(s: VaultFormState) => c.push(s.brand)}>
-        <CardNumberField />
-        <CardExpiryField />
-        <CardCVCField />
-      </HyperswitchVaultFormProvider>,
-    );
-    if (pan) type_(r2, ID.number, pan);
-    got.providerLegacyOnStateChange = b[b.length - 1] ?? 'unknown';
-    got.providerOnFormStateChange = c[c.length - 1] ?? 'unknown';
-    ReactTestRenderer.act(() => r2.unmount());
-
-    const d: unknown[] = [];
-    const e: unknown[] = [];
-    const r3 = mount(
-      <HyperswitchVault.CardForm session={session} environment="sandbox"
-        onStateChange={(s: CardFormState) => d.push(s.brand)}
-        onFormStateChange={(s: VaultFormState) => e.push(s.brand)} />,
-    );
-    if (pan) type_(r3, ID.number, pan);
-    got.readyMadeLegacyOnStateChange = d[d.length - 1] ?? 'unknown';
-    got.readyMadeOnFormStateChange = e[e.length - 1] ?? 'unknown';
-    ReactTestRenderer.act(() => r3.unmount());
-
-    return got;
-  };
-
-  for (const [brand, pan] of PANS) {
-    it(`${brand}: every surface agrees, exactly`, () => {
-      const got = surfaces(pan);
-      expect(got).toEqual({
-        fieldOnStateChange: brand,
-        providerLegacyOnStateChange: brand,
-        providerOnFormStateChange: brand,
-        readyMadeLegacyOnStateChange: brand,
-        readyMadeOnFormStateChange: brand,
-      });
-    });
-  }
-
-  it('the legacy surface never emits the detector display casing or an empty string', () => {
-    const seen: unknown[] = [];
-    const r = mount(
-      <HyperswitchVaultForm session={session} environment="sandbox"
-        onStateChange={(s: CardFormState) => seen.push(s.brand)} />,
-    );
-    expect(seen[seen.length - 1]).toBe('unknown');   /* was "" */
-    type_(r, ID.number, '4242424242424242');
-    expect(seen[seen.length - 1]).toBe('visa');      /* was "Visa" */
-    expect(seen).not.toContain('Visa');
-    expect(seen).not.toContain('');
-    ReactTestRenderer.act(() => r.unmount());
-  });
-});
-
-/* ── §11 The security boundary still holds ─────────────────────────────────── */
+/*
+ * §10 covered the brand reported on five state-emission surfaces. ADR-0003 removed all of them, so
+ * there is no surface left for the assertion to make and nothing to migrate it to — the block was
+ * deleted rather than weakened into a test that always passes.
+ *
+ * What the brand still DOES drive is the card-number accessory, and that behaviour keeps its own
+ * coverage in `brandIcon.test.tsx` (standard / hidden / animated / hideGeneric).
+ */
 
 describe('§11 the corrections expose no card data', () => {
   const FORBIDDEN_PROPS = [
@@ -646,8 +584,16 @@ describe('§11 the corrections expose no card data', () => {
       <HyperswitchVault.CardForm ref={ref} session={session} environment="sandbox"
         layout="stacked" fieldArrangement="fused"
         appearance={{brandIconMode: 'standard'}}
-        onFormStateChange={(s) => seen.push(s)}
-        onStateChange={(s) => seen.push(s)}
+        /*
+         * REMOVED props, passed on purpose and cast past the compiler. TypeScript rejects them —
+         * `type-tests/consumer.tsx` proves that with `@ts-expect-error` — but a plain-JavaScript
+         * caller is not bound by types, so the runtime assertion below (that `seen` stays empty)
+         * is about exactly such a caller. React forwards an unknown prop to nothing.
+         */
+        {...({
+          onFormStateChange: (s: unknown) => seen.push(s),
+          onStateChange: (s: unknown) => seen.push(s),
+        } as {})}
         fieldOptions={{
           cardNumber: {placeholder: 'Card Number', errorDisplay: 'inline'},
           expiry: {placeholder: 'Expiry', errorDisplay: 'inline'},
@@ -698,9 +644,9 @@ describe('§11 the corrections expose no card data', () => {
     /* the invalid CVC above was there to force an error message; make the form submittable again */
     type_(r, ID.cvc, '456');
 
-    let result!: VaultSubmitResult;
+    let result!: VaultTokenizeResult;
     await ReactTestRenderer.act(async () => {
-      const p = ref.current!.submit();
+      const p = ref.current!.tokenize();
       calls[0].settle({associated_payment_methods: [{payment_method_token: {data: 'tok_final'}}]});
       result = await p;
     });

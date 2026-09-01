@@ -17,6 +17,13 @@
  *             also marks it as removed. Naming a removed surface in order to say it is gone is
  *             useful to a migrating merchant; presenting it as available is the defect.
  *
+ *   ACCEPTED  decision records that are still in force. An ADR argues for a change by naming the
+ *             surface it removes, so it cannot pass the merchant-term scan and should not have to —
+ *             but it is NOT historical either, and labelling it "removed design" would misdescribe
+ *             the decision a reader is meant to follow. It is exempt from the term scan and must
+ *             instead carry an explicit `**Status:** Accepted` line near the top, so a record cannot
+ *             sit in this tier without saying it is in force.
+ *
  *   HISTORICAL decision and investigation records (ADRs, the styling spike). These legitimately
  *             describe designs that no longer exist, so they are exempt from the term scan — but
  *             only if they carry an explicit "Historical / removed design" marker near the top, so
@@ -47,6 +54,12 @@ const CURRENT = [
   'docs/manual-device-checklist.md',
   'docs/public-api-baseline.md',
   'docs/followup-sdk-utils-card-validation.md',
+  /*
+   * The parity inventory NAMES the surfaces it replaced — that is its whole job — so it lives in
+   * the CURRENT tier and relies on the removal-marker rule: each row says what happened to the
+   * feature, which is exactly the framing the scan requires.
+   */
+  'docs/cardelement-parity-inventory.md',
 ];
 
 /* Decision and investigation records. Exempt from the term scan, but must be marked. */
@@ -58,6 +71,14 @@ const HISTORICAL = [
 
 const HISTORICAL_MARKER = /Historical \/ removed design/;
 
+/* Decision records still in force. Exempt from the term scan; must declare their status. */
+const ACCEPTED = [
+  'docs/adr/0003-remove-state-emission-and-own-final-confirmation.md',
+  'docs/adr/0004-library-owns-every-new-card-flow.md',
+  'docs/adr/0005-restore-card-safe-state-emission.md',
+];
+const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
+
 /*
  * Terms that name a removed surface or a removed contract. `/vault-session` is a merchant's own
  * backend endpoint in the examples and is not this package's subpath, so the patterns require a
@@ -67,7 +88,13 @@ const FORBIDDEN = [
   ['the /vault subpath', /(?<![\w-])\/vault(?![\w-])/],
   ['the /embedded subpath', /(?<![\w-])\/embedded(?![\w-])/],
   ['controlled fields', /controlled[ -](card )?field/i],
-  ['client-core', /client-core/i],
+  /*
+   * `client-core` was forbidden while the package was merchant-only and had no business naming its
+   * other consumer. ADR-0003 made the client-core payment confirmation an explicitly supported flow
+   * (Flow 2), so the docs must now describe it by name. `verify-flow-docs.mjs` enforces the thing
+   * that actually matters — that Flow 2 is never documented as returning a token, and Flow 1 never
+   * as confirming a payment.
+   */
   ['caller-supplied card details', /accepts raw card details|takes a `?cardDetails|supply(ing)? raw card|pass(es|ing)? (in )?(the )?card (number|values|details)/i],
 ];
 
@@ -192,12 +219,25 @@ for (const file of HISTORICAL) {
   check(HISTORICAL_MARKER.test(head), `${file} carries the "Historical / removed design" marker near the top`);
 }
 
+console.log('\nAccepted decision records declare their status');
+
+for (const file of ACCEPTED) {
+  const full = path.join(root, file);
+  if (!existsSync(full)) {
+    check(false, `${file} exists`);
+    continue;
+  }
+  const head = readFileSync(full, 'utf8').split('\n').slice(0, 12).join('\n');
+  check(ACCEPTED_MARKER.test(head), `${file} declares "**Status:** Accepted" near the top`);
+  check(!HISTORICAL_MARKER.test(head), `${file} is not also labelled historical`);
+}
+
 console.log('\nEvery document is classified');
 
 const allDocs = ['README.md', ...walk(path.join(root, 'docs')).map((f) => path.relative(root, f))]
   .filter((f) => f.endsWith('.md'))
   .sort();
-const classified = new Set([...CURRENT, ...HISTORICAL]);
+const classified = new Set([...CURRENT, ...ACCEPTED, ...HISTORICAL]);
 const unclassified = allDocs.filter((f) => !classified.has(f));
 check(
   unclassified.length === 0,

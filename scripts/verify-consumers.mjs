@@ -314,6 +314,7 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     ['CardNumber', 'CardNumberField'],
     ['Expiry', 'CardExpiryField'],
     ['CVC', 'CardCVCField'],
+    ['CardholderName', 'CardholderNameField'],
   ];
 
   check(
@@ -356,6 +357,8 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     'CardExpiryWidget',
     'CardNumberField',
     'CardNumberWidget',
+    'CardholderNameField',
+    'CardholderNameWidget',
     'HyperswitchVault',
     'HyperswitchVaultForm',
     'HyperswitchVaultFormProvider',

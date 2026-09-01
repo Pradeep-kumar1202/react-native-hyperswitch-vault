@@ -20,6 +20,7 @@ import { make as HyperswitchVaultFormProviderImpl } from './HyperswitchVaultForm
 import { make as CardNumberWidgetImpl } from './CardNumberWidget.bs.js';
 import { make as CardExpiryWidgetImpl } from './CardExpiryWidget.bs.js';
 import { make as CardCVCWidgetImpl } from './CardCVCWidget.bs.js';
+import { make as CardholderNameWidgetImpl } from './CardholderNameWidget.bs.js';
 
 /* Existing published names — unchanged, not deprecated. */
 export const HyperswitchVaultForm = HyperswitchVaultFormImpl;
@@ -27,11 +28,13 @@ export const HyperswitchVaultFormProvider = HyperswitchVaultFormProviderImpl;
 export const CardNumberWidget = CardNumberWidgetImpl;
 export const CardExpiryWidget = CardExpiryWidgetImpl;
 export const CardCVCWidget = CardCVCWidgetImpl;
+export const CardholderNameWidget = CardholderNameWidgetImpl;
 
 /* Canonical field names (ADR-0002 §1) — the same component objects. */
 export const CardNumberField = CardNumberWidgetImpl;
 export const CardExpiryField = CardExpiryWidgetImpl;
 export const CardCVCField = CardCVCWidgetImpl;
+export const CardholderNameField = CardholderNameWidgetImpl;
 
 /* Convenience namespace (ADR-0002 §2). */
 export const HyperswitchVault = {
@@ -40,4 +43,5 @@ export const HyperswitchVault = {
   CardNumber: CardNumberWidgetImpl,
   Expiry: CardExpiryWidgetImpl,
   CVC: CardCVCWidgetImpl,
+  CardholderName: CardholderNameWidgetImpl,
 };

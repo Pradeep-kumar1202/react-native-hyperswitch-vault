@@ -79,6 +79,10 @@ type cardNumberOptions = {
 @genType
 type expiryOptions = fieldOptions
 
+/* No brand artwork and no CVC glyph — a name field has neither. */
+@genType
+type cardholderNameOptions = fieldOptions
+
 @genType
 type cvcOptions = {
   placeholder?: string,
@@ -98,6 +102,7 @@ type formFieldOptions = {
   cardNumber?: cardNumberOptions,
   expiry?: expiryOptions,
   cvc?: cvcOptions,
+  cardholderName?: cardholderNameOptions,
 }
 
 /*
@@ -108,6 +113,39 @@ type formFieldOptions = {
  * borders are separate". There was no way to ask for three stacked fields, which is now the
  * default. One source of truth, two independent questions.
  */
+
+/*
+ * WHO COLLECTS THE CARDHOLDER NAME, AND WHERE ITS VALUE COMES FROM.
+ *
+ * Three modes, because there are genuinely three arrangements and collapsing any two of them loses
+ * something:
+ *
+ *   #collect   The library renders its own bare input and uses what was typed into it. The default,
+ *              because a merchant placing one component expects a complete card form.
+ *
+ *   #"external"  The library renders NO name field, and the value arrives on the confirm input as
+ *              `cardholderName`. This is for a host that already owns a cardholder-name field —
+ *              client-core does, with its own validation, localisation and error timing — and
+ *              whose field must stay the one on screen.
+ *
+ *   #omit      The library renders no name field and sends no name at all. For a host whose
+ *              configuration simply does not ask for one.
+ *
+ * `#"external"` and `#omit` look identical on screen and differ entirely in what is sent, which is
+ * why they are separate: a host that means "I will supply it" and one that means "there is none"
+ * must not be spelled the same way, or a missing value silently becomes an omitted one.
+ *
+ * Neither renders a hidden field. A `display: none` input is still mounted, still focusable, and
+ * still announced by a screen reader as a second name field — which is the bug this exists to
+ * prevent, not a cosmetic detail.
+ */
+/*
+ * `#"external"` is quoted because `external` is a ReScript keyword. The quoting is syntax only —
+ * the runtime value is the plain string `"external"`, which is what the published TypeScript union
+ * and every caller sees.
+ */
+@genType
+type cardholderNameMode = [#collect | #"external" | #omit]
 
 @genType
 type formLayout = [#stacked | #inline]
@@ -199,6 +237,13 @@ let resolveExpiry = (options: option<expiryOptions>) =>
     ~defaultTestID=CardTestIds.expiryInputTestId,
   )
 
+let resolveCardholderName = (options: option<cardholderNameOptions>) =>
+  resolveField(
+    options,
+    ~defaultAccessibilityLabel="Cardholder name",
+    ~defaultTestID=CardTestIds.cardholderNameInputTestId,
+  )
+
 let resolveCvc = (options: option<cvcOptions>) =>
   resolveWith(
     ~placeholder=options->Option.flatMap(o => o.placeholder),
@@ -236,3 +281,6 @@ let cardNumberOf = (options: option<formFieldOptions>) =>
 let expiryOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.expiry)
 
 let cvcOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.cvc)
+
+let cardholderNameOf = (options: option<formFieldOptions>) =>
+  options->Option.flatMap(o => o.cardholderName)

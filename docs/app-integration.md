@@ -1,27 +1,48 @@
 # App integration
 
-Everything the app side needs to collect and tokenize a card with
-`@juspay-tech/react-native-hyperswitch-vault`, for both supported layouts:
+Everything the app side needs to collect a card with
+`@juspay-tech/react-native-hyperswitch-vault`.
 
-- **Flow A — ready-made form.** One component renders all three card fields. Fastest path.
-- **Flow B — custom layout.** You place three field widgets yourself, anywhere in your own screen.
+## The three flows
 
-Both flows share the same session, the same submit call, the same result type and the same
-guarantees.
+The library supports exactly three flows. **All three render the library's own card fields**: the
+PAN, expiry, CVC and cardholder name belong to the library in every one of them. What differs is
+what the library then does with those values, and therefore what crosses the public boundary. Pick
+one deliberately; they are not interchangeable.
+
+| | Requests the library makes | What the caller receives | Operation |
+|---|---|---|---|
+| **Flow 1 — standalone merchant tokenization** | tokenize | a payment-method token | `tokenize()` |
+| **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` |
+| **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` |
+
+Flows 2 and 3 are the SAME operation with a different `cardSource`. The source is required and has
+no default — whether a customer's card is tokenized and saved is not a thing to infer from which
+other arguments happened to be passed.
+
+Two layout styles are available to all three flows:
+
+- **Ready-made form.** One component renders every card field. Fastest path.
+- **Custom layout.** You place the field widgets yourself, anywhere in your own screen.
+
+Both share the same session, the same operations, the same result types and the same guarantees.
 
 ## Read this first
 
-- **This release collects and tokenizes a new card.** That is its entire job.
-- **Saved-card flows are not covered.** Listing, selecting, updating or deleting a previously
-  saved card is not implemented in this package. See [section 9](#9-what-to-do-with-the-token).
-- **Choose one integration style per card-form instance.** A single card form is either Flow A or
-  Flow B, never both.
-- **Multiple providers may exist on one screen**, and each is independent — but every widget
-  belongs to exactly one provider, and each provider needs its own session.
+- **This release collects a new card.** Listing, selecting, updating or deleting a previously saved
+  card is not implemented in this package.
+- **Choose one integration style per card-form instance.** A single card form is either ready-made
+  or custom, never both.
+- **Multiple providers may exist on one screen**, and each is independent — but every widget belongs
+  to exactly one provider, and each provider needs its own session.
+- **The library reports state as the customer types, and never values.** `onStateChange` per field
+  and `onFormStateChange` for the form carry validity, completeness, focus, touched and the visible
+  message — no PAN, no BIN, no last four, no length (see
+  [ADR-0005](adr/0005-restore-card-safe-state-emission.md)). Pass no callback and the library derives
+  nothing at all, which is exactly what it cost before the callbacks existed.
 
 The backend endpoint that produces a session is **not** covered here — see
-[merchant-integration.md](merchant-integration.md#2-the-server). This document assumes you already
-have it.
+[merchant-integration.md](merchant-integration.md#2-the-server). This document assumes you have it.
 
 ---
 
@@ -37,17 +58,17 @@ npm install @juspay-tech/react-native-hyperswitch-vault
 | `react` | `>=19.0.0 <20.0.0` |
 | `react-native` | `>=0.79.0 <0.80.0` |
 
-> **Pre-release:** the package is not on the public npm registry yet. Until it is, install the
-> packed tarball you were given:
-> `npm install ./juspay-tech-react-native-hyperswitch-vault-<version>.tgz`.
-> Nothing else in this document changes.
-
 **No native step.** The package is pure JavaScript: no native module, no `pod install`, no Codegen,
 no autolinking, no `react-native.config.js` entry.
 
 This package has **no form library**. It declares only `react` and `react-native` as peers, and its
-card fields are controlled views whose state it owns internally. You do not install, configure or
-interact with a form library to use it.
+card fields are controlled views whose state it owns internally.
+
+> **Linked or portal installs:** a linked package resolves its own peer dependencies from its own
+> directory, which can put a second copy of React in your bundle. The symptom is a null hook
+> dispatcher (`Cannot read properties of null (reading 'useMemo')`) at render, not a resolution
+> error. Alias `react`, `react-dom` and `react-native`/`react-native-web` to single absolute paths
+> in your bundler config.
 
 ---
 
@@ -62,484 +83,458 @@ import type {MerchantSession} from '@juspay-tech/react-native-hyperswitch-vault'
 const session: MerchantSession = await fetch(`${YOUR_BACKEND}/vault-session`).then(r => r.json());
 ```
 
-The session is **JSON**. Only `vault_details.vault_type` and
-`vault_details.vault_data.sdk_authorization` are read; every other field your backend returns is
-carried through and ignored. The `sdk_authorization` value inside that JSON is a **Base64-encoded**
+Only `vault_details.vault_type` and `vault_details.vault_data.sdk_authorization` are read; every
+other field is carried through and ignored. The `sdk_authorization` value is a **Base64-encoded**
 string — which is precisely why nothing in your app should decode or inspect it.
 
 Rules:
 
-- A session belongs to **one Payment Method Session — one vault attempt.** Create a new one for a
-  new attempt rather than holding one open or reusing it.
-- Keep it in component state. Never persist it (AsyncStorage, Redux persist, disk). It is a
-  short-lived credential.
+- A session belongs to **one Payment Method Session — one vault attempt.** Create a new one per
+  attempt rather than holding one open or reusing it.
+- Keep it in component state. Never persist it (AsyncStorage, Redux persist, disk).
 - Never log it, render it, or decode it.
-- After an `unknown_outcome` result, **reconcile the previous attempt server-side before creating
-  or submitting another one** — see [section 5](#5-the-result).
+- After an `unknown_outcome` result, **reconcile the previous attempt server-side** before creating
+  or submitting another one.
 
 `environment` must match the environment your backend created the session in:
 
-```ts
-type VaultEnvironment = 'production' | 'sandbox' | 'integration';
-```
-
-| `environment` | Vault host |
-| --- | --- |
-| `production` | `checkout.hyperswitch.io` |
-| `sandbox` | `beta.hyperswitch.io` |
-| `integration` | `dev.hyperswitch.io` |
+| `environment` | vault host |
+|---|---|
+| `"sandbox"` | `https://beta.hyperswitch.io/api` |
+| `"integration"` | `https://dev.hyperswitch.io/api` |
+| `"production"` | `https://checkout.hyperswitch.io/api` |
 
 ---
 
-## 3. Flow A — ready-made form
+## 3. Flow 1 — standalone merchant tokenization
 
-`sendTokenToYourBackend` and `showError` below are **your** functions, written by you for this
-example. They are not exported by the package.
+You collect a card, get a token, and your own backend charges it whenever you choose.
+
+```
+library fields → PMS confirm → {status: 'success', token}
+```
 
 ```tsx
 import {useRef, useState} from 'react';
-import {Button} from 'react-native';
+import {Button, View} from 'react-native';
 import {
   HyperswitchVaultForm,
-  type CardFormState,
-  type HyperswitchVaultFormHandle,
+  type VaultFormHandle,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
-function SaveCard({session}: {session: MerchantSession}) {
-  const formRef = useRef<HyperswitchVaultFormHandle>(null);
-  const [card, setCard] = useState<CardFormState | null>(null);
+export function SaveCard({session}: {session: MerchantSession}) {
+  const formRef = useRef<VaultFormHandle>(null);
+  const [busy, setBusy] = useState(false);
 
   const save = async () => {
-    const result = await formRef.current?.submit();
-    if (!result) return;
-    if (result.status === 'success') {
-      await sendTokenToYourBackend(result.token);   // your function — see section 9
-    } else {
-      showError(result.error.message);              // your function — see section 5
+    setBusy(true);
+    const result = await formRef.current?.tokenize();
+    setBusy(false);
+
+    if (result?.status === 'success') {
+      await sendToYourBackend(result.token);   // never store or display it in the app
+    } else if (result) {
+      showMessage(result.error.message);
     }
   };
 
   return (
-    <>
-      <HyperswitchVaultForm
-        ref={formRef}
-        session={session}
-        environment="sandbox"
-        onStateChange={setCard}
-      />
-      <Button title="Save card" onPress={save} disabled={!card?.complete} />
-    </>
+    <View>
+      <HyperswitchVaultForm ref={formRef} session={session} environment="sandbox" />
+      <Button title="Save card" onPress={save} disabled={busy} />
+    </View>
   );
 }
 ```
 
-### Props
+`tokenize()` takes no arguments. It exchanges the card for a token and stops; nothing is charged.
 
-| Prop | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `session` | `MerchantSession` | yes | See section 2. |
-| `environment` | `VaultEnvironment` | yes | See section 2. |
-| `appearance` | `VaultFormAppearance` | no | See section 6. |
-| `localisation` | `VaultFormLocalisation` | no | See section 7. |
-| `fieldOptions` | `VaultFormFieldOptions` | no | which visual elements each field renders. With none, the form is three empty neutral inputs. |
-| `layout` | `"stacked" \| "inline"` | no | `"stacked"` (default) gives each field its own row; `"inline"` puts expiry and CVC side by side. |
-| `fieldArrangement` | `"separate" \| "fused"` | no | `"separate"` (default) gives each field its own bordered box; `"fused"` joins them. |
-| `disabled` | `boolean` | no | Makes the inputs non-interactive. |
-| `accessible` | `boolean` | no | Passed to each `TextInput`. |
-| `onStateChange` | `(state: CardFormState) => void` | no | See section 8. |
+### The tokenize result
+
+```ts
+type VaultTokenizeResult =
+  | {status: 'success';          token: string}
+  | {status: 'validation_error'; error: SafeVaultError}
+  | {status: 'not_ready';        error: SafeVaultError}
+  | {status: 'error';            error: SafeVaultError};
+```
+
+**This is the only published type with a `token`.** `validation_error` and `not_ready` are returned
+without any network request.
 
 ---
 
-## 4. Flow B — custom layout
+## 4. Flow 2 — client-core payment confirmation
 
-Wrap your screen in `HyperswitchVaultFormProvider` and place the three widgets wherever your design
-puts them. Your own components can sit between them; nesting inside your Views and fragments is
-fine.
+The library performs both calls and hands back what to do next. This is the flow the Hyperswitch
+payment sheet uses.
+
+```
+library fields → PMS confirm → internal token → final payment confirm → navigation result
+```
+
+The intermediate token stays inside the library. It is not returned, not published, and not readable
+through any handle — `VaultPaymentResult` has no `token` member, so this is a property of the type
+rather than a promise in prose.
 
 ```tsx
-import {useRef, useState} from 'react';
-import {Button, Text, TextInput, View} from 'react-native';
-import {
-  HyperswitchVaultFormProvider,
-  CardNumberWidget,
-  CardExpiryWidget,
-  CardCVCWidget,
-  type CardFormState,
-  type HyperswitchVaultFormHandle,
-  type MerchantSession,
-} from '@juspay-tech/react-native-hyperswitch-vault';
+const result = await formRef.current!.confirmPayment({
+  paymentId: 'pay_123',
+  sdkAuthorization: intentCredential,       // the PAYMENT-INTENT credential
+  paymentMethodType: 'credit',
+  paymentMethodData: {billing: {email: 'ada@example.com'}, nickName: 'Travel card'},
+  browserInfo: {userAgent, colorDepth: 32, javaEnabled: true},
+  returnUrl: 'myapp://return',
+});
 
-function SaveCard({session}: {session: MerchantSession}) {
-  const formRef = useRef<HyperswitchVaultFormHandle>(null);
-  const [card, setCard] = useState<CardFormState | null>(null);
-  const [plate, setPlate] = useState('');
-
-  const save = async () => {
-    const result = await formRef.current?.submit();
-    if (!result) return;
-    if (result.status === 'success') {
-      await sendTokenToYourBackend(result.token);   // your function — see section 9
-    } else {
-      showError(result.error.message);              // your function — see section 5
-    }
-  };
-
-  return (
-    <HyperswitchVaultFormProvider
-      ref={formRef}
-      session={session}
-      environment="sandbox"
-      onStateChange={setCard}>
-      <Text>Card number</Text>
-      <CardNumberWidget />
-
-      {/* your own field, your own state — the SDK never sees it */}
-      <Text>Number plate</Text>
-      <TextInput value={plate} onChangeText={setPlate} />
-
-      {/* the row is yours: give each widget a flex:1 View of your own */}
-      <View style={{flexDirection: 'row', gap: 12}}>
-        <View style={{flex: 1}}>
-          <CardExpiryWidget />
-        </View>
-        <View style={{flex: 1}}>
-          <CardCVCWidget />
-        </View>
-      </View>
-
-      <Button title="Save card" onPress={save} disabled={!card?.complete} />
-    </HyperswitchVaultFormProvider>
-  );
+switch (result.status) {
+  case 'succeeded': return done();
+  case 'processing': return showPending();
+  case 'requires_customer_action': return drive(result.nextAction);
+  default: return showMessage(result.error.message);
 }
 ```
 
-Widgets have no width of their own — they fill their parent. Sizing and spacing come from the
-Views you wrap them in.
+### The two credentials are not interchangeable
 
-### Provider props
+| | Credential | Source | Used by |
+|---|---|---|---|
+| Call 1 | vault `sdk_authorization` | inside `cardSource.session`'s `vault_details` | the library only |
+| Call 2 | payment-intent `sdkAuthorization` | the `confirmPayment` input | the library only |
 
-Identical to Flow A **except**: `children` is required, and there is no `layout` or `fieldArrangement` — layout
-is yours.
+You supply the second because you own the payment intent. You never see the first — you hand over
+the session it lives in, and the library decodes it.
 
-| Prop | Type | Required |
-| --- | --- | --- |
-| `session` | `MerchantSession` | yes |
-| `environment` | `VaultEnvironment` | yes |
-| `children` | `React.ReactNode` | yes |
-| `appearance` | `VaultFormAppearance` | no |
-| `localisation` | `VaultFormLocalisation` | no |
-| `disabled` | `boolean` | no |
-| `accessible` | `boolean` | no |
-| `onStateChange` | `(state: CardFormState) => void` | no |
+Flow 3 uses only the second: there is no call 1 and no vault credential in that flow.
 
-### Widget rules
-
-These are enforced, not advisory:
-
-1. **All three widgets are mandatory.** `CardNumberWidget`, `CardExpiryWidget` and `CardCVCWidget`
-   must each be mounted. The vault call needs number, expiry and CVC.
-2. **Exactly one instance of each, per provider.** Two of the same widget under one provider is
-   refused.
-3. If a widget is missing or duplicated, `submit()` returns `status: 'not_ready'` with a message
-   naming the widget, and **makes no network request**. Nothing is written to the console.
-4. A widget rendered outside a provider **throws** while rendering, with a message naming the
-   widget. This is the only throw in the API; it is a wiring mistake, so it fails loudly in
-   development rather than silently at payment time.
-5. Widgets take **no props** in this release — no `style`, no `textStyle`, no per-widget events, no
-   field names, no custom validators. They inherit `appearance`, `localisation`, `accessible` and
-   `disabled` from their provider. Wrap a widget in your own `View` to position or space it.
-6. There is no `CardHolderWidget`. Collect a cardholder name as your own field if you need one; it
-   is not part of the vault request.
-
-### Placement is free, order is semantic
-
-Put the widgets in any visual arrangement. Focus auto-advance always follows **number, then expiry,
-then CVC**, regardless of where they sit on screen; if the next widget is not mounted, the advance
-is a no-op. Backspace on an empty CVC returns to the expiry field, and on an empty expiry returns to
-the card number.
-
----
-
-## 5. The result
-
-**Every documented operational outcome** — validation failure, a missing or duplicated widget, an
-invalid session, an HTTP failure, a malformed response and an unknown request outcome — resolves
-through the returned discriminated union rather than as an exception. Raw backend failures are not
-thrown to your code. Handle all four branches.
-
-A success carries **the token and nothing else**: no brand, no BIN, no last four, no expiry, no card
-object, no raw transport response. If you need masked card details for a confirmation screen, read
-them from your own backend after you store the token.
+### The payment result
 
 ```ts
-type VaultSubmitResult =
-  | {status: 'success'; token: string}
+type VaultPaymentResult =
+  | {status: 'succeeded'}
+  | {status: 'processing'}
+  | {status: 'requires_customer_action'; nextAction: VaultNextAction}
+  | {status: 'failed';           error: SafeVaultError}
   | {status: 'validation_error'; error: SafeVaultError}
-  | {status: 'not_ready'; error: SafeVaultError}
-  | {status: 'error'; error: SafeVaultError};
-
-type SafeVaultError = {code: SafeVaultErrorCode; message: string};
-type SafeVaultErrorCode =
-  | 'invalid_session'
-  | 'invalid_card_data'
-  | 'not_ready'
-  | 'server_error'
-  | 'unknown_outcome';
+  | {status: 'not_ready';        error: SafeVaultError};
 ```
 
-| `status` | `error.code` | What happened |
-| --- | --- | --- |
-| `success` | not applicable | The card was tokenized. `token` is a short-lived Payment Method Token — see section 9. |
-| `validation_error` | `invalid_card_data` | The card failed validation. Inline messages are already shown on the fields. |
-| `not_ready` | `not_ready` | Fields have not registered yet, or in Flow B a required widget is missing or duplicated. |
-| `error` | `invalid_session` | No `vault_details`, an unsupported `vault_type`, or a missing, blank or undecodable `sdk_authorization`. |
-| `error` | `server_error` | The vault rejected the request or returned something unusable. |
-| `error` | `unknown_outcome` | The request may or may not have reached the vault — a thrown fetch, a timeout, or an abort landing after the server had already processed it. |
+`nextAction.type_` is one of `three_ds_invoke`, `third_party_sdk_session_token`,
+`display_bank_transfer_information`, `invoke_ddc` or `redirect_to_url`, with optional
+`redirectUrl`, `threeDs`, `ddc` and `sessionToken` payloads. Only allowlisted navigation fields are
+carried; a confirm response's `payment_method_data.card` is never read.
 
-### What to do about each
+### Host input is non-card only, and fails closed
 
-- **`invalid_card_data`** — the customer corrects the card and submits again. No new session
-  needed.
-- **`not_ready`** — safe to call again once the form is ready. In Flow B, fix the layout so exactly
-  one of each widget is mounted.
-- **`invalid_session`** — a configuration fault, not a transient one. **Verify and fix the
-  `vault_details` configuration** behind the session. Fetching another identical session is not a
-  solution; it will fail the same way.
-- **`server_error`** — **there is no automatic retry, and none is performed for you.** Whether a
-  fresh, explicit attempt is safe is a backend and product policy decision. Decide it deliberately.
-- **`unknown_outcome`** — **requires server-side reconciliation.** The card may already have been
-  tokenized. Reconcile that previous attempt before creating or submitting another one, and never
-  retry blindly.
+`paymentMethodData` accepts exactly `billing` and `nickName`. A card key anywhere inside it, at any
+depth — `card`, `card_number`, `cardNumber`, `cvc`, `expiryMonth`, `cardHolderName`, `bin`, `last4`,
+`payment_token`, `vault_card`, and the rest — fails the whole call with `forbidden_card_data` and
+sends **no network request**. Nothing is silently stripped: a caller trying to hand the library a
+PAN has an integration bug, and hiding it would not fix it.
 
-`error.message` is a fixed, safe string. It never contains a card value, a backend message, a
-session identifier or anything decoded from the authorization. Show it, or substitute your own copy
-keyed off `error.code`.
+`nickName` names the saved card and is sent on call 1 only.
+
+### Who collects the cardholder name
+
+Three arrangements, chosen with `cardholderName` on the form:
+
+| Mode | The library renders | Value comes from |
+|---|---|---|
+| `'collect'` *(default)* | its own bare input | what the customer typed into it |
+| `'external'` | **nothing** | the `cardholderName` member of the confirm input |
+| `'omit'` | **nothing** | nowhere — no name is sent |
+
+```tsx
+/* Default: the library collects it. */
+<HyperswitchVaultForm environment="sandbox" />
+
+/* Your screen owns the field; you supply the validated value at confirm time. */
+<HyperswitchVaultForm environment="sandbox" cardholderName="external" />
+```
+
+```ts
+await formRef.current!.confirmPayment({
+  cardSource: {type_: 'direct'},
+  paymentId, sdkAuthorization,
+  cardholderName: nameFromYourOwnField,   // 'external' only
+});
+```
+
+`'external'` and `'omit'` look identical on screen and differ entirely in what is sent. They are
+separate on purpose: *"I will supply it"* and *"there is none"* must not be spelled the same way, or
+a value you forgot to pass becomes a name silently dropped.
+
+**Why `'external'` exists.** A host with its own dynamic form has its own cardholder-name field —
+with its own validation, localised messages and error timing. Replacing that with the library's
+bare input would throw all of it away; rendering both asks the customer for one name twice, from two
+components that cannot see each other. `'external'` keeps your field and your validation, and moves
+only the validated string.
+
+`cardholderName` is the **one** card value a host may pass into the library, and it is a member of
+its own for that reason. It is not reachable through `paymentMethodData`, which stays non-card and
+still rejects `card`, `card_holder_name`, `cardHolderName` and every other card key at any depth.
+
+Supplying it in `'collect'` or `'omit'` is a configuration error — `unsupported_configuration`, with
+no request. It is never resolved by precedence: a host with two names cannot tell which was sent.
+Omitting it in `'external'` is fine and means the customer left an optional field blank.
+
+Nothing comes back. The library attaches the name to `payment_method_data.card.card_holder_name` on
+a direct confirm, and to the card object of the tokenization request on a vault one, and never
+returns, emits or logs it.
+
+**The library's own field is deliberately bare.** In `'collect'` it is a plain uncontrolled input:
+empty and optional, no visible label, no placeholder, no validation, no error message, no icon. It
+keeps an internal accessibility label, trims outer whitespace only when the request is built, and
+omits `card_holder_name` entirely when blank. Merchant-configurable validation and messages are not
+implemented yet.
+
+In a custom layout, `<CardholderNameField />` renders only where you place it — leaving it out is
+already supported, and a confirmation succeeds without it.
+
+### Co-badged cards
+
+When the typed number matches more than one network you accept, the card-number field's accessory
+becomes a chooser. The customer's pick decides which network the payment is routed over, and it
+reaches every flow that sends a card:
+
+| | Where the choice lands |
+|---|---|
+| `tokenize()` | `payment_method_data.card.card_network` on the tokenization request |
+| `cardSource: vault` | the same field on the tokenization request; the saved card records it |
+| `cardSource: direct` | `payment_method_data.card.card_network` on the payment confirm |
+
+Supply `enabledCardSchemes` to narrow what may be offered and to enable the "card not supported"
+rule. With one acceptable network left there is no choice to make and no chooser appears.
+
+Nothing about the selection is published — there is no callback and no way to read it back.
+
+### Other inputs
+
+| Input | Notes |
+|---|---|
+| `cardSource` | **Required.** `{type_: 'vault', session, confirmTokenMode?}` tokenizes first; `{type_: 'direct'}` does not. A direct source carrying `session` or `confirmTokenMode` is rejected with `unsupported_configuration` and no request — it describes a caller who believes the card is being saved when it is not. |
+| `cardSource.confirmTokenMode` | Vault source only. `'payment_token'` (default) sends the token top-level; `'vault_card'` puts it in `payment_method_data.vault_card` for processors that expect that shape. |
+| `paymentMethodType` | `'credit'` (default) or `'debit'`. |
+| `paymentType` | `'new_mandate'` or `'setup_mandate'`. Omit for a normal payment. |
+| `customerAcceptance` | `{acceptanceType: 'online' \| 'offline', acceptedAt, online: {userAgent}}`. |
+| `browserInfo` | scalars only; the library has no device access, so the host supplies them. |
+| `returnUrl`, `email` | passed through. |
+| `eligibilityRequired` | `true` makes the library run the backend eligibility check itself, with the PAN it owns, before confirming. A denial returns `card_not_eligible` and confirms nothing. A transport failure resolves to *allowed*, reproducing the existing behaviour — eligibility is a routing preference, and the backend still refuses an ineligible card at confirm time. |
+| `appId` | Non-card. Reproduces the `x-app-id` header on the eligibility call. |
+| `cardholderName` | `'collect'` (default) or `'omit'`. A form prop, not a confirm input — see above. |
+| `enabledCardSchemes` | A form prop. The networks you accept; drives the co-badge chooser and the unsupported-card rule. |
+| `endpoint` | `{baseUrl}` overrides the FINAL confirm host only. Validated: https required, except `http://localhost` and `http://10.0.2.2` in sandbox/integration; credentials, path, query and fragment are rejected. Invalid values fail with `unsupported_configuration` and no request. |
 
 ---
 
-## 6. Appearance
+### Eligibility
 
-One optional object, applied at the form or provider level. Every field is optional and falls back
-to the built-in default.
+Set `eligibilityRequired: true` when the payment has a backend eligibility step. The library makes
+the call itself, with the PAN it owns, and gates the confirmation on the answer.
 
-| Key | Type | Applies to |
-| --- | --- | --- |
-| `primaryColor` | `string` | focus and active accent, CVC hint glyph |
-| `textColor` | `string` | input text |
-| `errorColor` | `string` | error text and invalid border |
-| `placeholderColor` | `string` | placeholder and floating label |
-| `backgroundColor` | `string` | input background |
-| `borderColor` | `string` | input border and dividers |
-| `borderRadius` | `number` | input corners |
-| `borderWidth` | `number` | input border |
-| `fontFamily` | `string` | all text in the fields |
-| `inputHeight` | `number` | input height |
-| `gap` | `number` | space between fields in split layout, and below the field block |
-| `fontScale` | `number` | multiplies every font size |
-| `placeholderTextSizeAdjust` | `number` | added to placeholder and label size before scaling |
-| `errorTextSizeAdjust` | `number` | added to the 12pt error size before scaling |
-| `errorMessageSpacing` | `number` | space between a field and its error |
-| `brandIconMode` | `VaultFormBrandIconMode` | form-wide default for the card brand mark |
+| Backend answer | Result |
+|---|---|
+| `sdk_next_action.next_action` is `"deny"`, or an object with a `deny` key | `failed` / `card_not_eligible`, and **no** confirmation request |
+| any other action | the confirmation proceeds |
+| a transport failure, a 5xx, an unreadable body, no `sdk_next_action` | the confirmation proceeds |
+
+**That last row is deliberate, and it is the one place the library fails open.** Eligibility is a
+merchant routing preference, not an authorization control, and the backend still refuses an
+ineligible card at confirm time — so a dropped packet must not become a declined checkout. It
+reproduces a decision already made in client-core (`94b89ee`, *"allowing the payment for all the
+cases and blocking for deny"*), which changed this behaviour **from** fail-closed **to** fail-open
+because failing closed was rejecting payments merchants wanted taken.
+
+Passing the optional `eligibility` prop additionally runs the check as the customer finishes typing,
+so the "card not accepted" message appears inline. That prop only changes WHEN the check happens;
+`confirmPayment` re-checks regardless.
+
+### Retries, and what is never retried
+
+| Situation | What the library does |
+|---|---|
+| Two confirmations in flight at once | the second returns the same promise; one sequence, one set of requests |
+| The other operation while one is pending | refused with `not_ready`, and no request |
+| Tokenization succeeded, the payment confirm failed definitively | a retry re-runs **only** the payment confirm — the token is reused |
+| The payment confirm returned an unknown outcome | `failed` / `unknown_outcome`, and **never** retried automatically |
+| The card is edited, `reset()` is called, the session changes, or the form unmounts | any cached token is discarded |
+
+The reason the token is reused rather than re-minted: the payment-method-session confirm is **not
+idempotent**. It accepts no idempotency key, nothing refuses a second confirm of the same session,
+and each confirm stores another payment method. Re-minting on retry would vault one card twice.
+
+An `unknown_outcome` means the request may already have been processed and there is no idempotency
+key on that endpoint either — so the decision to retry is yours, with whatever context you have.
+
+### Unsupported configuration
+
+`failed` / `unsupported_configuration` means the request was never sent, and the reason is the
+integration rather than the card or the customer:
+
+- a `cardSource: direct` carrying a `session` or a `confirmTokenMode`;
+- a `cardSource: direct` on a form mounted **with** a usable vault session — the mount says
+  "tokenize this card" and the call says "do not", and the library will not pick one for you;
+- an `endpoint.baseUrl` that fails validation.
+
+## 5. Flow 3 — vault disabled
+
+When the merchant profile does not ask for tokenization, **the library still renders the card fields
+and still makes the payment confirmation**. Nothing is tokenized: the card values the library holds
+go straight into `payment_method_data.card`, in one request, and no token exists at any point.
+
+```tsx
+/* No `session` prop — there is no vault session in this flow. */
+<HyperswitchVaultForm ref={formRef} environment="sandbox" />
+```
 
 ```ts
-type VaultFormBrandIconMode = 'standard' | 'animated' | 'hidden' | 'hideGeneric';
+const result = await formRef.current!.confirmPayment({
+  cardSource: {type_: 'direct'},
+  paymentId: 'pay_123',
+  sdkAuthorization: intentCredential,
+  paymentMethodType: 'credit',
+  paymentMethodData: {billing: {email: 'ada@example.com'}},
+});
 ```
 
-`hidden` (default) shows no mark and reserves no space; `standard` shows the detected brand,
-otherwise a generic card mark; `animated` cycles brand placeholders until one is detected;
-`hideGeneric` shows a detected brand only.
+The request:
 
-This is the form-wide default. `fieldOptions.cardNumber.brandIconMode` — or `brandIconMode` on a
-standalone `CardNumberField` — is the same union and wins whenever it is supplied:
-
+```json
+{
+  "payment_method": "card",
+  "payment_method_type": "credit",
+  "payment_method_data": {
+    "billing": {"email": "ada@example.com"},
+    "card": {
+      "card_number": "<library-owned>",
+      "card_exp_month": "<library-owned>",
+      "card_exp_year": "<library-owned>",
+      "card_cvc": "<library-owned>",
+      "card_holder_name": "<library-owned, omitted when blank>"
+    }
+  }
+}
 ```
-field brandIconMode  →  appearance.brandIconMode  →  'hidden'
-```
 
-Card brand artwork ships with the package. There is no network fetch for icons and no
-`react-native-svg` dependency.
+The result is the SAME `VaultPaymentResult` union Flow 2 returns, with the same navigation branches
+and the same absence of a token. The host non-card data is serialized first and the card subtree is
+attached last, by explicit assignment — the library decides where the card goes, never the caller.
+
+`tokenize()` on a form mounted without a session reports `invalid_session`. That is the honest
+answer rather than an error: the operation that mints a token cannot run without a vault session.
+
+### Why this is not "the library steps aside"
+
+An earlier design had this flow mean exactly that: with vaulting off, the application kept card
+fields of its own and built its own confirm body. That was narrowed deliberately. It left a PAN in
+application code for no benefit — the library was already on screen — and it meant a merchant's PCI
+posture silently depended on a server-side profile flag.
+
+Flow 3 is selected by configuration, never by failure. If a profile *is* configured to tokenize but
+the session cannot back it — no `vault_details`, an unsupported vault type, a blank authorization —
+the correct behaviour is to stop and report it. Confirming directly instead would transmit a PAN for
+a merchant who configured the opposite, and it would look completely normal on screen while doing
+so. That is not a fallback; it is a silent downgrade of a security posture, and the integration must
+refuse it.
 
 ---
 
-## 7. Localisation
+## 6. Custom layout
 
-```ts
-localisation={{
-  labels: {cardNumberPlaceholder: 'Numéro de carte', cvcPlaceholder: 'CVC'},
-  validationMessages: {cardNumberInvalid: 'Numéro de carte invalide'},
-  isRtl: false,
-}}
+Place the fields yourself. Everything else is identical.
+
+```tsx
+<HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
+  <CardholderNameField label="Name on card" />
+  <CardNumberField placeholder="Card number" brandIconMode="standard" />
+  <View style={{flexDirection: 'row', gap: 12}}>
+    <CardExpiryField placeholder="MM / YY" />
+    <CardCVCField placeholder="CVC" cvcIcon="default" />
+  </View>
+</HyperswitchVaultFormProvider>
 ```
 
-Merged per field over the English defaults, so you can translate one string or all of them.
+Exactly one card-number, one expiry and one CVC field must be mounted per provider; `tokenize()` and
+`confirmPayment()` both return `not_ready` otherwise, naming what is missing.
 
-**labels** (`VaultFormLabels`): `cardNumberPlaceholder`, `cardNumberFloatingLabel`,
-`expiryPlaceholder`, `expiryFloatingLabel`, `cvcPlaceholder`, `cvcFloatingLabel`.
-
-**validationMessages** (`VaultFormValidationMessages`): `cardNumberRequired`, `cardNumberInvalid`,
-`expiryRequired`, `expiryInvalid`, `cvcRequired`, `cvcInvalid`.
-
-These replace text only. The rules behind them — Luhn, per-scheme lengths, the expiry window, CVC
-length — are not configurable.
+**`CardholderNameField` is optional.** The ready-made form always renders it, full width above the
+card number; a custom layout may omit it entirely and still succeed. Left blank, it is omitted from
+the request.
 
 ---
 
-## 8. Form state
+## 7. The handle
 
 ```ts
-type CardFormState = {
-  complete: boolean;
-  cardNumberValid: boolean;
-  expiryValid: boolean;
-  cvcValid: boolean;
-  brand: CardBrand;     // canonical union; 'unknown' until a scheme is detected
+type VaultFormHandle = {
+  tokenize(): Promise<VaultTokenizeResult>;
+  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
+  reset(): void;
+  focus(field: 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName'): void;
 };
 ```
 
-`brand` is the same `CardBrand` union that the per-field `onStateChange` and `onFormStateChange`
-carry, so the same card produces the identical value on every event surface. It was a bare `string`
-here and emitted the detector's display casing (`"Visa"`), which disagreed with the canonical token
-(`"visa"`) every other surface emitted.
+Two explicit operations rather than one ambiguous `submit()`: which one you call decides what can
+come back, so the exposure is visible at the call site instead of depending on which arguments were
+passed.
 
-Use `complete` to enable your submit button. It carries no card value — no PAN, no BIN, no last4,
-no expiry.
+- **`reset()`** clears values, expiry text, validation state and errors. It is ignored while an
+  operation is in flight.
+- **Repeating the same operation** while it is pending returns the same promise, so a double press
+  is harmless. Requesting the *other* operation while one is pending returns `not_ready` without a
+  request — there is no honest answer to give it mid-flight.
 
-In **Flow B** the mounted-widget registry is part of the calculation:
-
-- a field's validity is reported `false` unless exactly one instance of its widget is mounted;
-- `complete` requires exactly one of each of the three widgets **and** all three valid;
-- mounting or unmounting a widget re-emits state immediately;
-- a value typed into a widget that is later unmounted can never make the form look valid, and can
-  never be submitted.
+There are no value accessors in either direction. State callbacks report validity, completeness,
+focus and the visible message — never a card value; see
+[ADR-0005](adr/0005-restore-card-safe-state-emission.md).
 
 ---
 
-## 9. What to do with the token
+## 8. Retry safety
 
-`result.token` is a **short-lived Payment Method Token** returned by the payment-method-session
-confirm. It is not card data, and it is **not a permanent identifier for the customer's card.**
-
-Send it to **your** backend over TLS. Your backend then does one of two things:
-
-1. **Use it for an immediate payment.**
-2. **Exchange it server-to-server for a reusable Payment Method ID**, if the card is to be charged
-   again later.
-
-Both paths are described in the official Hyperswitch documentation:
-[Token Led Payment](https://github.com/juspay/hyperswitch-docs/blob/main/integration-guide/payment-suite/payment-method-card/payments.md).
-
-**Do not store the Payment Method Token as a permanent customer card identifier.** It is
-short-lived. The reusable identifier is the Payment Method ID obtained from the exchange above.
-
-Also:
-
-- Do not log the token, render it, or send it to analytics. The example app renders it deliberately
-  so a developer can read it off the device; a production app must not.
-- **Saved-card flows are not implemented in this package.** Listing a customer's saved cards,
-  selecting one, updating one, or collecting a CVC for one are not part of this release. Those are
-  backend and product work today.
+- **`unknown_outcome` is never retried automatically**, on either call. A thrown fetch, a timeout
+  and an abort are indistinguishable from a request the backend already processed, and neither
+  endpoint takes an idempotency key.
+- **A minted token is not re-minted.** If call 1 succeeds and call 2 fails, the library keeps the
+  token internally and a subsequent `confirmPayment()` re-runs only call 2. Whether the
+  payment-method-session confirm is idempotent is **not established**, so assuming it and being
+  wrong would vault the customer's card twice.
+- That cached token is discarded when any card value changes, when the session changes, on
+  `reset()`, and on unmount.
 
 ---
 
-## 10. Imperative control
+## 9. Errors
 
-The form and the provider expose the same handle:
+Every error is `{code, message}` where `message` is library-owned, customer-safe text. A backend
+error string is never forwarded.
 
-```ts
-type HyperswitchVaultFormHandle = {
-  submit: () => Promise<VaultSubmitResult>;
-  reset: () => void;
-  focus: (field: 'cardNumber' | 'expiry' | 'cvc') => void;
-};
-```
-
-In Flow B each widget also accepts a ref:
-
-```ts
-type WidgetHandle = {focus: () => void; blur: () => void};
-```
-
-There is deliberately no getter for a field value, on either handle.
-
-### Lifecycle guarantees
-
-| Situation | Behaviour |
-| --- | --- |
-| `submit()` called again while one is in flight | Returns the **same promise**. No second request is issued. |
-| While a submission is in flight | All fields are non-interactive. |
-| `reset()` while in flight | **Refused** — a no-op. The request is not cancelled, and the fields keep their values. |
-| `reset()` when idle | Clears values, validation state, displayed errors and the visible expiry text. |
-| `session` or `environment` replaced | An in-flight request under the old session is aborted and resolves as `unknown_outcome`. The next `submit()` uses the new session. |
-| Component or provider unmounted | An in-flight request is aborted. |
-| A widget unmounted mid-flight, Flow B | The in-flight request is **not** aborted; it settles normally. |
+| `code` | Meaning |
+|---|---|
+| `invalid_card_data` | the customer's entry is incomplete or invalid; nothing was sent |
+| `not_ready` | fields are not mounted yet, or the other operation is in flight; nothing was sent |
+| `invalid_session` | the session cannot be used; nothing was sent |
+| `forbidden_card_data` | the host put a card key in the confirm input; nothing was sent |
+| `unsupported_configuration` | eligibility required, or an invalid endpoint; nothing was sent |
+| `server_error` | the backend refused, or answered 2xx with an unreadable body |
+| `unknown_outcome` | the request threw, timed out, or was aborted — outcome genuinely unknown |
 
 ---
 
-## 11. Security and PCI DSS
-
-Hyperswitch is a PCI DSS Level 1 Service Provider.
-
-The boundary, stated exactly:
+## 10. The boundary
 
 > PAN, expiry and CVC never cross the library's supported public API. They remain in library-owned
 > state and are transmitted only by the library's internal tokenization transport. The merchant
 > receives safe UI state and the resulting token.
 
-There is one entry point and one flow — Flow A (`HyperswitchVaultForm`) and Flow B
-(`HyperswitchVaultFormProvider` with the card-number, expiry and CVC fields) are two layouts of the
-same flow — so the guarantee has no carve-out. The library renders the fields, keeps the values in
-its own state, tokenizes them itself, and returns a token.
+In Flow 2 that is narrower still: the caller receives a navigation decision and not the token
+either.
 
-**What this is not.** It is an API and data-flow guarantee. It is **not** native-process isolation,
-**not** physical memory zeroization, **not** automatic PCI compliance or a PCI-scope determination,
-and **not** protection from malicious code executing inside the merchant's own application process —
-anything running there can reach React Native's internals regardless of this package.
+That is an API and data-flow guarantee — **not** native-process isolation, **not** memory
+zeroization, **not** a claim of PCI DSS compliance, **not** a claim that your PCI scope is reduced,
+and **not** protection from malicious code executing inside your own application process.
 
-Merchants remain responsible for their own integration, applicable PCI obligations and required
-assessment; only their own assessor, evaluating the whole integration, can determine scope.
-Modifying the package to expose, log or persist raw card data changes what the merchant is
-handling.
-
-Official sources:
-[PCI compliance](https://docs.hyperswitch.io/other-features/security-and-compliance/pci-compliance)
-and [Vault workflow](https://docs.hyperswitch.io/integration-guide/workflows/vault).
-
-Rules for your integration:
-
-1. Your secret API key stays on your server. The app never holds it.
-2. Never persist or log the session, `sdk_authorization`, or anything decoded from it.
-3. Never attempt to read a card value. There is no API for it.
-4. Send the token to your own backend only, over TLS.
-5. Use `environment: 'production'` only with production sessions.
-
----
-
-## 12. Before you ship
-
-- [ ] A session is created per vault attempt and never persisted.
-- [ ] All four `submit()` branches are handled.
-- [ ] `unknown_outcome` triggers server-side reconciliation of the previous attempt, never a blind
-      retry.
-- [ ] `server_error` retry behaviour is an explicit, documented product decision.
-- [ ] `invalid_session` is treated as a configuration fault to fix, not a case to re-fetch.
-- [ ] The submit button is driven by `complete`.
-- [ ] The token goes to your backend, is not logged or rendered, and is either used for an
-      immediate payment or exchanged for a Payment Method ID.
-- [ ] **Flow B only:** all three widgets are mounted exactly once on every path through the screen,
-      including conditional rendering, tabs and steppers.
-- [ ] Tested on a physical device, both platforms.
-- [ ] `environment` matches the backend environment in each build configuration.
-
----
-
-## Reference
-
-- Backend endpoint and the two Hyperswitch calls:
-  [merchant-integration.md](merchant-integration.md#2-the-server)
-- Charging with the token, server side:
-  [merchant-integration.md](merchant-integration.md#5-what-to-do-with-the-token)
-- What is and is not configurable: [control-surface.md](control-surface.md)
-- Working code for both flows: [`example/src/MerchantCheckout.tsx`](../example/src/MerchantCheckout.tsx)
-  (Flow A) and [`example/src/CustomLayoutCheckout.tsx`](../example/src/CustomLayoutCheckout.tsx)
-  (Flow B)
+Host code runs in the same JavaScript process and can monkey-patch globals such as `fetch`; the
+library's own tests do exactly that to observe its requests. The guarantee covers the supported
+public API, not malicious in-process instrumentation.

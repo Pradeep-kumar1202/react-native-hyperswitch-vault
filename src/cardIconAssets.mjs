@@ -9,6 +9,7 @@ import cartesbancaires from '../assets/cartesbancaires.png';
 import interac from '../assets/interac.png';
 import waitcard from '../assets/waitcard.png';
 import cvv from '../assets/cvv.png';
+import camera from '../assets/camera.png';
 
 export const cardIconAssets = {
   visa,
@@ -21,4 +22,5 @@ export const cardIconAssets = {
   interac,
   waitcard,
   cvv,
+  camera,
 };

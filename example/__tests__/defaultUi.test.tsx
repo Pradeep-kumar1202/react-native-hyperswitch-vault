@@ -1,7 +1,9 @@
 /**
  * THE ZERO-CONFIGURATION CONTRACT.
  *
- * With no visual configuration the library renders three empty, neutral inputs and nothing else.
+ * With no visual configuration the library renders four empty, neutral inputs and nothing else:
+ * cardholder name, card number, expiry and CVC. The cardholder name is always rendered by the
+ * ready-made form (optional to mount in a custom layout), and is blank like the rest by default.
  * This file is the proof, taken from the rendered React Native tree of the PUBLISHED package.
  *
  * Sensitive values are asserted as booleans inside this file only. Nothing is printed or
@@ -22,7 +24,8 @@ import {
   CardExpiryWidget,
   CardCVCWidget,
   type VaultFormHandle,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
+  type VaultTokenizeResult,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
@@ -146,17 +149,18 @@ const zeroConfigForm = () =>
 
 /* ── The blank default ────────────────────────────────────────────────────── */
 
-describe('zero configuration renders three empty, neutral fields and nothing else', () => {
-  it('three TextInputs, all with an empty internal value', () => {
+describe('zero configuration renders four empty, neutral fields and nothing else', () => {
+  it('four TextInputs, all with an empty internal value', () => {
     const r = zeroConfigForm();
     const found = inputs(r);
 
-    expect(found).toHaveLength(3);
+    expect(found).toHaveLength(4);
     /* Private assertion: the values are empty. Never printed. */
     for (const input of found) expect(input.props.value).toBe('');
     expect(found.map((i) => i.props.testID).sort()).toEqual([
       'CVCInputTestId',
       'CardNumberInputTestId',
+      'CardholderNameInputTestId',
       'ExpiryInputTestId',
     ]);
 
@@ -223,7 +227,7 @@ describe('zero configuration renders three empty, neutral fields and nothing els
       .findAll((n) => n.type === View)
       .map((n) => flat(n.props.style))
       .filter((s) => s.borderTopWidth !== undefined);
-    expect(boxes).toHaveLength(3);
+    expect(boxes).toHaveLength(4);
     for (const box of boxes) {
       expect(box.borderTopWidth).toBe(box.borderBottomWidth);
       expect(box.borderTopLeftRadius).toBeGreaterThan(0);
@@ -239,7 +243,12 @@ describe('zero configuration renders three empty, neutral fields and nothing els
       .map((i) => i.props.accessibilityLabel)
       .sort();
 
-    expect(labels).toEqual(['Card number', 'Expiration date', 'Security code']);
+    expect(labels).toEqual([
+      'Card number',
+      'Cardholder name',
+      'Expiration date',
+      'Security code',
+    ]);
 
     ReactTestRenderer.act(() => r.unmount());
   });
@@ -253,6 +262,7 @@ describe('zero configuration renders three empty, neutral fields and nothing els
       </HyperswitchVaultFormProvider>,
     );
 
+    /* Three widgets mounted, three inputs: the cardholder field is optional in a custom layout. */
     expect(inputs(r)).toHaveLength(3);
     expect(texts(r)).toHaveLength(0);
     expect(animatedElements(r)).toHaveLength(0);
@@ -291,9 +301,9 @@ describe('placeholder text is never treated as a field value', () => {
     for (const input of inputs(r)) expect(input.props.value).toBe('');
 
     /* Submitting cannot tokenize: the form is empty, so no request is made at all. */
-    let result!: VaultSubmitResult;
+    let result!: VaultTokenizeResult;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.tokenize();
     });
     expect(result.status).not.toBe('success');
     expect(calls).toHaveLength(0);
@@ -319,7 +329,7 @@ describe('placeholder text is never treated as a field value', () => {
     ReactTestRenderer.act(() => by('CVCInputTestId').props.onChangeText('123'));
 
     await ReactTestRenderer.act(async () => {
-      const pending = formRef.current!.submit();
+      const pending = formRef.current!.tokenize();
       calls[0].settle({associated_payment_methods: [{payment_method_token: {data: 'tok_x'}}]});
       await pending;
     });
@@ -438,14 +448,15 @@ describe('each option turns on exactly one thing', () => {
     ReactTestRenderer.act(() => r.unmount());
   });
 
-  it('errorDisplay="inline" renders the error; "none" emits it without rendering', () => {
+  /*
+   * This used to assert two halves: the error RENDERS only with `errorDisplay: 'inline'`, and the
+   * error EVENT fires either way. ADR-0003 removed the event, so only the rendering half has a
+   * subject — and that is the half `errorDisplay` actually controls.
+   */
+  it('errorDisplay="inline" renders the error; "none" renders nothing', () => {
     for (const [display, expected] of [['none', 0], ['inline', 1]] as const) {
-      const seen: unknown[] = [];
       const r = mount(
-        <HyperswitchVaultFormProvider
-          session={session}
-          environment="sandbox"
-          onFormStateChange={(s) => seen.push(s)}>
+        <HyperswitchVaultFormProvider session={session} environment="sandbox">
           <CardNumberField errorDisplay={display} />
           <CardExpiryField />
           <CardCVCField />
@@ -457,9 +468,6 @@ describe('each option turns on exactly one thing', () => {
       ReactTestRenderer.act(() => number.props.onBlur({nativeEvent: {}}));
 
       expect(texts(r)).toHaveLength(expected);
-      /* the EVENT fires either way */
-      const latest = seen[seen.length - 1] as {fields: {cardNumber: {error?: unknown}}};
-      expect(latest.fields.cardNumber.error).toBeDefined();
 
       ReactTestRenderer.act(() => r.unmount());
     }
@@ -795,7 +803,7 @@ describe('enabled icons are decorative, not interactive', () => {
       expect(a.props.accessibilityRole).toBeUndefined();
       expect(a.props.importantForAccessibility).toBe('no-hide-descendants');
     }
-    /* the fields themselves keep their labels */
+    /* the fields themselves keep their labels (custom layout: no cardholder field mounted) */
     expect(inputs(r).map((i) => i.props.accessibilityLabel).sort()).toEqual([
       'Card number',
       'Expiration date',
@@ -907,23 +915,24 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onChangeText(VISA));
 
   /*
-   * Compared exactly. Every event surface now emits the canonical `CardBrand` token, so there is
-   * no casing to normalise away — the legacy provider-level `onStateChange` used to emit "Visa"
-   * here while the others emitted "visa".
+   * The point of these tests is that a DETECTED brand still renders no artwork when the icon is not
+   * enabled. Detection used to be asserted through the emitted brand; ADR-0003 removed that surface,
+   * and its absence is itself the guarantee — there is no public way to observe the brand at all.
+   *
+   * A full, valid Visa number is typed, so detection has certainly run internally; what is asserted
+   * is the part that remains observable and is what actually matters here — zero accessory
+   * containers and zero brand images.
    */
-  const assertNoIcon = (r: Renderer, brandSeen: string[]) => {
-    expect(brandSeen[brandSeen.length - 1]).toBe('visa');                // brand IS detected
+  const assertNoIcon = (r: Renderer) => {
     expect(accessories(r)).toHaveLength(0);                              // zero accessory containers
     expect(artwork(r)).toHaveLength(0);                                  // zero brand images
   };
 
   it('CardNumberWidget: brand detected, zero icon, zero reserved width', () => {
-    const brands: string[] = [];
     const r = mount(
       <HyperswitchVaultFormProvider
         session={session}
-        environment="sandbox"
-        onStateChange={(st) => brands.push(st.brand)}>
+        environment="sandbox">
         <CardNumberWidget placeholder="Card Number" />
         <CardExpiryWidget />
         <CardCVCWidget />
@@ -933,7 +942,7 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
     /* the input's layout before and after must be identical — no accessory took width */
     const widthBefore = flat(by(r, 'CardNumberInputTestId').props.style).width;
     typeVisa(r);
-    assertNoIcon(r, brands);
+    assertNoIcon(r);
     expect(flat(by(r, 'CardNumberInputTestId').props.style).width).toBe(widthBefore);
     expect(widthBefore).toBe('100%');
 
@@ -941,52 +950,46 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
   });
 
   it('CardNumberField: same, under the current export name', () => {
-    const brands: string[] = [];
     const r = mount(
       <HyperswitchVaultFormProvider
         session={session}
-        environment="sandbox"
-        onStateChange={(st) => brands.push(st.brand)}>
+        environment="sandbox">
         <CardNumberField placeholder="Card Number" />
         <CardExpiryField />
         <CardCVCField />
       </HyperswitchVaultFormProvider>,
     );
     typeVisa(r);
-    assertNoIcon(r, brands);
+    assertNoIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 
   it('the ready-made form: same, through grouped fieldOptions', () => {
-    const brands: string[] = [];
     const r = mount(
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        onFormStateChange={(st) => brands.push(st.brand)}
         fieldOptions={{cardNumber: {placeholder: 'Card Number'}}}
       />,
     );
     typeVisa(r);
-    assertNoIcon(r, brands);
+    assertNoIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 
   it('an appearance that omits brandIconMode still resolves to hidden', () => {
-    const brands: string[] = [];
     const r = mount(
       <HyperswitchVaultFormProvider
         session={session}
         environment="sandbox"
-        appearance={{primaryColor: '#0E7C86', inputHeight: 52, borderRadius: 12}}
-        onStateChange={(st) => brands.push(st.brand)}>
+        appearance={{primaryColor: '#0E7C86', inputHeight: 52, borderRadius: 12}}>
         <CardNumberWidget placeholder="Card Number" />
         <CardExpiryWidget />
         <CardCVCWidget />
       </HyperswitchVaultFormProvider>,
     );
     typeVisa(r);
-    assertNoIcon(r, brands);
+    assertNoIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 

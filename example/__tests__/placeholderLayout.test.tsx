@@ -25,7 +25,8 @@ import {
   CardExpiryField,
   CardCVCField,
   type VaultFormHandle,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
+  type VaultTokenizeResult,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
@@ -331,7 +332,7 @@ describe('the overlay behaves like a native placeholder', () => {
     }
     /* the fields keep their own labels, so nothing is lost by hiding the overlay */
     expect(inputs(r).map((i) => i.props.accessibilityLabel).sort()).toEqual([
-      'Card number', 'Expiration date', 'Security code',
+      'Card number', 'Cardholder name', 'Expiration date', 'Security code',
     ]);
     ReactTestRenderer.act(() => r.unmount());
   });
@@ -408,9 +409,9 @@ describe('a placeholder is never card data', () => {
   it('focusing an empty field submits nothing', async () => {
     const {r, formRef} = cardShaped();
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onFocus({}));
-    let result!: VaultSubmitResult;
+    let result!: VaultTokenizeResult;
     await ReactTestRenderer.act(async () => {
-      result = await formRef.current!.submit();
+      result = await formRef.current!.tokenize();
     });
     expect(result.status).not.toBe('success');
     expect(calls).toHaveLength(0);
@@ -444,7 +445,7 @@ describe('a placeholder is never card data', () => {
     ReactTestRenderer.act(() => by(r, 'CVCInputTestId').props.onChangeText('456'));
 
     await ReactTestRenderer.act(async () => {
-      const pending = formRef.current!.submit();
+      const pending = formRef.current!.tokenize();
       calls[0].settle({associated_payment_methods: [{payment_method_token: {data: 'tok_ok'}}]});
       await pending;
     });
@@ -459,13 +460,18 @@ describe('a placeholder is never card data', () => {
     ReactTestRenderer.act(() => r.unmount());
   });
 
-  it('placeholder strings never appear in state payloads as card values', () => {
+  /*
+   * This asserted that a placeholder string never appeared inside an emitted state payload. ADR-0003
+   * removed state emission entirely, so there is no payload left to inspect — and the stronger
+   * property is now testable directly: typing, focusing and blurring produce NO host-visible call at
+   * all, and the component accepts no callback prop through which one could travel.
+   */
+  it('typing and focus produce no host-visible emission of any kind', () => {
     const seen: unknown[] = [];
     const r = mount(
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        onFormStateChange={(s) => seen.push(s)}
         fieldOptions={{
           cardNumber: {placeholder: '4242 4242 4242 4242', errorDisplay: 'inline'},
           expiry: {placeholder: '12/30'},
@@ -473,13 +479,18 @@ describe('a placeholder is never card data', () => {
         }}
       />,
     );
+
+    /* The props surface admits no `on*` callback at all. */
+    const form = r.root.findByProps({session});
+    for (const key of Object.keys(form.props)) {
+      expect(key).not.toMatch(/^on[A-Z]/);
+    }
+
+    ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onChangeText('4111111111111111'));
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onFocus({}));
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onBlur({}));
-    expect(seen.length).toBeGreaterThan(0);
-    const dump = JSON.stringify(seen);
-    expect(dump.includes('4242')).toBe(false);
-    expect(dump.includes('12/30')).toBe(false);
-    expect(dump.includes('123')).toBe(false);
+
+    expect(seen).toHaveLength(0);
     ReactTestRenderer.act(() => r.unmount());
   });
 

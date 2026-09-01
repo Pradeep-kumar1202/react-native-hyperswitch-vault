@@ -2,7 +2,7 @@
  * The short version.
  *
  * This is the whole modern integration in one screen: fetch a session from the merchant's own
- * backend, render the ready-made form, and drive a merchant-owned Pay button from `canSubmit`.
+ * backend, render the ready-made form, and pay through a merchant-owned button.
  * Everything else in this app — the storefront in `MerchantCheckout`, the hand-placed fields in
  * `CustomLayoutCheckout`, the device controls in `DeveloperPanel` — is elaboration on top of it.
  *
@@ -13,22 +13,21 @@ import React, {useCallback, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {
   HyperswitchVault,
-  type CardBrand,
   type MerchantSession,
   type VaultFormFieldOptions,
   type VaultFormFieldStyles,
   type VaultFormHandle,
-  type VaultFormState,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {fetchMerchantSession} from './merchantServer';
+import {fetchMerchantSession, vaultPaymentFrom, directPaymentFrom} from './merchantServer';
 
 /*
- * WHICH ELEMENTS EXIST. With no `fieldOptions` the form renders three empty, neutral inputs —
+ * WHICH ELEMENTS EXIST. With no `fieldOptions` the form renders four empty, neutral inputs —
  * no placeholder, no label, no icon, no error text. That is deliberate: the library owns the card
  * values, the merchant owns the look. Pick what this checkout should show.
  */
 const fieldOptions: VaultFormFieldOptions = {
+  cardholderName: {placeholder: 'Name on card', errorDisplay: 'inline'},
   cardNumber: {placeholder: 'Card number', brandIconMode: 'standard', errorDisplay: 'inline'},
   expiry: {placeholder: 'MM/YY', errorDisplay: 'inline'},
   cvc: {placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline'},
@@ -36,6 +35,7 @@ const fieldOptions: VaultFormFieldOptions = {
 
 /* HOW THE ENABLED ELEMENTS LOOK. A separate axis from the options above. */
 const fieldStyles: VaultFormFieldStyles = {
+  cardholderName: {container: {borderColor: '#CBD5F5', borderRadius: 12}},
   cardNumber: {
     container: {borderColor: '#CBD5F5', borderRadius: 12},
     input: {fontSize: 17},
@@ -46,22 +46,6 @@ const fieldStyles: VaultFormFieldStyles = {
   cvc: {container: {borderColor: '#CBD5F5', borderRadius: 12}},
 };
 
-const BRAND_LABEL: Partial<Record<CardBrand, string>> = {
-  visa: 'Visa',
-  mastercard: 'Mastercard',
-  americanExpress: 'American Express',
-  dinersClub: 'Diners Club',
-  discover: 'Discover',
-  jcb: 'JCB',
-  cartesBancaires: 'Cartes Bancaires',
-  interac: 'Interac',
-  maestro: 'Maestro',
-  unionPay: 'UnionPay',
-  rupay: 'RuPay',
-  sodexo: 'Sodexo',
-  bajaj: 'Bajaj',
-};
-
 export function QuickStartCheckout() {
   const formRef = useRef<VaultFormHandle>(null);
 
@@ -69,8 +53,13 @@ export function QuickStartCheckout() {
   const [loadingSession, setLoadingSession] = useState(false);
   const [sessionError, setSessionError] = useState<string | null>(null);
 
-  const [state, setState] = useState<VaultFormState>();
-  const [result, setResult] = useState<VaultSubmitResult>();
+  /*
+   * The library publishes no form state any more, so the Pay button is the merchant's own state.
+   * It stays enabled: an incomplete card is answered with `validation_error` and no network
+   * request, which is a better experience than a button that never explains itself.
+   */
+  const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<VaultPaymentResult>();
 
   /* 1. The merchant's own backend creates the session. The app never holds a secret key. */
   const startCheckout = useCallback(async () => {
@@ -86,17 +75,48 @@ export function QuickStartCheckout() {
     }
   }, []);
 
-  /* 2. Submit, and handle the three outcomes a merchant has to distinguish. */
-  const pay = useCallback(async () => {
-    const outcome = await formRef.current?.submit();
-    setResult(outcome);
-    if (outcome?.status === 'success') {
-      /* Send the token to YOUR backend. Never store or display it in the app. */
-      await Promise.resolve(outcome.token);
-    }
-  }, []);
+  /*
+   * ── 2. Submit ──────────────────────────────────────────────────────────────
+   *
+   * `confirmPayment()` resolves to a navigation decision. The library owns every network call, so
+   * there is no token to hand back and nothing for this screen to forward to a backend.
+   *
+   * `cardSource` is the only thing that differs between the two flows, and this screen makes the
+   * choice visible because it is the choice that matters:
+   *
+   *   vault  — tokenize the card, then confirm with the token. The card is saved.
+   *   direct — confirm with the card itself. One request, no token, nothing saved.
+   *
+   * The FORM is identical either way. That is the whole point of the correction: turning vaulting
+   * off changes what the request carries, not who owns the card fields.
+   */
+  const [vaulting, setVaulting] = useState(true);
 
-  const unknownOutcome = result?.status === 'error' && result.error.code === 'unknown_outcome';
+  const pay = useCallback(async () => {
+    if (!session) {
+      return;
+    }
+    setSubmitting(true);
+    const outcome = await formRef.current?.confirmPayment(
+      vaulting ? vaultPaymentFrom(session) : directPaymentFrom(session),
+    );
+    setSubmitting(false);
+    setResult(outcome);
+  }, [session, vaulting]);
+
+  /*
+   * The result is discriminated on `status`. Only the three failure statuses carry an `error`, and
+   * only `requires_customer_action` carries a `nextAction` — the union says so, so there is nothing
+   * to guess at.
+   */
+  const failure =
+    result &&
+    (result.status === 'failed' ||
+      result.status === 'validation_error' ||
+      result.status === 'not_ready')
+      ? result.error
+      : undefined;
+  const unknownOutcome = failure?.code === 'unknown_outcome';
 
   if (!session) {
     return (
@@ -116,42 +136,34 @@ export function QuickStartCheckout() {
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Add a card</Text>
 
-        {/* 3. The form. `onFormStateChange` is the only thing driving the button below. */}
+        {/* 3. The form. Cardholder name, card number, expiry and CVC — the library owns all four. */}
         <HyperswitchVault.CardForm
           ref={formRef}
           session={session}
           environment="sandbox"
           fieldOptions={fieldOptions}
           fieldStyles={fieldStyles}
-          onFormStateChange={setState}
         />
 
         {/*
-          * Safe field state. The ready-made form reports the aggregate, which carries the detected
-          * brand and the three field states — never a card value. (In a custom layout you would put
-          * `onStateChange` on `CardNumberField` instead and read the same `brand` from there.)
+          * A developer toggle, not a customer control: in a real integration the merchant profile
+          * decides this. It is here so the two sources can be compared against one identical form.
           */}
-        {state && state.brand !== 'unknown' ? (
-          <Text style={styles.muted}>{BRAND_LABEL[state.brand] ?? state.brand} detected</Text>
-        ) : null}
-        {state?.fields.cvc.error ? (
-          <Text style={styles.error}>{state.fields.cvc.error.message}</Text>
-        ) : null}
+        <Pressable style={styles.sourceToggle} onPress={() => setVaulting(current => !current)}>
+          <Text style={styles.muted}>
+            {vaulting ? 'Vaulting ON — tokenize, then confirm' : 'Vaulting OFF — confirm directly'}
+          </Text>
+        </Pressable>
 
-        {/* The session itself can be unusable — say so instead of showing a dead button. */}
-        {state?.sessionStatus === 'invalid' ? (
-          <Text style={styles.error}>This checkout session has expired. Start again.</Text>
-        ) : null}
-
-        {/* 4. A merchant-owned Pay button, driven entirely by `canSubmit`. */}
+        {/* 4. A merchant-owned Pay button. Its enabled state is this screen's business, not the library's. */}
         <Pressable
-          style={[styles.primary, !state?.canSubmit && styles.primaryDisabled]}
-          disabled={!state?.canSubmit}
+          style={[styles.primary, submitting && styles.primaryDisabled]}
+          disabled={submitting}
           onPress={pay}>
-          {state?.submitting ? (
+          {submitting ? (
             <ActivityIndicator color="#FFFFFF" />
           ) : (
-            <Text style={styles.primaryText}>Save card</Text>
+            <Text style={styles.primaryText}>Pay</Text>
           )}
         </Pressable>
 
@@ -159,16 +171,32 @@ export function QuickStartCheckout() {
           <Text style={styles.secondaryText}>Reset</Text>
         </Pressable>
 
-        {/* 5. Result handling. Success carries a token and nothing else. */}
-        {result?.status === 'success' ? (
-          <Text style={styles.ok}>Card saved. The token went to your backend.</Text>
+        {/* 5. Result handling. Success means the PAYMENT succeeded — no token exists to store. */}
+        {result?.status === 'succeeded' ? <Text style={styles.ok}>Payment succeeded.</Text> : null}
+        {result?.status === 'processing' ? (
+          <Text style={styles.muted}>Payment is processing. Your backend will hear the outcome.</Text>
         ) : null}
 
-        {result && result.status !== 'success' ? (
+        {result?.status === 'requires_customer_action' ? (
           <View>
-            <Text style={styles.error}>{result.error.message}</Text>
+            <Text style={styles.muted}>
+              The customer has to finish this payment: {result.nextAction.type_}
+            </Text>
             {/*
-              * An unknown outcome is NOT a failure: the vault may or may not have saved the card.
+              * A real app would drive the action here — open `redirectUrl` in a browser or web view,
+              * run the 3DS challenge, and then ask its own backend for the final status.
+              */}
+            {result.nextAction.redirectUrl ? (
+              <Text style={styles.muted}>Redirect required.</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {failure ? (
+          <View>
+            <Text style={styles.error}>{failure.message}</Text>
+            {/*
+              * An unknown outcome is NOT a failure: the payment may or may not have been taken.
               * Ask your backend what happened before charging the customer again.
               */}
             <Text style={styles.muted}>
@@ -189,6 +217,11 @@ export function QuickStartCheckout() {
 }
 
 const styles = StyleSheet.create({
+  sourceToggle: {
+    marginTop: 12,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
   root: {flex: 1, backgroundColor: '#F6F7FB'},
   centered: {flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24},
   body: {padding: 20, gap: 14},

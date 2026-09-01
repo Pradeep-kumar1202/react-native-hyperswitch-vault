@@ -12,6 +12,20 @@ type contextValue = {
   editable: bool,
   isProcessing: bool,
   onAnalytics: CardFormTypes.analyticsEvent => unit,
+  /*
+   * The merchant-facing snapshot, carried so a field widget can emit its OWN state.
+   *
+   * A THUNK, not a record: it is invoked only inside an emitter's `build`, which runs only when a
+   * merchant is listening, so a form with no callbacks derives nothing at all.
+   *
+   * That means up to five independent derivations per commit — one per listening field plus the
+   * form — rather than the single shared one an eager record gave. They cannot disagree even so:
+   * each thunk closes over the same immutable `state` and `errors` from the same render, and the
+   * derivation is pure. The cost is O(listeners) on a path that runs once per commit, bounded at
+   * five; the maximal configuration re-derives the whole snapshot five times and discards all but
+   * its own slice.
+   */
+  publicSnapshot: unit => VaultPublicState.controllerSnapshot,
 }
 
 let context: React.Context.t<option<contextValue>> = React.createContext(None)

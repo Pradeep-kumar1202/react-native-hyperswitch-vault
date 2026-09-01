@@ -16,24 +16,23 @@ let make = React.forwardRef((
     "accessibilityLabel": option<string>,
     "accessibilityHint": option<string>,
     "testID": option<string>,
-    "cvcIcon": option<CardFieldOptions.cvcIconDisplay>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
     "onStateChange": option<VaultPublicState.cvcState => unit>,
+    "cvcIcon": option<CardFieldOptions.cvcIconDisplay>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardCVCWidget")
-  let controller = ctx.controller
 
-  /*
-   * Merchant field state (ADR-0002 §4). The snapshot is derived by the controller and emitted only
-   * when it structurally changes; the callback itself is never stored in controller, registration
-   * or submission state.
-   */
   VaultStateEmitter.use(
-    ~build=() => controller.publicFields.cvc,
+    ~build=() => ctx.publicSnapshot().cvc,
     ~equal=VaultPublicState.cvcEq,
     ~notify=props["onStateChange"],
   )
+  let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {
     HyperswitchVaultFormProvider.focus: () => VaultCardController.focusRef(controller.cvcRef),

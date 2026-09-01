@@ -5,27 +5,24 @@
  * procedure can be walked on a device without editing code.
  *
  * The whole integration is: fetch a session from your backend, render <HyperswitchVaultForm/>, and
- * call submit() through a ref. The app never sees a PAN, expiry, CVC, sdk_authorization or anything
- * decoded from it.
+ * call submit({paymentId, sdkAuthorization}) through a ref. The app never sees a PAN, expiry, CVC,
+ * sdk_authorization from the vault details or anything decoded from it.
  *
  * Handling rules this file follows, and yours should too:
  *   - the session lives in component state only. It is never written to AsyncStorage, to a
  *     persisted Redux store, or to any other durable storage: `sdk_authorization` is a short-lived
  *     credential for one payment-method session, and persisting it outlives the session it belongs
  *     to;
- *   - nothing here LOGS the session, the authorization, anything decoded from it, a card value or
- *     the returned token. `console.log(session)` in a React Native app reaches Metro, logcat and
- *     Console.app, where it persists; rendering it on screen does not;
- *   - the token goes straight to the merchant's own backend.
+ *   - nothing here LOGS the session, the authorization, anything decoded from it, or a card value.
+ *     `console.log(session)` in a React Native app reaches Metro, logcat and Console.app, where it
+ *     persists; rendering it on screen does not.
  *
- * ONE deliberate exception, for this example only: the returned payment-method token IS shown on
- * screen, so a developer can read it off the device and check it against their dashboard. It is a
- * reference to the stored card, not card data — but it is still a credential for charging that
- * card, so a production app should send it to its own backend and never render it. The README says
- * the same.
+ * There is no token box any more, and that is the point: the library performs the final payment
+ * confirmation itself, so `submit()` resolves to a NAVIGATION decision — succeeded, processing, a
+ * customer action, or a typed error — and no payment-method token ever crosses into the app.
  *
- * The controls below "Save card" exist so that docs/manual-device-checklist.md can be walked
- * without editing code. A production integration needs only the Save button.
+ * The controls below "Pay" exist so that docs/manual-device-checklist.md can be walked
+ * without editing code. A production integration needs only the Pay button.
  */
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
@@ -41,9 +38,9 @@ import {
   HyperswitchVaultForm,
   type HyperswitchVaultFormHandle,
   type MerchantSession,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {MERCHANT_BACKEND} from './merchantServer';
+import {MERCHANT_BACKEND, vaultPaymentFrom} from './merchantServer';
 
 export function DeveloperPanel() {
   const formRef = useRef<HyperswitchVaultFormHandle>(null);
@@ -53,10 +50,7 @@ export function DeveloperPanel() {
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('Enter a card to continue.');
   const [detail, setDetail] = useState<string>('');
-  /* Example-only: see the note at the top of this file. */
-  const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [complete, setComplete] = useState(false);
   /* Live toggle so both layouts can be shown, and checked, without editing code. */
   const [split, setSplit] = useState(false);
 
@@ -79,7 +73,6 @@ export function DeveloperPanel() {
       setSessionSerial(previous => previous + 1);
       setStatus('Enter a card to continue.');
       setDetail('');
-      setToken(null);
     } catch {
       setSessionError(`Could not reach the merchant server at ${MERCHANT_BACKEND}.`);
     }
@@ -89,42 +82,61 @@ export function DeveloperPanel() {
     loadSession();
   }, [loadSession]);
 
-  const show = useCallback((result: VaultSubmitResult | undefined) => {
+  const show = useCallback((result: VaultPaymentResult | undefined) => {
     if (!result) {
       return;
     }
-    if (result.status === 'success') {
-      setStatus('Card saved');
-      setToken(result.token);
-      /* The public result is token-only: no masked metadata is exposed to a merchant. */
-      setDetail('token returned');
-    } else {
-      setStatus(result.error.message);
-      setDetail(`${result.status} / ${result.error.code}`);
-      setToken(null);
+    /* The result is discriminated on `status`: only the failure statuses carry an `error`. */
+    switch (result.status) {
+      case 'succeeded':
+        setStatus('Payment succeeded');
+        setDetail('succeeded — no token crosses the boundary');
+        return;
+      case 'processing':
+        setStatus('Payment processing');
+        setDetail('processing — ask your backend for the final status');
+        return;
+      case 'requires_customer_action':
+        setStatus('Customer action required');
+        setDetail(`requires_customer_action / ${result.nextAction.type_}`);
+        return;
+      default:
+        setStatus(result.error.message);
+        setDetail(`${result.status} / ${result.error.code}`);
     }
   }, []);
 
+  /*
+   * The NON-CARD input `confirmPayment()` needs: the two credentials, plus the card source that
+   * says which flow to run. This panel exercises the VAULT source — the one with two requests —
+   * because that is the sequence the manual checklist steps through.
+   */
+  const payment = session ? vaultPaymentFrom(session) : null;
+
   const onSubmit = useCallback(async () => {
+    if (!payment) {
+      return;
+    }
     setBusy(true);
     setDetail('');
-    setToken(null);
-    show(await formRef.current?.submit());
+    show(await formRef.current?.confirmPayment(payment));
     setBusy(false);
-  }, [show]);
+  }, [payment, show]);
 
   /* Checklist step 6: two presses in one tick must share one request. */
   const onDoubleSubmit = useCallback(async () => {
+    if (!payment) {
+      return;
+    }
     setBusy(true);
     setDetail('');
-    setToken(null);
-    const first = formRef.current?.submit();
-    const second = formRef.current?.submit();
+    const first = formRef.current?.confirmPayment(payment);
+    const second = formRef.current?.confirmPayment(payment);
     setDetail(first === second ? 'same promise returned' : 'DIFFERENT promises — bug');
     show(await first);
     await second;
     setBusy(false);
-  }, [show]);
+  }, [payment, show]);
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -147,55 +159,36 @@ export function DeveloperPanel() {
                 environment="sandbox"
                 layout="inline"
                 fieldArrangement={split ? 'separate' : 'fused'}
-                onStateChange={state => setComplete(state.complete)}
               />
 
               <Pressable
                 accessibilityRole="button"
                 disabled={busy}
                 onPress={onSubmit}
-                style={[styles.button, (busy || !complete) && styles.buttonMuted]}>
+                style={[styles.button, busy && styles.buttonMuted]}>
                 {busy ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
-                  <Text style={styles.buttonLabel}>Save card</Text>
+                  <Text style={styles.buttonLabel}>Pay</Text>
                 )}
               </Pressable>
 
               <Text style={styles.status}>{status}</Text>
               {detail ? <Text style={styles.detail}>{detail}</Text> : null}
 
-              {token ? (
-                <View style={styles.tokenBox}>
-                  <Text style={styles.tokenLabel}>
-                    payment_method token — shown for this example only
-                  </Text>
-                  {/* Selectable so it can be copied off the device for a dashboard lookup. */}
-                  <Text selectable style={styles.tokenValue}>
-                    {token}
-                  </Text>
-                </View>
-              ) : null}
-
               <View style={styles.divider} />
               <Text style={styles.sectionLabel}>
-                Manual checks — session #{sessionSerial}, form {complete ? 'complete' : 'incomplete'}
-                , layout {split ? 'split' : 'stacked'}
+                Manual checks — session #{sessionSerial}, layout {split ? 'split' : 'stacked'}
               </Text>
 
               <View style={styles.row}>
-                <Control
-                  label="Reset"
-                  onPress={() => {
-                    formRef.current?.reset();
-                    setToken(null);
-                  }}
-                />
+                <Control label="Reset" onPress={() => formRef.current?.reset()} />
                 <Control label="Submit ×2" onPress={onDoubleSubmit} />
                 <Control label="New session" onPress={loadSession} />
                 <Control label={split ? 'Stacked' : 'Split'} onPress={() => setSplit(v => !v)} />
               </View>
               <View style={styles.row}>
+                <Control label="Focus name" onPress={() => formRef.current?.focus('cardholderName')} />
                 <Control label="Focus number" onPress={() => formRef.current?.focus('cardNumber')} />
                 <Control label="Focus expiry" onPress={() => formRef.current?.focus('expiry')} />
                 <Control label="Focus CVC" onPress={() => formRef.current?.focus('cvc')} />
@@ -239,16 +232,6 @@ const styles = StyleSheet.create({
   buttonMuted: {opacity: 0.5},
   buttonLabel: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
   status: {color: '#4B5563'},
-  tokenBox: {
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#F1F5F9',
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#CBD5E1',
-    gap: 4,
-  },
-  tokenLabel: {color: '#64748B', fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5},
-  tokenValue: {color: '#0F172A', fontSize: 13, fontFamily: 'monospace'},
   detail: {color: '#6B7280', fontSize: 12},
   error: {color: '#DF1B41'},
   divider: {height: StyleSheet.hairlineWidth, backgroundColor: '#E6E6E6'},

@@ -64,6 +64,48 @@ module Number = {
   }
 }
 
+module CardholderName = {
+  @react.component
+  let make = (
+    ~ctx: VaultWidgetContext.contextValue,
+    ~renderError: option<string => React.element>=?,
+    ~borderBottomWidth: option<float>=?,
+    ~borderBottomLeftRadius: option<float>=?,
+    ~borderBottomRightRadius: option<float>=?,
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
+    ~options: option<CardFieldOptions.cardholderNameOptions>=?,
+  ) => {
+    let resolved = CardFieldOptions.resolveCardholderName(options)
+    /*
+     * Registered, but under a kind `VaultFormHost.requiredKinds` does not list — so the presence
+     * gate still does not demand it and a custom layout that omits it still submits, which is what
+     * the previous "deliberately NOT registered" arrangement was protecting.
+     *
+     * It is registered because the FORM STATE has to report whether this field exists, and in a
+     * custom layout only the merchant knows: they place the widgets. `cardholderNameMode` used to
+     * stand in for that and was wrong here — it defaults to `#collect`, so a layout with only
+     * number/expiry/CVC reported a `fields.cardholderName` that was not on screen.
+     */
+    let controller = ctx.controller
+    React.useEffect0(() => Some(controller.register(VaultCardController.CardholderNameKind)))
+    <CardFields.CardholderName
+      ?styles
+      value=controller.values.cardholderName
+      onChange=controller.onCardholderNameChange
+      onFocus={() => controller.onFocus(#cardholderName)}
+      onBlur={() => controller.onBlur(#cardholderName)}
+      renderError=?renderError
+      options=resolved
+      common={ctx->VaultWidgetContext.commonFor}
+      onAnalytics=ctx.onAnalytics
+      reference=controller.cardholderRef
+      ?borderBottomWidth
+      ?borderBottomLeftRadius
+      ?borderBottomRightRadius
+    />
+  }
+}
+
 module Expiry = {
   @react.component
   let make = (

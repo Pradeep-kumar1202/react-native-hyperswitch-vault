@@ -15,11 +15,11 @@ import {
   CardNumberWidget,
   CardExpiryWidget,
   CardCVCWidget,
+  CardholderNameWidget,
   type HyperswitchVaultFormHandle,
   type WidgetHandle,
-  type CardFormState,
   type MerchantSession,
-  type VaultSubmitResult,
+  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
 declare const global: {fetch: unknown};
@@ -64,12 +64,36 @@ const CARD_NUMBER = '4242424242424242';
 const EXPIRY = `12${String((new Date().getFullYear() + 3) % 100).padStart(2, '0')}`;
 const CVC = '123';
 
+/* Call 1 — the payment-method-session confirm that mints a token. */
 const confirmResponse = {
   associated_payment_methods: [{payment_method_token: {data: 'tok_fake_0001'}}],
   payment_method_data: {
     card: {last4_digits: '4242', card_isin: '424242', expiry_month: '12', expiry_year: '2030'},
   },
 };
+
+/* Call 2 — the payment confirm the library performs itself. */
+const paymentSucceeded = {status: 'succeeded'};
+
+/* The two NON-CARD values submit() requires. Neither is a real credential. */
+const PAYMENT = {paymentId: 'pay_widgets_fake', sdkAuthorization: 'intent_auth_widgets_fake'};
+
+/*
+ * The confirm input names its own card source. This suite exercises Flow 2 — the VAULT source —
+ * which carries the session the token is minted against.
+ */
+const paymentWith = (session: MerchantSession) =>
+  ({...PAYMENT, cardSource: {type_: 'vault' as const, session}});
+
+const PAYMENT_VAULT = paymentWith(sessionWith('pms_fake_0001'));
+
+/*
+ * `Succeeded` and `Processing` carry no payload, so the published union renders them as plain
+ * strings; every other outcome is an object with a `status`.
+ */
+const statusOf = (result: VaultPaymentResult) => result.status;
+
+const errorOf = (result: VaultPaymentResult) => ('error' in result ? result.error : undefined);
 
 /* ── fetch stub ──────────────────────────────────────────────────────────── */
 
@@ -148,9 +172,9 @@ type HarnessProps = {
   showNumber?: boolean;
   showExpiry?: boolean;
   showCvc?: boolean;
+  showCardholderName?: boolean;
   duplicate?: 'number' | 'expiry' | 'cvc' | null;
   session?: MerchantSession;
-  onState?: (state: CardFormState) => void;
   formRef?: React.RefObject<HyperswitchVaultFormHandle | null>;
   numberRef?: React.RefObject<WidgetHandle | null>;
   strict?: boolean;
@@ -158,13 +182,23 @@ type HarnessProps = {
 
 /* Widgets are deliberately nested in merchant-owned Views and a fragment. */
 function Layout(props: HarnessProps) {
-  const {showNumber = true, showExpiry = true, showCvc = true, duplicate = null} = props;
+  const {
+    showNumber = true,
+    showExpiry = true,
+    showCvc = true,
+    showCardholderName = false,
+    duplicate = null,
+  } = props;
   return (
     <HyperswitchVaultFormProvider
       ref={props.formRef}
       session={props.session ?? sessionWith('pms_fake_0001')}
-      environment="sandbox"
-      onStateChange={props.onState}>
+      environment="sandbox">
+      {/*
+        * The cardholder name is OPTIONAL in a custom layout: this harness leaves it out by default
+        * and every submission below still works, which is the contract.
+        */}
+      {showCardholderName && <CardholderNameWidget />}
       <View>
         {/*
           * Inline error RENDERING is opt-in since the merchant UI reset; this harness asserts what
@@ -189,19 +223,13 @@ function Layout(props: HarnessProps) {
 type MountedHarness = {
   tree: Renderer;
   ref: React.RefObject<HyperswitchVaultFormHandle | null>;
-  states: CardFormState[];
   update: (props: HarnessProps) => Promise<void>;
 };
 
 const mountHarness = async (props: HarnessProps = {}): Promise<MountedHarness> => {
   const ref = React.createRef<HyperswitchVaultFormHandle>();
-  const states: CardFormState[] = [];
-  const onState = (state: CardFormState) => {
-    states.push(state);
-    props.onState?.(state);
-  };
   const element = (extra: HarnessProps) => {
-    const merged = {...props, ...extra, formRef: ref, onState};
+    const merged = {...props, ...extra, formRef: ref};
     return merged.strict ? (
       <React.StrictMode>
         <Layout {...merged} />
@@ -218,7 +246,6 @@ const mountHarness = async (props: HarnessProps = {}): Promise<MountedHarness> =
   return {
     tree,
     ref,
-    states,
     update: async extra => {
       await ReactTestRenderer.act(() => {
         tree.update(element(extra));
@@ -251,68 +278,120 @@ const pressKey = async (tree: Renderer, testID: string, key: string) => {
 };
 
 const submit = async (ref: React.RefObject<HyperswitchVaultFormHandle | null>) => {
-  let result!: VaultSubmitResult;
+  let result!: VaultPaymentResult;
   await ReactTestRenderer.act(async () => {
-    result = await ref.current!.submit();
+    result = await ref.current!.confirmPayment(PAYMENT_VAULT);
   });
   return result;
 };
 
-const last = (states: CardFormState[]) => states[states.length - 1];
+/*
+ * Settles call 1 and then the payment confirm it triggers. One press of a merchant's Pay button is
+ * two requests, and both have to be answered.
+ */
+const settlePair = async (
+  first: unknown = confirmResponse,
+  second: unknown = paymentSucceeded,
+) => {
+  const index = calls.length - 1;
+  await ReactTestRenderer.act(async () => {
+    calls[index].settle(first);
+  });
+  await ReactTestRenderer.act(async () => {
+    calls[index + 1].settle(second);
+  });
+};
 
-/* ── 1–2, 14: happy path, one request, token, shared promise ─────────────── */
+/* ── 1–2, 14: happy path, two requests, no token, shared promise ─────────── */
 
 describe('submission through the provider', () => {
-  it('submits ONE PMS-confirm request when all three widgets are mounted and valid, and returns the token', async () => {
-    const {tree, ref, states} = await mountHarness();
+  it('mints once and confirms once when the three widgets are mounted and valid, and returns no token', async () => {
+    const {tree, ref} = await mountHarness();
     await fillValidCard(tree);
-    expect(last(states).complete).toBe(true);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toContain('/payment-method-sessions/pms_fake_0001/confirm');
 
-    let result!: VaultSubmitResult;
+    await settlePair();
+    expect(calls).toHaveLength(2);
+    expect(calls[1].url).toContain('/payments/pay_widgets_fake/confirm');
+
+    let result!: VaultPaymentResult;
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       result = await pending;
     });
-    expect(result.status).toBe('success');
-    expect(result.status === 'success' && result.token).toBe('tok_fake_0001');
+    expect(result.status).toBe('succeeded');
 
-    /* 17: nothing sensitive in the result or the emitted states. */
-    const serialized = JSON.stringify({result, states});
+    /* 17: nothing sensitive in the result — and the minted token stayed inside the library. */
+    const serialized = JSON.stringify({result});
     expect(serialized).not.toContain(CARD_NUMBER);
     expect(serialized).not.toContain(fakeAuthorization('pms_fake_0001'));
     expect(serialized).not.toContain('pms_fake_0001');
-    for (const state of states) {
-      expect(Object.keys(state).sort()).toEqual(
-        ['brand', 'cardNumberValid', 'complete', 'cvcValid', 'expiryValid'].sort(),
-      );
-    }
+    expect(serialized).not.toContain('tok_fake_0001');
+    expect(serialized).not.toContain('tok_');
   });
 
-  it('repeated submit while in flight returns the same promise and issues one request', async () => {
+  it('a layout with no cardholder-name widget still submits — the field is optional', async () => {
+    const {tree, ref} = await mountHarness();
+    /* No CardholderNameWidget is mounted at all. */
+    expect(tree.root.findAll(n => n.props?.testID === 'CardholderNameInputTestId')).toHaveLength(0);
+    await fillValidCard(tree);
+
+    let pending!: Promise<VaultPaymentResult>;
+    await ReactTestRenderer.act(async () => {
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    await settlePair();
+    await ReactTestRenderer.act(async () => {
+      expect((await pending).status).toBe('succeeded');
+    });
+  });
+
+  it('mounting the cardholder name adds a fourth field and changes nothing about submission', async () => {
+    const {tree, ref} = await mountHarness({showCardholderName: true});
+    expect(
+      tree.root.findAll(
+        n => n.props?.testID === 'CardholderNameInputTestId' && n.type === TextInput,
+      ),
+    ).toHaveLength(1);
+
+    await fillValidCard(tree);
+    await type(tree, 'CardholderNameInputTestId', 'Ada Lovelace');
+
+    let pending!: Promise<VaultPaymentResult>;
+    await ReactTestRenderer.act(async () => {
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    expect(calls).toHaveLength(1);
+    await settlePair();
+    await ReactTestRenderer.act(async () => {
+      expect((await pending).status).toBe('succeeded');
+    });
+  });
+
+  it('repeated submit while in flight returns the same promise and issues one pair of requests', async () => {
     const {tree, ref} = await mountHarness();
     await fillValidCard(tree);
 
-    let first!: Promise<VaultSubmitResult>;
-    let second!: Promise<VaultSubmitResult>;
+    let first!: Promise<VaultPaymentResult>;
+    let second!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      first = ref.current!.submit();
-      second = ref.current!.submit();
+      first = ref.current!.confirmPayment(PAYMENT_VAULT);
+      second = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(second).toBe(first);
     expect(calls).toHaveLength(1);
 
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await first;
     });
-    expect((await first).status).toBe('success');
+    expect((await first).status).toBe('succeeded');
+    expect(calls).toHaveLength(2);
   });
 });
 
@@ -324,12 +403,11 @@ describe('widget presence gating', () => {
     ['CardExpiryWidget', {showExpiry: false}],
     ['CardCVCWidget', {showCvc: false}],
   ] as const)('missing %s -> not_ready naming it, zero fetches', async (name, props) => {
-    const {ref, states} = await mountHarness(props);
+    const {ref} = await mountHarness(props);
     const result = await submit(ref);
-    expect(result.status).toBe('not_ready');
-    expect(result.status === 'not_ready' && result.error.message).toContain(name);
+    expect(statusOf(result)).toBe('not_ready');
+    expect(errorOf(result)?.message).toContain(name);
     expect(calls).toHaveLength(0);
-    expect(last(states).complete).toBe(false);
   });
 
   it.each([
@@ -341,14 +419,13 @@ describe('widget presence gating', () => {
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
     const logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     try {
-      const {tree, ref, states} = await mountHarness({duplicate: kind});
+      const {tree, ref} = await mountHarness({duplicate: kind});
       await fillValidCard(tree);
       const result = await submit(ref);
-      expect(result.status).toBe('not_ready');
-      expect(result.status === 'not_ready' && result.error.message).toContain(name);
-      expect(result.status === 'not_ready' && result.error.message).toContain('Only one');
+      expect(statusOf(result)).toBe('not_ready');
+      expect(errorOf(result)?.message).toContain(name);
+      expect(errorOf(result)?.message).toContain('Only one');
       expect(calls).toHaveLength(0);
-      expect(last(states).complete).toBe(false);
       expect(errorSpy).not.toHaveBeenCalled();
       expect(warnSpy).not.toHaveBeenCalled();
       expect(logSpy).not.toHaveBeenCalled();
@@ -360,45 +437,26 @@ describe('widget presence gating', () => {
   });
 });
 
-/* ── 4, 5, 10: unmount + stale values + aggregate ────────────────────────── */
+/* ── 4, 5: unmount + stale values ────────────────────────────────────────── */
 
-describe('unmount and the aggregate state', () => {
-  it('unmounting a valid CVC widget immediately emits complete=false, submit is not_ready, and the retained value is never sent', async () => {
-    const {tree, ref, states, update} = await mountHarness();
+describe('unmount of a mounted field', () => {
+  it('unmounting a valid CVC widget makes submit not_ready, and the retained value is never sent', async () => {
+    const {tree, ref, update} = await mountHarness();
     await fillValidCard(tree);
-    expect(last(states).complete).toBe(true);
-    expect(last(states).cvcValid).toBe(true);
+
+    /* Proof the form WAS submittable before the unmount: it reaches the network. */
+    await ReactTestRenderer.act(async () => {
+      ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    expect(calls).toHaveLength(1);
+    await settlePair();
+    calls = [];
 
     await update({showCvc: false});
-    expect(last(states).complete).toBe(false);
-    expect(last(states).cvcValid).toBe(false);
 
     const result = await submit(ref);
-    expect(result.status).toBe('not_ready');
+    expect(statusOf(result)).toBe('not_ready');
     expect(calls).toHaveLength(0);
-  });
-
-  it('aggregate state tracks per-field validity as fields are filled', async () => {
-    const {tree, states} = await mountHarness();
-    expect(last(states).complete).toBe(false);
-
-    await type(tree, 'CardNumberInputTestId', CARD_NUMBER);
-    expect(last(states).cardNumberValid).toBe(true);
-    expect(last(states).complete).toBe(false);
-    /* canonical CardBrand token, identical on every event surface */
-    expect(last(states).brand).toBe('visa');
-
-    await type(tree, 'ExpiryInputTestId', EXPIRY);
-    expect(last(states).expiryValid).toBe(true);
-
-    await type(tree, 'CVCInputTestId', CVC);
-    expect(last(states)).toEqual({
-      complete: true,
-      cardNumberValid: true,
-      expiryValid: true,
-      cvcValid: true,
-      brand: 'visa',
-    });
   });
 });
 
@@ -446,7 +504,6 @@ describe('multiple providers on one screen', () => {
   it('keeps registration and card state isolated', async () => {
     const refA = React.createRef<HyperswitchVaultFormHandle>();
     const refB = React.createRef<HyperswitchVaultFormHandle>();
-    const statesB: CardFormState[] = [];
     let tree!: Renderer;
     await ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
@@ -462,8 +519,7 @@ describe('multiple providers on one screen', () => {
           <HyperswitchVaultFormProvider
             ref={refB}
             session={sessionWith('pms_fake_000B')}
-            environment="sandbox"
-            onStateChange={state => statesB.push(state)}>
+            environment="sandbox">
             <CardNumberWidget />
             <CardExpiryWidget />
             <CardCVCWidget />
@@ -489,26 +545,26 @@ describe('multiple providers on one screen', () => {
     });
 
     /* B has all three widgets mounted but no values: validation error, not a presence failure. */
-    let resultB!: VaultSubmitResult;
+    let resultB!: VaultPaymentResult;
     await ReactTestRenderer.act(async () => {
-      resultB = await refB.current!.submit();
+      resultB = await refB.current!.confirmPayment(paymentWith(sessionWith('pms_fake_000B')));
     });
-    expect(resultB.status).toBe('validation_error');
-    expect(statesB.every(state => state.complete === false)).toBe(true);
+    expect(statusOf(resultB)).toBe('validation_error');
     expect(calls).toHaveLength(0);
 
     /* A submits its own card to its own session. */
-    let pendingA!: Promise<VaultSubmitResult>;
+    let pendingA!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pendingA = refA.current!.submit();
+      pendingA = refA.current!.confirmPayment(paymentWith(sessionWith('pms_fake_000A')));
     });
     expect(calls).toHaveLength(1);
     expect(calls[0].url).toContain('pms_fake_000A');
+    expect(calls[0].url).not.toContain('pms_fake_000B');
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await pendingA;
     });
-    expect((await pendingA).status).toBe('success');
+    expect((await pendingA).status).toBe('succeeded');
   });
 });
 
@@ -516,20 +572,19 @@ describe('multiple providers on one screen', () => {
 
 describe('React StrictMode', () => {
   it('effect replay creates no false duplicates and submission works', async () => {
-    const {tree, ref, states} = await mountHarness({strict: true});
+    const {tree, ref} = await mountHarness({strict: true});
     await fillValidCard(tree);
-    expect(last(states).complete).toBe(true);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls).toHaveLength(1);
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await pending;
     });
-    expect((await pending).status).toBe('success');
+    expect((await pending).status).toBe('succeeded');
   });
 });
 
@@ -604,13 +659,11 @@ describe('expiry is canonical in the controller', () => {
    */
   it('keeps the displayed expiry across an unmount and remount, and clears it on reset', async () => {
     const ref = React.createRef<HyperswitchVaultFormHandle>();
-    const states: CardFormState[] = [];
     const Harness = ({showExpiry}: {showExpiry: boolean}) => (
       <HyperswitchVaultFormProvider
         ref={ref}
         session={sessionWith('pms_fake_0001')}
-        environment="sandbox"
-        onStateChange={state => states.push(state)}>
+        environment="sandbox">
         <CardNumberWidget />
         {showExpiry ? <CardExpiryWidget /> : null}
         <CardCVCWidget />
@@ -628,22 +681,24 @@ describe('expiry is canonical in the controller', () => {
     await type(tree, 'CVCInputTestId', CVC);
     const typedExpiry = input(tree, 'ExpiryInputTestId').props.value;
     expect(typedExpiry).not.toBe('');
-    expect(last(states).complete).toBe(true);
 
-    /* 2. unmount -> the widget is gone, so the form is not complete */
+    /* 2. unmount -> the widget is gone, so the form cannot be submitted */
     await ReactTestRenderer.act(() => {
       tree.update(<Harness showExpiry={false} />);
     });
-    expect(last(states).complete).toBe(false);
-    expect(last(states).expiryValid).toBe(false);
+    expect(statusOf(await submit(ref))).toBe('not_ready');
+    expect(calls).toHaveLength(0);
 
-    /* 3-4. remount -> the display matches the canonical value again, and validity agrees */
+    /* 3-4. remount -> the display matches the canonical value again, and the form submits */
     await ReactTestRenderer.act(() => {
       tree.update(<Harness showExpiry={true} />);
     });
     expect(input(tree, 'ExpiryInputTestId').props.value).toBe(typedExpiry);
-    expect(last(states).expiryValid).toBe(true);
-    expect(last(states).complete).toBe(true);
+    await ReactTestRenderer.act(async () => {
+      ref.current!.confirmPayment(PAYMENT_VAULT);
+    });
+    expect(calls).toHaveLength(1);
+    await settlePair();
 
     /* 5. reset clears the canonical values AND the visible display together */
     await ReactTestRenderer.act(() => {
@@ -652,7 +707,6 @@ describe('expiry is canonical in the controller', () => {
     expect(input(tree, 'ExpiryInputTestId').props.value).toBe('');
     expect(input(tree, 'CardNumberInputTestId').props.value).toBe('');
     expect(input(tree, 'CVCInputTestId').props.value).toBe('');
-    expect(last(states).expiryValid).toBe(false);
   });
 
   it('a replaced session cannot restore a stale expiry display', async () => {
@@ -739,9 +793,9 @@ describe('reset through the provider', () => {
     const typedNumber = input(tree, 'CardNumberInputTestId').props.value;
     expect(typedNumber).not.toBe('');
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls).toHaveLength(1);
 
@@ -756,8 +810,8 @@ describe('reset through the provider', () => {
     expect(input(tree, 'CardNumberInputTestId').props.value).toBe(typedNumber);
     expect(calls[0].aborted()).toBe(false);
 
+    await settlePair();
     await ReactTestRenderer.act(async () => {
-      calls[0].settle(confirmResponse);
       await pending;
     });
 
@@ -777,9 +831,9 @@ describe('session replacement', () => {
     const {tree, ref, update} = await mountHarness();
     await fillValidCard(tree);
 
-    let pending!: Promise<VaultSubmitResult>;
+    let pending!: Promise<VaultPaymentResult>;
     await ReactTestRenderer.act(async () => {
-      pending = ref.current!.submit();
+      pending = ref.current!.confirmPayment(PAYMENT_VAULT);
     });
     expect(calls).toHaveLength(1);
 
@@ -787,7 +841,7 @@ describe('session replacement', () => {
     expect(calls[0].aborted()).toBe(true);
 
     const result = await pending;
-    expect(result.status).toBe('error');
-    expect(result.status === 'error' && result.error.code).toBe('unknown_outcome');
+    expect(statusOf(result)).toBe('failed');
+    expect(errorOf(result)?.code).toBe('unknown_outcome');
   });
 });

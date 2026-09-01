@@ -13,6 +13,7 @@
     "link": "node scripts/link-library.mjs"
   },
   "dependencies": {
+    "@juspay-tech/react-native-hyperswitch-scancard": "^0.2.3",
     "@juspay-tech/react-native-hyperswitch-vault": "link:..",
     "react": "19.0.0",
     "react-native": "0.79.7"
@@ -21,7 +22,6 @@
     "@babel/core": "^7.25.2",
     "@babel/preset-env": "^7.25.3",
     "@babel/runtime": "^7.25.0",
-    "@juspay-tech/react-native-hyperswitch-scancard": "^0.2.3",
     "@react-native-community/cli": "18.0.0",
     "@react-native-community/cli-platform-android": "18.0.0",
     "@react-native-community/cli-platform-ios": "18.0.0",

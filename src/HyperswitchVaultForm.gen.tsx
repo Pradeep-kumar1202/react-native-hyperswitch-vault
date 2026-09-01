@@ -11,7 +11,11 @@ import type {appearance as VaultFormOptions_appearance} from './VaultFormOptions
 
 import type {brandIconMode as VaultFormOptions_brandIconMode} from './VaultFormOptions.gen';
 
-import type {cardFormState as VaultFormOptions_cardFormState} from './VaultFormOptions.gen';
+import type {cardSourceType as VaultCardSource_cardSourceType} from './VaultCardSource.gen';
+
+import type {cardholderNameMode as CardFieldOptions_cardholderNameMode} from './CardFieldOptions.gen';
+
+import type {eligibilityConfig as VaultFormOptions_eligibilityConfig} from './VaultFormOptions.gen';
 
 import type {expiryStyles as CardFieldStyles_expiryStyles} from './CardFieldStyles.gen';
 
@@ -31,9 +35,13 @@ import type {localisationMessages as VaultFormOptions_localisationMessages} from
 
 import type {localisation as VaultFormOptions_localisation} from './VaultFormOptions.gen';
 
+import type {paymentCardSource as VaultCardSource_paymentCardSource} from './VaultCardSource.gen';
+
 import type {safeVaultErrorCode as VaultResult_safeVaultErrorCode} from './VaultResult.gen';
 
 import type {safeVaultError as VaultResult_safeVaultError} from './VaultResult.gen';
+
+import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './VaultEndpoint.gen';
 
 import type {vaultEnvironment as VaultFormOptions_vaultEnvironment} from './VaultFormOptions.gen';
 
@@ -41,9 +49,11 @@ import type {vaultFormHandle as VaultFormOptions_vaultFormHandle} from './VaultF
 
 import type {vaultFormState as VaultPublicState_vaultFormState} from './VaultPublicState.gen';
 
+import type {vaultPaymentResult as VaultResult_vaultPaymentResult} from './VaultResult.gen';
+
 import type {vaultSession as VaultFormOptions_vaultSession} from './VaultFormOptions.gen';
 
-import type {vaultSubmitResult as VaultResult_vaultSubmitResult} from './VaultResult.gen';
+import type {vaultTokenizeResult as VaultResult_vaultTokenizeResult} from './VaultResult.gen';
 
 export type vaultEnvironment = VaultFormOptions_vaultEnvironment;
 
@@ -59,13 +69,13 @@ export type localisationMessages = VaultFormOptions_localisationMessages;
 
 export type localisation = VaultFormOptions_localisation;
 
-export type cardFormState = VaultFormOptions_cardFormState;
-
 export type safeVaultErrorCode = VaultResult_safeVaultErrorCode;
 
 export type safeVaultError = VaultResult_safeVaultError;
 
-export type vaultSubmitResult = VaultResult_vaultSubmitResult;
+export type vaultPaymentResult = VaultResult_vaultPaymentResult;
+
+export type vaultTokenizeResult = VaultResult_vaultTokenizeResult;
 
 export type vaultFormHandle = VaultFormOptions_vaultFormHandle;
 
@@ -75,40 +85,52 @@ export type expiryStyles = CardFieldStyles_expiryStyles;
 
 export type formFieldStyles = CardFieldStyles_formFieldStyles;
 
-export type vaultFormState = VaultPublicState_vaultFormState;
-
 export type formFieldOptions = CardFieldOptions_formFieldOptions;
 
 export type formLayout = CardFieldOptions_formLayout;
 
 export type fieldArrangement = CardFieldOptions_fieldArrangement;
 
+export type cardholderNameMode = CardFieldOptions_cardholderNameMode;
+
+export type eligibilityConfig = VaultFormOptions_eligibilityConfig;
+
+export type paymentCardSource = VaultCardSource_paymentCardSource;
+
+export type cardSourceType = VaultCardSource_cardSourceType;
+
 export type Props = {
   readonly accessible?: boolean; 
   readonly appearance?: appearance; 
+  readonly cardholderName?: cardholderNameMode; 
   readonly disabled?: boolean; 
+  readonly eligibility?: eligibilityConfig; 
+  readonly enabledCardSchemes?: string[]; 
   readonly environment: vaultEnvironment; 
   readonly fieldArrangement?: fieldArrangement; 
   readonly fieldOptions?: formFieldOptions; 
   readonly fieldStyles?: formFieldStyles; 
   readonly layout?: formLayout; 
   readonly localisation?: localisation; 
-  readonly onFormStateChange?: (_1:vaultFormState) => void; 
-  readonly onStateChange?: (_1:cardFormState) => void; 
-  readonly session: vaultSession
+  readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
+  readonly session?: vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };
 
 export const make: React.ComponentType<{
   readonly accessible?: boolean; 
   readonly appearance?: appearance; 
+  readonly cardholderName?: cardholderNameMode; 
   readonly disabled?: boolean; 
+  readonly eligibility?: eligibilityConfig; 
+  readonly enabledCardSchemes?: string[]; 
   readonly environment: vaultEnvironment; 
   readonly fieldArrangement?: fieldArrangement; 
   readonly fieldOptions?: formFieldOptions; 
   readonly fieldStyles?: formFieldStyles; 
   readonly layout?: formLayout; 
   readonly localisation?: localisation; 
-  readonly onFormStateChange?: (_1:vaultFormState) => void; 
-  readonly onStateChange?: (_1:cardFormState) => void; 
-  readonly session: vaultSession
+  readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
+  readonly session?: vaultSession; 
+  readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 }> = HyperswitchVaultFormJS.make as any;

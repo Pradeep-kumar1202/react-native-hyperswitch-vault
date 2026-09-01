@@ -7,9 +7,25 @@ type common = {
   accessible: option<bool>,
 }
 
-let inputColors = (~theme: CardFormTypes.cardTheme, ~error: option<string>, ~isValid) => {
+/*
+ * `errorDisplay` governs the COLOUR too, not only the message.
+ *
+ * It used to govern the message alone: a merchant who configured nothing got no error text and a
+ * red field anyway, because the tint read `dangerColor` straight off the theme. That made "inline
+ * error rendering is OPT-IN" true of the sentence and false of the styling, and it painted a
+ * judgement onto a merchant's form in a colour they never chose.
+ *
+ * The validity verdict is returned unchanged — only the colour is gated — so nothing downstream
+ * starts believing an invalid field is valid.
+ */
+let inputColors = (
+  ~theme: CardFormTypes.cardTheme,
+  ~error: option<string>,
+  ~isValid,
+  ~errorDisplay: CardFieldOptions.errorDisplay,
+) => {
   let ok = isValid->Option.getOr(error->Option.isNone)
-  (ok, ok ? theme.textColor : theme.dangerColor)
+  (ok, !ok && errorDisplay === #inline ? theme.dangerColor : theme.textColor)
 }
 
 /*
@@ -53,7 +69,12 @@ module Number = {
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf
@@ -115,7 +136,12 @@ module Expiry = {
     /* Widened from `expiryStyles`; `accessory` is structurally absent for this field. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf
@@ -155,6 +181,67 @@ module Expiry = {
   }
 }
 
+/*
+ * A plain text field: no brand artwork, no CVC glyph, no auto-advance. It is not part of the
+ * number → expiry → CVC focus chain, because a cardholder name has no completion signal that could
+ * tell us when to move on.
+ */
+module CardholderName = {
+  @react.component
+  let make = (
+    ~value: string,
+    ~onChange: string => unit,
+    ~onFocus: unit => unit=() => (),
+    ~onBlur: unit => unit=() => (),
+    ~error: option<string>=?,
+    ~isValid: bool=?,
+    ~renderError: option<string => React.element>=?,
+    ~options: CardFieldOptions.resolved,
+    ~common: common,
+    ~onAnalytics: CardFormTypes.analyticsEvent => unit=_ => (),
+    ~reference: option<React.ref<Nullable.t<TextInput.element>>>=?,
+    ~borderBottomWidth: option<float>=?,
+    ~borderBottomLeftRadius: option<float>=?,
+    ~borderBottomRightRadius: option<float>=?,
+    ~styles: option<CardFieldStyles.fieldStyles>=?,
+  ) => {
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
+    <View
+      style=?{styles
+      ->CardFieldStyles.rootOf
+      ->Option.map(root => Style.s({})->CardFieldStyles.withView(Some(root)))}>
+      <CardInput
+        ?styles
+        theme=common.theme
+        isProcessing=common.isProcessing
+        editable=common.editable
+        onAnalytics
+        fieldId=CardFormTypes.CardholderNameField
+        options
+        reference
+        state=value
+        setState={text => onChange(CardFieldLogic.onCardholderNameText(text))}
+        keyboardType=#default
+        isValid
+        maxLength=Some(255)
+        ?borderBottomWidth
+        ?borderBottomLeftRadius
+        ?borderBottomRightRadius
+        textColor
+        onFocus
+        onBlur
+        accessible=?common.accessible
+      />
+      <ErrorSlot error={error} renderError={renderError} errorDisplay={options.errorDisplay} />
+    </View>
+  }
+}
+
 module Cvc = {
   @react.component
   let make = (
@@ -183,7 +270,12 @@ module Cvc = {
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf

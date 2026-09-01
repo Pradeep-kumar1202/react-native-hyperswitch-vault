@@ -96,6 +96,8 @@ type formFieldStyles = {
   cardNumber?: fieldStyles,
   expiry?: expiryStyles,
   cvc?: fieldStyles,
+  /* Renders no accessory, but keeps the full slot set for symmetry with the other text fields. */
+  cardholderName?: fieldStyles,
 }
 
 /*
@@ -175,6 +177,8 @@ let cardNumberOf = (styles: option<formFieldStyles>) => styles->Option.flatMap(s
 let expiryOf = (styles: option<formFieldStyles>) =>
   styles->Option.flatMap(s => s.expiry)->Option.map(widenExpiry)
 let cvcOf = (styles: option<formFieldStyles>) => styles->Option.flatMap(s => s.cvc)
+let cardholderNameOf = (styles: option<formFieldStyles>) =>
+  styles->Option.flatMap(s => s.cardholderName)
 
 /*
  * THE RUNTIME DEFENCE FOR THE ANIMATED LABEL.

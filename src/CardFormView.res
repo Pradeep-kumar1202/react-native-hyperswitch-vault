@@ -15,6 +15,8 @@ let make = (
   ~fieldStyles: option<CardFieldStyles.formFieldStyles>=?,
   /* Grouped per-field options: which visual elements exist. */
   ~fieldOptions: option<CardFieldOptions.formFieldOptions>=?,
+  /* Whether this form renders a cardholder-name field at all. See `cardholderNameMode`. */
+  ~cardholderName: CardFieldOptions.cardholderNameMode=#collect,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardFormView")
   let theme = ctx.theme
@@ -25,9 +27,12 @@ let make = (
   let expiryStyles = fieldStyles->CardFieldStyles.expiryOf
   let cvcStyles = fieldStyles->CardFieldStyles.cvcOf
 
+  let cardholderStyles = fieldStyles->CardFieldStyles.cardholderNameOf
+
   let numberOptions = fieldOptions->CardFieldOptions.cardNumberOf
   let expiryOptions = fieldOptions->CardFieldOptions.expiryOf
   let cvcOptions = fieldOptions->CardFieldOptions.cvcOf
+  let cardholderOptions = fieldOptions->CardFieldOptions.cardholderNameOf
 
   /*
    * `fused` is the only arrangement that halves shared borders and squares inner corners, and it is
@@ -59,6 +64,25 @@ let make = (
    * `separate` needs none of this — each field's own `ErrorSlot` renders its own message.
    */
   let claim = (enabled, error) => enabled ? error : None
+
+  /*
+   * FORM-LEVEL messages — the unsupported-network rule and the eligibility denial. Neither belongs
+   * to a field: one is about the network in force, the other is the backend's verdict on the card
+   * as a whole.
+   *
+   * They are ordered LAST, after every field message, reproducing client-core's precedence — a
+   * malformed number is a more actionable thing to tell the customer than a routing verdict on the
+   * number they have not finished typing.
+   *
+   * Their opt-in and their style come from the card NUMBER, the form's anchor field. That is a
+   * choice, not an oversight: a form-level message needs a declared owner, and attaching it to the
+   * field the customer is looking at when it appears is the only owner that reads naturally.
+   */
+  let formLevelError = switch errors.network {
+  | Some(error) => Some(error)
+  | None => errors.eligibility
+  }
+
   let fusedFieldError = if !fused {
     None
   } else {
@@ -68,10 +92,19 @@ let make = (
       switch claim(expiryInline, errors.expiry) {
       | Some(error) => Some((expiryStyles, error))
       | None =>
-        claim(cvcInline, errors.cvc)->Option.map(error => (cvcStyles, error))
+        switch claim(cvcInline, errors.cvc) {
+        | Some(error) => Some((cvcStyles, error))
+        | None => claim(numberInline, formLevelError)->Option.map(error => (numberStyles, error))
+        }
       }
     }
   }
+
+  /*
+   * In the SPLIT arrangement each field already renders its own message, so the form-level ones
+   * need a line of their own rather than a share of somebody else's.
+   */
+  let splitFormError = fused ? None : claim(numberInline, formLevelError)
 
   /*
    * ERROR STYLE OWNERSHIP.
@@ -105,6 +138,24 @@ let make = (
 
   <React.Fragment>
     <View style={s({marginBottom: theme.gap->dp})}>
+      /*
+       * Cardholder name: full width, ABOVE the card number, and deliberately OUTSIDE the fused
+       * group below. It is optional and has no completion signal, so joining it to the
+       * number/expiry/CVC block would imply a sequence and a shared border it is not part of.
+       */
+      /* `#external` and `#omit` both render nothing here; they differ only at confirm time. */
+      <CardRenderIf condition={cardholderName === #collect}>
+        <View style={s({width: 100.->pct, marginBottom: theme.gap->dp})}>
+          <BoundCardFields.CardholderName
+            ctx
+            styles=?cardholderStyles
+            options=?cardholderOptions
+            renderError=?{Some(
+              message => renderErrorWith(cardholderStyles->CardFieldStyles.errorOf, message),
+            )}
+          />
+        </View>
+      </CardRenderIf>
       <View style={s({width: 100.->pct, borderRadius: theme.borderRadius})}>
         <View
           style={s({
@@ -116,14 +167,18 @@ let make = (
             styles=?numberStyles
             options=?numberOptions
             renderError=?{perFieldError(numberStyles)}
-            iconRight={switch CardFieldOptions.resolveBrandIconMode(
-              numberOptions,
-              ~formWide=ctx.brandIconMode,
-            ) {
-            | #hidden => CardInput.NoIcon
-            | mode =>
-              CardInput.CustomIcon(<CardIcons detectedScheme=ctx.controller.values.brand mode />)
-            }}
+            /*
+             * The accessory decides which slot this is — nothing, decoration, or a control —
+             * because a co-badge chooser or a scan button can be warranted even with brand artwork
+             * switched off.
+             */
+            iconRight={CardNumberAccessory.iconFor(
+              ~ctx,
+              ~brandIconMode=CardFieldOptions.resolveBrandIconMode(
+                numberOptions,
+                ~formWide=ctx.brandIconMode,
+              ),
+            )}
             borderBottomWidth=?{fused ? Some(theme.borderWidth /. 2.) : None}
             borderBottomLeftRadius=?{fused ? Some(0.) : None}
             borderBottomRightRadius=?{fused ? Some(0.) : None}
@@ -184,15 +239,23 @@ let make = (
        * field opted in" — the previous form used any opt-in as permission and then showed whichever
        * field errored first, so `cvc: {errorDisplay: "inline"}` alone surfaced card-number text.
        *
-       * There is deliberately no network-error branch here. `errors.network` has no owner: the
-       * reducer's `validators.network` is `None` at every call site, so it can never be populated,
-       * and a slot that renders a field's message under a non-field heading is exactly the
-       * cross-field leak this block was fixed to stop. If form-level errors are wanted later they
-       * need their own declared owner and their own opt-in.
+       * The network and eligibility messages DO appear here now, last in the chain. They were
+       * previously excluded because `validators.network` was `None` at every call site and the slot
+       * could never be populated — a dead branch that would only ever have rendered some other
+       * field's message under a heading that did not own it. Both now have a real source (the
+       * merchant's accepted-scheme list, and the backend's eligibility verdict) and a declared owner
+       * (the card-number field), which is what that exclusion was waiting for.
        */
       <CardRenderIf condition={fusedFieldError->Option.isSome}>
         {switch fusedFieldError {
         | Some((styles, error)) => renderErrorWith(styles->CardFieldStyles.errorOf, error)
+        | None => React.null
+        }}
+      </CardRenderIf>
+      /* The split layout's own line for the two messages no field owns. */
+      <CardRenderIf condition={splitFormError->Option.isSome}>
+        {switch splitFormError {
+        | Some(error) => renderErrorWith(numberStyles->CardFieldStyles.errorOf, error)
         | None => React.null
         }}
       </CardRenderIf>
