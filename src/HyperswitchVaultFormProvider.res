@@ -32,6 +32,12 @@ let make = React.forwardRef((
      * merchant should place no field; `#omit` sends none.
      */
     "cardholderName": option<CardFieldOptions.cardholderNameMode>,
+    /*
+     * Called with one snapshot on mount and again whenever the snapshot actually changes, by
+     * structural comparison. Passing an inline arrow function is safe: the callback is held in a
+     * ref, so its identity changing emits nothing.
+     */
+    "onFormStateChange": option<VaultPublicState.vaultFormState => unit>,
     "children": React.element,
   },
   ref,
@@ -47,6 +53,7 @@ let make = React.forwardRef((
     ~eligibility=props["eligibility"],
     ~vaultEndpoint=props["vaultEndpoint"],
     ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
+    ~onFormStateChange=props["onFormStateChange"],
   )
 
   React.useImperativeHandle0(ref, () => {

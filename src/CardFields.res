@@ -7,9 +7,25 @@ type common = {
   accessible: option<bool>,
 }
 
-let inputColors = (~theme: CardFormTypes.cardTheme, ~error: option<string>, ~isValid) => {
+/*
+ * `errorDisplay` governs the COLOUR too, not only the message.
+ *
+ * It used to govern the message alone: a merchant who configured nothing got no error text and a
+ * red field anyway, because the tint read `dangerColor` straight off the theme. That made "inline
+ * error rendering is OPT-IN" true of the sentence and false of the styling, and it painted a
+ * judgement onto a merchant's form in a colour they never chose.
+ *
+ * The validity verdict is returned unchanged — only the colour is gated — so nothing downstream
+ * starts believing an invalid field is valid.
+ */
+let inputColors = (
+  ~theme: CardFormTypes.cardTheme,
+  ~error: option<string>,
+  ~isValid,
+  ~errorDisplay: CardFieldOptions.errorDisplay,
+) => {
   let ok = isValid->Option.getOr(error->Option.isNone)
-  (ok, ok ? theme.textColor : theme.dangerColor)
+  (ok, !ok && errorDisplay === #inline ? theme.dangerColor : theme.textColor)
 }
 
 /*
@@ -53,7 +69,12 @@ module Number = {
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf
@@ -115,7 +136,12 @@ module Expiry = {
     /* Widened from `expiryStyles`; `accessory` is structurally absent for this field. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf
@@ -179,7 +205,12 @@ module CardholderName = {
     ~borderBottomRightRadius: option<float>=?,
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf
@@ -239,7 +270,12 @@ module Cvc = {
     /* Merchant per-field style slots. None => byte-identical to the unstyled render. */
     ~styles: option<CardFieldStyles.fieldStyles>=?,
   ) => {
-    let (isValid, textColor) = inputColors(~theme=common.theme, ~error, ~isValid)
+    let (isValid, textColor) = inputColors(
+      ~theme=common.theme,
+      ~error,
+      ~isValid,
+      ~errorDisplay=options.errorDisplay,
+    )
     <View
       style=?{styles
       ->CardFieldStyles.rootOf

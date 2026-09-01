@@ -36,13 +36,21 @@ const out = path.join(root, 'assets');
 
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
-/* Brands with approved artwork, plus the two non-brand glyphs. `camera` is deliberately absent:
- * scan-card is parked. */
+/*
+ * Brands with approved artwork, plus the three non-brand glyphs.
+ *
+ * `camera` was parked while scan-card was; the field showed the word "Scan" in the meantime. It is
+ * client-core's own `Icon.res` camera path, moved here verbatim when the scan button moved into
+ * this library, so the two SDKs draw the identical glyph. It is a single-path monochrome mark, so
+ * it is rasterised black and tinted at render time to the merchant's `primaryColor` — which is what
+ * client-core's `fill=primaryColor` did.
+ */
 const ICONS = [
   'visa', 'mastercard', 'americanexpress', 'dinersclub',
   'discover', 'jcb', 'cartesbancaires', 'interac',
   'waitcard',
   'cvv',
+  'camera',
 ];
 
 const DENSITIES = [

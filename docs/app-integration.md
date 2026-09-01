@@ -35,10 +35,11 @@ Both share the same session, the same operations, the same result types and the 
   or custom, never both.
 - **Multiple providers may exist on one screen**, and each is independent — but every widget belongs
   to exactly one provider, and each provider needs its own session.
-- **The library emits nothing as the customer types.** There are no state callbacks: no validity, no
-  focus, no brand, no completion. That surface was removed (see
-  [ADR-0003](adr/0003-remove-state-emission-and-own-final-confirmation.md)). The only state a host
-  tracks is whether its own promise is still pending.
+- **The library reports state as the customer types, and never values.** `onStateChange` per field
+  and `onFormStateChange` for the form carry validity, completeness, focus, touched and the visible
+  message — no PAN, no BIN, no last four, no length (see
+  [ADR-0005](adr/0005-restore-card-safe-state-emission.md)). Pass no callback and the library derives
+  nothing at all, which is exactly what it cost before the callbacks existed.
 
 The backend endpoint that produces a session is **not** covered here — see
 [merchant-integration.md](merchant-integration.md#2-the-server). This document assumes you have it.
@@ -484,7 +485,9 @@ passed.
   is harmless. Requesting the *other* operation while one is pending returns `not_ready` without a
   request — there is no honest answer to give it mid-flight.
 
-There are no value accessors and no state callbacks, in either direction.
+There are no value accessors in either direction. State callbacks report validity, completeness,
+focus and the visible message — never a card value; see
+[ADR-0005](adr/0005-restore-card-safe-state-emission.md).
 
 ---
 

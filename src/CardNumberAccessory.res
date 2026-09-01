@@ -27,26 +27,36 @@ open Style
  * decoration is hidden from screen readers, controls are not.
  */
 
+/*
+ * The camera glyph and the hairline before it, reproducing client-core's `ScanCardButton`: a
+ * divider in the border colour, then a 26pt camera filled with `primaryColor`.
+ *
+ * It read the word "Scan" until now, which was a placeholder from when the artwork was parked —
+ * a text control in a row of icons, in English only, and not what client-core's customers saw.
+ * `accessibilityLabel` keeps the word for screen readers, which is the one place it belonged.
+ */
 module ScanButton = {
   @react.component
   let make = (~theme: CardFormTypes.cardTheme, ~editable: bool, ~onPress: unit => unit) =>
-    <Pressable
-      accessibilityRole=#button
-      accessibilityLabel="Scan card"
-      testID=CardTestIds.scanCardButton
-      disabled={!editable}
-      onPress={_ => onPress()}
-      style={_ => s({paddingHorizontal: 4.->dp, justifyContent: #center})}>
-      {_ =>
-        <Text
-          style={s({
-            color: theme.primaryColor,
-            fontFamily: theme.fontFamily,
-            fontSize: 12. *. theme.fontScale,
-          })}>
-          {React.string("Scan")}
-        </Text>}
-    </Pressable>
+    <>
+      <View
+        style={s({
+          backgroundColor: theme.dividerColor,
+          marginHorizontal: 6.->dp,
+          height: 60.->pct,
+          width: 1.->dp,
+        })}
+      />
+      <Pressable
+        accessibilityRole=#button
+        accessibilityLabel="Scan card"
+        testID=CardTestIds.scanCardButton
+        disabled={!editable}
+        onPress={_ => onPress()}
+        style={_ => s({paddingHorizontal: 2.->dp, justifyContent: #center})}>
+        {_ => <CardIcons.Camera size={20. *. theme.fontScale} color=theme.primaryColor />}
+      </Pressable>
+    </>
 }
 
 /*

@@ -11,6 +11,7 @@ import {
   type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {vaultPaymentFrom} from './merchantServer';
+import {logFormState} from './eventLog';
 
 type BareMinimumFieldsProps = {
   session: MerchantSession;
@@ -23,11 +24,6 @@ type BareMinimumFieldsProps = {
 
 export function BareMinimumFields({session, onResult}: BareMinimumFieldsProps) {
   const formRef = useRef<VaultFormHandle>(null);
-  /*
-   * The library publishes no form state, so the button is entirely the merchant's affair. Keeping
-   * it enabled costs nothing: an incomplete card is answered with `validation_error` and makes no
-   * network request at all.
-   */
   const [busy, setBusy] = useState(false);
 
   const pay = async () => {
@@ -45,6 +41,15 @@ export function BareMinimumFields({session, onResult}: BareMinimumFieldsProps) {
         ref={formRef}
         session={session}
         environment="sandbox"
+        /*
+         * OBSERVE ONLY. The button stays enabled on purpose: this screen exists to show that a
+         * premature press is answered with `validation_error` and makes no network request, so
+         * nothing here is gated on `canSubmit`. `CustomLayoutCheckout` shows the other style,
+         * where the button is disabled until the form reports itself ready.
+         *
+         * The fields themselves still take no props at all — the screen is still bare.
+         */
+        onFormStateChange={logFormState}
       >
         <CardNumberField />
         <CardExpiryField />

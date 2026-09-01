@@ -204,11 +204,13 @@ Session: `MerchantSession`.
 
 Named explicitly so their absence is checkable rather than assumed:
 
-- **State emission — all removed in ADR-0003, gated by `verify-event-surface.mjs`.**
-  Removed: `onStateChange`, `onFormStateChange`, `CardFormState`, `VaultFormState`.
-  Removed: `VaultFieldState`, `VaultFormFields`, `VaultFieldStatus`, `VaultFieldError`.
-  Removed: `VaultFieldErrorCode`, `VaultSessionStatus`, `CardBrand`.
-  Removed: `canSubmit`, `fieldsReady`, `complete`. None of these exists.
+- **Card values inside the emitted state.** State emission itself is published again under
+  [ADR-0005](adr/0005-restore-card-safe-state-emission.md) — `onStateChange`, `onFormStateChange`
+  and their types are part of the supported surface. What remains unpublished is any card value
+  within them: there is no `value`, `bin`, `last4`, `length`, `expiryMonth`, `expiryYear` or `token`
+  on any snapshot, and `verify-event-surface.mjs` holds the exact member allowlist that keeps it so.
+  `CardFormState` and `CardBrand` are still gone as names; the published spellings are
+  `VaultFormState` and `VaultCardBrand`.
 - **Controlled inputs.** `value`, `defaultValue`, `onChange`, `onChangeText` on any field.
 - **Value accessors.** Nothing reads the PAN, expiry, CVC or cardholder name.
 - **The transports.** `confirmPaymentMethodSession`, `confirmPayment` (internal), `cardDetails`,

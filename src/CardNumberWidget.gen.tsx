@@ -9,6 +9,8 @@ import * as CardNumberWidgetJS from './CardNumberWidget.bs.js';
 
 import type {brandIconMode as CardFieldOptions_brandIconMode} from './CardFieldOptions.gen';
 
+import type {cardNumberState as VaultPublicState_cardNumberState} from './VaultPublicState.gen';
+
 import type {errorDisplay as CardFieldOptions_errorDisplay} from './CardFieldOptions.gen';
 
 import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
@@ -23,6 +25,7 @@ export type Props = {
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cardNumberState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string
@@ -36,6 +39,7 @@ export const make: React.ComponentType<{
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cardNumberState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string

@@ -16,11 +16,22 @@ let make = React.forwardRef((
     "accessibilityLabel": option<string>,
     "accessibilityHint": option<string>,
     "testID": option<string>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
+    "onStateChange": option<VaultPublicState.cvcState => unit>,
     "cvcIcon": option<CardFieldOptions.cvcIconDisplay>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardCVCWidget")
+
+  VaultStateEmitter.use(
+    ~build=() => ctx.publicSnapshot().cvc,
+    ~equal=VaultPublicState.cvcEq,
+    ~notify=props["onStateChange"],
+  )
   let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {

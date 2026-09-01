@@ -37,6 +37,8 @@ let useHost = (
    * one is even allowed. One prop, read in both places, so the two cannot disagree.
    */
   ~cardholderNameMode: CardFieldOptions.cardholderNameMode,
+  /* Absent means no merchant is listening, and nothing is derived. See `VaultStateEmitter`. */
+  ~onFormStateChange: option<VaultPublicState.vaultFormState => unit>,
 ): host => {
   /*
    * The component's session backs `tokenize()` ONLY. A confirmation reads its session from
@@ -174,9 +176,72 @@ let useHost = (
     ~clearLocal=controller.reset,
   )
 
+  /*
+   * `#absent` is not `#invalid`. A form mounted with no session at all is a legitimate Flow 3 form
+   * — client-core mounts exactly that when the merchant profile says Skip — so reporting it as
+   * invalid would have merchants render a fault where there is none. Only a session that WAS
+   * supplied and could not be read is `#invalid`.
+   */
+  let sessionStatus: VaultPublicState.vaultSessionStatus = switch (session, sessionState) {
+  | (None, _) => #absent
+  | (Some(_), Ready(_)) => #valid
+  | (Some(_), Unusable(_)) => #invalid
+  }
+
+  let isSubmitting = machinery.isSubmitting
+
+  /*
+   * `fieldsReady` is derived from the SAME registry counts `presenceGate` uses to refuse a submit,
+   * so a merchant's disabled Pay button and the library's own gate cannot disagree — there is
+   * deliberately no second definition of readiness.
+   *
+   * The snapshot is built inside the emitter's effect rather than during render: each field
+   * registers itself in a child effect, and child effects run before the parent's, so a render-time
+   * read of the registry would be one commit stale and the first snapshot would claim
+   * `fieldsReady: false` for a form that is already complete.
+   */
+  VaultStateEmitter.use(
+    ~build=() => {
+      /* Derived inside `build`, which the emitter calls only when a merchant is listening. */
+      let publicSnapshot = controller.publicSnapshot()
+      VaultPublicState.formStateOf(
+        ~fieldsReady=requiredKinds->Array.every(kind => countOf(kind) === 1),
+        ~sessionStatus,
+        ~submitting=isSubmitting,
+        ~brand=controller.values.brand,
+        ~isCoBadged=controller.values.isCoBadged,
+        ~eligibility=publicSnapshot.eligibility,
+        ~networkError=publicSnapshot.networkError,
+        ~fields={
+          cardNumber: publicSnapshot.cardNumber,
+          expiry: publicSnapshot.expiry,
+          cvc: publicSnapshot.cvc,
+          /*
+           * Present exactly when the field IS MOUNTED — not when the mode says it ought to be.
+           *
+           * One rule for both layouts. The ready-made form renders it only under `#collect`
+           * (`CardFormView.res`), so this reproduces its behaviour precisely; a custom layout places
+           * its own widgets, and there the mode was never the right question. Keying on the mode
+           * reported a `cardholderName` for a merchant who mounted only number, expiry and CVC —
+           * describing a field the customer could not see, and disagreeing with that widget's own
+           * `onStateChange`, which does not fire because the widget does not exist.
+           */
+          cardholderName: ?(
+            countOf(VaultCardController.CardholderNameKind) > 0
+              ? Some(publicSnapshot.cardholderName)
+              : None
+          ),
+        },
+      )
+    },
+    ~equal=VaultPublicState.formEq,
+    ~notify=onFormStateChange,
+  )
+
   {
     contextValue: {
       controller,
+      publicSnapshot: controller.publicSnapshot,
       theme,
       labels,
       errorFontSize,

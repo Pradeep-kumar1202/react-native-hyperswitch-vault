@@ -56,6 +56,13 @@ import type {
   VaultEnvironment,
   SafeVaultError,
   VaultNextAction,
+  VaultCardBrand,
+  VaultFieldErrorCode,
+  VaultEligibilityStatus,
+  VaultSessionStatus,
+  VaultCardNumberState,
+  VaultFormState,
+  VaultFieldState,
 } from '../dist/types/public';
 
 const session = {} as MerchantSession;
@@ -369,29 +376,106 @@ export const badInput7: VaultPaymentConfirmInput = {cardSource: direct, sdkAutho
 // @ts-expect-error - sdkAuthorization is required
 export const badInput8: VaultPaymentConfirmInput = {cardSource: direct, paymentId: 'p'};
 
-/* ══ 5. The removed state surface cannot be written ═══════════════════════════ */
+/* ══ 5. State emission reports validity, and nothing card-shaped ══════════════ */
 
-// @ts-expect-error - per-field state emission was removed
-export const noEmit1 = <CardNumberField onStateChange={(s: unknown) => s} />;
-// @ts-expect-error - per-field state emission was removed
-export const noEmit2 = <CardExpiryField onStateChange={(s: unknown) => s} />;
-// @ts-expect-error - per-field state emission was removed
-export const noEmit3 = <CardCVCField onStateChange={(s: unknown) => s} />;
-// @ts-expect-error - per-field state emission was removed
-export const noEmit4 = <CardholderNameField onStateChange={(s: unknown) => s} />;
-export const noEmit5 = (
-  // @ts-expect-error - form state emission was removed
-  <HyperswitchVaultForm session={session} environment="sandbox" onFormStateChange={(s: unknown) => s} />
+/*
+ * POSITIVE: what ADR-0005 exists to make possible. A merchant drives their own chrome from these
+ * without ever holding a card value.
+ */
+export const emit1 = (
+  <CardNumberField
+    onStateChange={(s) => {
+      const valid: boolean = s.valid;
+      const status: 'empty' | 'incomplete' | 'complete' = s.status;
+      const touched: boolean = s.touched;
+      const focused: boolean = s.focused;
+      const brand: VaultCardBrand = s.brand;
+      const coBadged: boolean = s.isCoBadged;
+      const eligibility: VaultEligibilityStatus = s.eligibility;
+      const code: VaultFieldErrorCode | undefined = s.error?.code;
+      const message: string | undefined = s.error?.message;
+      return [valid, status, touched, focused, brand, coBadged, eligibility, code, message];
+    }}
+  />
 );
-export const noEmit6 = (
-  // @ts-expect-error - the ready-made form has no per-field emission either
-  <HyperswitchVaultForm session={session} environment="sandbox" onStateChange={(s: unknown) => s} />
+export const emit2 = <CardExpiryField onStateChange={(s) => s.valid} />;
+/* The form-level network fault, and the optional name's always-true validity. */
+export const emitNetwork = (
+  <HyperswitchVaultForm
+    session={session}
+    environment="sandbox"
+    enabledCardSchemes={['Visa']}
+    onFormStateChange={(s) => {
+      const why: VaultFieldErrorCode | undefined = s.networkError?.code;
+      const nameValid: boolean | undefined = s.fields.cardholderName?.valid;
+      return [why, nameValid];
+    }}
+  />
 );
-export const noEmit7 = (
-  // @ts-expect-error - the provider has no emission
-  <HyperswitchVaultFormProvider session={session} environment="sandbox" onFormStateChange={(s: unknown) => s}>
+export const emit3 = <CardCVCField onStateChange={(s) => s.error?.message} />;
+export const emit4 = <CardholderNameField onStateChange={(s) => s.status} />;
+export const emit5 = (
+  <HyperswitchVaultForm
+    session={session}
+    environment="sandbox"
+    onFormStateChange={(s) => {
+      const canSubmit: boolean = s.canSubmit;
+      const sessionStatus: VaultSessionStatus = s.sessionStatus;
+      const cvcValid: boolean = s.fields.cvc.valid;
+      const namePresent: boolean = s.fields.cardholderName !== undefined;
+      return [canSubmit, sessionStatus, cvcValid, namePresent];
+    }}
+  />
+);
+export const emit6 = (
+  <HyperswitchVaultFormProvider
+    session={session}
+    environment="sandbox"
+    onFormStateChange={(s: VaultFormState) => s.complete}>
     <CardNumberField />
   </HyperswitchVaultFormProvider>
+);
+
+/* The union narrows on `field`, and `brand` lives on exactly one branch. */
+export function narrowField(s: VaultFieldState): string {
+  switch (s.field) {
+    case 'cardNumber':
+      return s.brand;
+    case 'expiry':
+    case 'cvc':
+    case 'cardholderName':
+      return s.status;
+  }
+}
+
+/*
+ * NEGATIVE: the emitted snapshot has no route to a card value. These are the assertions that make
+ * "events without a leak" a compiler-enforced property rather than a claim in a comment.
+ */
+declare const numberState: VaultCardNumberState;
+declare const formState: VaultFormState;
+
+// @ts-expect-error - the PAN is not on the snapshot
+export const noLeak1 = numberState.value;
+// @ts-expect-error - the BIN is not on the snapshot (this is where VGS and this library part ways)
+export const noLeak2 = numberState.bin;
+// @ts-expect-error - the last four are not on the snapshot
+export const noLeak3 = numberState.last4;
+// @ts-expect-error - not even the length of what was typed
+export const noLeak4 = numberState.length;
+// @ts-expect-error - the CVC value is not on the snapshot
+export const noLeak5 = formState.fields.cvc.value;
+// @ts-expect-error - expiry parts are not on the snapshot
+export const noLeak6 = formState.fields.expiry.expiryMonth;
+// @ts-expect-error - the payment-method token never reaches a merchant surface
+export const noLeak7 = formState.token;
+// @ts-expect-error - the vault authorization never reaches a merchant surface
+export const noLeak8 = formState.sdkAuthorization;
+// @ts-expect-error - `brand` is card-number only
+export const noLeak9 = formState.fields.expiry.brand;
+export const noLeak10 = (
+  // @ts-expect-error - the ready-made form emits form state, not per-field state
+  <HyperswitchVaultForm session={session} environment="sandbox" onStateChange={(s: unknown) => s} />
 );
 
 /* ══ 6. Card values and events cannot be controlled from outside ══════════════ */

@@ -47,6 +47,12 @@ import type { safeVaultError as SafeVaultErrorInternal } from './VaultResult.gen
 import type { safeNextAction as SafeNextActionInternal } from './VaultNavigation.gen';
 import type { confirmTokenMode as VaultConfirmTokenModeInternal } from './VaultConfirmBody.gen';
 import type { MerchantSession as MerchantSessionInternal } from './merchantTypes';
+import type {
+  cardNumberState,
+  expiryState,
+  cvcState,
+  cardholderNameState,
+} from './VaultPublicState.gen';
 
 /* ── Component types ──────────────────────────────────────────────────────── */
 
@@ -200,15 +206,20 @@ type VaultFormComponent<P> = React.ForwardRefExoticComponent<
  * expiry style type.
  */
 /*
- * ── No state emission (ADR-0003) ─────────────────────────────────────────────
+ * ── State emission (ADR-0005, superseding ADR-0003) ──────────────────────────
  *
- * A field takes styles, options and a ref — and nothing else. There is deliberately no
- * `onStateChange`: typing, focusing, blurring, validating and brand detection produce zero
- * external callbacks, so no card-derived value has a route out of the library.
- * `scripts/verify-event-surface.mjs` proves the absence against the packed declarations.
+ * A field takes styles, options, a ref, and one callback reporting its own state. The callback
+ * carries validity, completeness, focus, whether the customer has touched it, and the message it is
+ * currently showing — and, for the card number, the detected scheme. It carries no card value:
+ * no PAN, no BIN, no last four, no length, no expiry parts, no CVC.
+ *
+ * The state type is a parameter rather than a union so each field publishes ITS OWN shape:
+ * `brand` exists on the card-number callback and on no other, structurally rather than by comment.
+ * `scripts/verify-event-surface.mjs` pins the payload member by member against the packed
+ * declarations, so widening it is a build failure rather than a judgement call.
  */
-type VaultStyledFieldComponent<S, O> = React.ForwardRefExoticComponent<
-  { styles?: S } & O & React.RefAttributes<widgetHandle>
+type VaultStyledFieldComponent<S, O, State> = React.ForwardRefExoticComponent<
+  { styles?: S; onStateChange?: (state: State) => void } & O & React.RefAttributes<widgetHandle>
 >;
 
 /* ── Existing published names — unchanged ─────────────────────────────────── */
@@ -227,15 +238,18 @@ export const HyperswitchVaultFormProvider =
 
 export const CardNumberWidget = RawCardNumberWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
-  cardNumberOptions
+  cardNumberOptions,
+  cardNumberState
 >;
 export const CardExpiryWidget = RawCardExpiryWidget as unknown as VaultStyledFieldComponent<
   expiryStyles,
-  expiryOptions
+  expiryOptions,
+  expiryState
 >;
 export const CardCVCWidget = RawCardCVCWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
-  cvcOptions
+  cvcOptions,
+  cvcState
 >;
 
 /*
@@ -248,7 +262,8 @@ export const CardCVCWidget = RawCardCVCWidget as unknown as VaultStyledFieldComp
  */
 export const CardholderNameWidget = RawCardholderNameWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
-  cardholderNameOptions
+  cardholderNameOptions,
+  cardholderNameState
 >;
 
 /*
@@ -394,3 +409,40 @@ export type {
 } from './VaultResult.gen';
 
 export type { MerchantSession } from './merchantTypes';
+
+/*
+ * ── Emitted state (ADR-0005) ────────────────────────────────────────────────────────────────────
+ *
+ * What the form and the individual fields report while the customer types. Every one of these is
+ * derived from library-owned state and carries no card value: no PAN, no BIN, no last four, no
+ * value length, no expiry month or year, no CVC, no token and no credential. The only card-derived
+ * members are the detected scheme name and the localised message already on screen.
+ *
+ * `scripts/verify-event-surface.mjs` gates that claim against the PACKED declarations.
+ */
+export type {
+  cardBrand as VaultCardBrand,
+  vaultFieldStatus as VaultFieldStatus,
+  vaultFieldErrorCode as VaultFieldErrorCode,
+  vaultFieldError as VaultFieldError,
+  vaultEligibilityStatus as VaultEligibilityStatus,
+  vaultSessionStatus as VaultSessionStatus,
+  cardNumberState as VaultCardNumberState,
+  expiryState as VaultExpiryState,
+  cvcState as VaultCVCState,
+  cardholderNameState as VaultCardholderNameState,
+  vaultFormFields as VaultFormFields,
+  vaultFormState as VaultFormState,
+} from './VaultPublicState.gen';
+
+/*
+ * The union a merchant writes when one handler serves several fields. Each member is narrowed by
+ * its own `field` discriminant, so `switch (state.field)` gives back the exact shape — and reading
+ * `brand` is a type error anywhere but the card-number branch.
+ */
+export type VaultFieldState =
+  | import('./VaultPublicState.gen').cardNumberState
+  | import('./VaultPublicState.gen').expiryState
+  | import('./VaultPublicState.gen').cvcState
+  | import('./VaultPublicState.gen').cardholderNameState;
+

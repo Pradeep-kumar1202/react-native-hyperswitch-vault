@@ -73,7 +73,6 @@ const forbidden = [
   [/\.env/, 'environment file'],
   [/(^|\/)node_modules\//, 'node_modules'],
   [/\.svg$/, 'source SVG artwork (only rasterised PNGs ship)'],
-  [/camera.*\.png$/i, 'camera artwork (scan-card is parked)'],
   [/^assets\/source\//, 'artwork source directory'],
   [/PostalCodes/i, 'unrelated sdk-utils module (postal codes for all countries)'],
   [/CpfValidation|CnpjValidation/i, 'unrelated sdk-utils module (BR tax-ID validation)'],
@@ -107,9 +106,14 @@ for (const required of [
  * fail loudly at runtime — React Native silently falls back to another density and the icon renders
  * blurry — so it has to be caught here.
  */
+/*
+ * `camera` was on the FORBIDDEN list above while scan-card was parked and the button rendered the
+ * word "Scan". It now ships and is asserted present: the scan button draws client-core's camera
+ * glyph, so a tarball without it would put a merchant back on the text placeholder.
+ */
 const ICONS = [
   'visa', 'mastercard', 'americanexpress', 'dinersclub', 'discover',
-  'jcb', 'cartesbancaires', 'interac', 'waitcard', 'cvv',
+  'jcb', 'cartesbancaires', 'interac', 'waitcard', 'cvv', 'camera',
 ];
 for (const icon of ICONS) {
   for (const suffix of ['', '@2x', '@3x']) {

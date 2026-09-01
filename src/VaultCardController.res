@@ -1,18 +1,31 @@
 open ReactNative
 
-type widgetKind = CardNumberKind | ExpiryKind | CvcKind
+/*
+ * `CardholderNameKind` is registered but is NOT in `VaultFormHost.requiredKinds`: the cardholder
+ * name is optional, and a custom layout that omits it must still submit. It is counted purely so
+ * the form state can report whether the field EXISTS, which in a custom layout only the merchant
+ * knows.
+ */
+type widgetKind = CardNumberKind | ExpiryKind | CvcKind | CardholderNameKind
 
 let kindLabel = kind =>
   switch kind {
   | CardNumberKind => "CardNumberWidget"
   | ExpiryKind => "CardExpiryWidget"
   | CvcKind => "CardCVCWidget"
+  | CardholderNameKind => "CardholderNameWidget"
   }
 
 type controller = {
   values: CardFormTypes.cardFieldValues,
   visibleErrors: CardFormTypes.cardFieldErrors,
   fieldOk: CardFormTypes.cardFieldOk,
+  /*
+   * The merchant-facing snapshot. Derived, never stored: a pure function of the reducer state this
+   * controller already holds, so there is no second source of truth to keep in sync and nothing new
+   * is retained.
+   */
+  publicSnapshot: unit => VaultPublicState.controllerSnapshot,
   onNumberChange: CardFieldLogic.numberChange => unit,
   onExpiryChange: CardFieldLogic.expiryChange => unit,
   onCvcChange: CardFieldLogic.cvcChange => unit,
@@ -144,7 +157,72 @@ let use = (~validators: CardStateReducer.validators, ~enabledCardSchemes: array<
           enabledCardSchemes->Array.some(enabled => enabled === scheme)
         )
 
+  let eligibilityStatus: VaultPublicState.vaultEligibilityStatus = switch state.eligibility {
+  | Unknown => #unknown
+  | Pending => #pending
+  | Allowed => #allowed
+  | Denied => #denied
+  }
+
+  /*
+   * `accepted` is the RAW validator verdict and `visibleError` is the already-filtered message the
+   * UI is rendering. Publishing both keeps "is this field done?" and "is the customer being shown a
+   * problem?" as the separate questions they are, and stops a merchant's chrome disagreeing with
+   * the library's.
+   */
+  let publicSnapshot = (): VaultPublicState.controllerSnapshot => {
+    cardNumber: VaultPublicState.cardNumberStateOf(
+      {
+        value: state.cardNumber,
+        accepted: errors.cardNumber->Option.isNone,
+        touched: state.numberMeta.touched,
+        focused: state.numberMeta.active,
+        visibleError: CardStateReducer.numberError(state, errors),
+      },
+      ~brand=state->CardStateReducer.effectiveNetwork,
+      ~isCoBadged=state->CardStateReducer.isCoBadged && eligibleSchemes->Array.length > 1,
+      ~eligibility=eligibilityStatus,
+    ),
+    expiry: VaultPublicState.expiryStateOf({
+      value: state.expiryDisplay,
+      accepted: errors.expiry->Option.isNone,
+      touched: state.expiryMeta.touched,
+      focused: state.expiryMeta.active,
+      visibleError: CardStateReducer.expiryError(state, errors),
+    }),
+    cvc: VaultPublicState.cvcStateOf({
+      value: state.cvc,
+      accepted: errors.cvc->Option.isNone,
+      touched: state.cvcMeta.touched,
+      focused: state.cvcMeta.active,
+      visibleError: CardStateReducer.cvcError(state, errors),
+    }),
+    cardholderName: VaultPublicState.cardholderNameStateOf({
+      value: state.cardholderName,
+      accepted: true,
+      touched: state.cardholderMeta.touched,
+      focused: state.cardholderMeta.active,
+      visibleError: None,
+    }),
+    /*
+     * The RAW verdict, not `CardStateReducer.networkError`'s touched-filtered one.
+     *
+     * These are different questions and the wrong one was wired here first. The filtered value asks
+     * "is the customer being shown a network problem?", which is false until they touch the field
+     * or press submit. `localGate` asks `isValid`, which consults the raw `errors.network` with no
+     * such filter. Feeding the filtered value into `canSubmit` made the form report itself
+     * submittable for a complete, well-formed card of a network the merchant does not accept — the
+     * merchant enabled Pay, the customer pressed it, and `tokenize()` answered `invalid_card_data`
+     * for a failure `canSubmit` had promised could not happen.
+     */
+    networkError: errors.network->Option.map((
+      message,
+    ): VaultPublicState.vaultFieldError => {code: #unsupported_network, message}),
+    eligibility: eligibilityStatus,
+  }
+
   {
+    publicSnapshot,
     values: {
       cardNumber: state.cardNumber,
       expiryDisplay: state.expiryDisplay,

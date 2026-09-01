@@ -19,6 +19,8 @@ import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './V
 
 import type {vaultEnvironment as VaultFormOptions_vaultEnvironment} from './VaultFormOptions.gen';
 
+import type {vaultFormState as VaultPublicState_vaultFormState} from './VaultPublicState.gen';
+
 import type {vaultSession as VaultFormOptions_vaultSession} from './VaultFormOptions.gen';
 
 export type widgetHandle = { readonly focus: () => void; readonly blur: () => void };
@@ -33,6 +35,7 @@ export type Props = {
   readonly enabledCardSchemes?: string[]; 
   readonly environment: VaultFormOptions_vaultEnvironment; 
   readonly localisation?: VaultFormOptions_localisation; 
+  readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
   readonly session?: VaultFormOptions_vaultSession; 
   readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };
@@ -47,6 +50,7 @@ export const make: React.ComponentType<{
   readonly enabledCardSchemes?: string[]; 
   readonly environment: VaultFormOptions_vaultEnvironment; 
   readonly localisation?: VaultFormOptions_localisation; 
+  readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
   readonly session?: VaultFormOptions_vaultSession; 
   readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 }> = HyperswitchVaultFormProviderJS.make as any;

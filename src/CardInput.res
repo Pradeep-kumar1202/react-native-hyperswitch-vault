@@ -181,7 +181,14 @@ let make = (
           borderBottomRightRadius: borderBottomRightRadius->Option.getOr(theme.borderRadius),
           height: theme.inputHeight->dp,
           flexDirection: #row,
-          borderColor: isValid
+          /*
+           * The error BORDER is opt-in on the same switch as the error message. With
+           * `errorDisplay = #none` (the default) an invalid field is bordered exactly like a valid
+           * one — focused or not — and the merchant hears about the problem through the state
+           * event instead, to draw however they like. Only `#inline` paints, and it paints in the
+           * merchant's own `errorColor`.
+           */
+          borderColor: isValid || options.errorDisplay !== #inline
             ? isFocused ? theme.primaryColor : theme.normalBorderColor
             : theme.errorBorderColor,
           width: 100.->pct,

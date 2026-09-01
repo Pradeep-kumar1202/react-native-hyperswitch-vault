@@ -14,7 +14,7 @@
  *
  *   1. the MERCHANT flow is documented as performing the final payment confirmation;
  *   2. the CLIENT-CORE flow is documented as returning a token;
- *   3. a removed state callback reappears;
+ *   3. a card value is documented as readable from an emitted snapshot;
  *   4. Flow 3 (vault disabled) is described as a FALLBACK for a broken vault configuration.
  *
  * Checks are scoped to a "flow section" — a heading and the prose under it — so a document may
@@ -42,21 +42,27 @@ const DOCS = [
 
 /* ── 3. Removed state callbacks, anywhere, in any document ─────────────────── */
 
-const REMOVED_CALLBACKS = [
-  'onStateChange',
-  'onFormStateChange',
-  'canSubmit',
-  'fieldsReady',
-  'CardFormState',
-  'VaultFormState',
-  'VaultFieldState',
+/*
+ * ADR-0005 restored `onStateChange` / `onFormStateChange`, so naming them is no longer the defect —
+ * this list used to hold them. The defect that replaced it is narrower and worse: documentation
+ * that shows a merchant reading a CARD VALUE off an emitted snapshot. A doc example is the first
+ * thing a merchant copies, so a sample doing `s.last4` would spread a member that does not exist
+ * and, if it ever did, must not.
+ *
+ * Deliberately MEMBER ACCESS, not bare words. The docs have to be able to say "VGS carries `bin`
+ * and `last4`, this library carries neither" — naming the thing in order to disclaim it is the
+ * clearest way to write it, and a bare-word scan would forbid exactly that sentence.
+ */
+const LEAKED_READS = [
+  /\b(?:s|state|snapshot|fieldState|formState|cardNumberState)\s*\.\s*(?:bin|iin|last4|lastFour|first6|pan|value|rawValue|cvv|securityCode|expiryMonth|expiryYear|token|sdkAuthorization)\b/,
+  /onStateChange[^\n]*\.\s*(?:bin|last4|pan|value)\b/,
 ];
 
 /*
  * A doc may NAME a removed callback to say it is gone. The marker must be on the same line, which
  * is what stops "use onStateChange to enable your button" from passing.
  */
-const REMOVAL_MARKER = /\bremoved\b|\bno longer\b|\bdoes not exist\b|\bgone\b|gets no\b|gets nothing\b|gets neither\b|\bnot exposed\b|there is no\b|gets no\b/i;
+const REMOVAL_MARKER = /\bremoved\b|\bno longer\b|\bdoes not exist\b|\bgone\b|gets no\b|gets nothing\b|gets neither\b|\bnot exposed\b|there is no\b|carries no\b|carries neither\b|\bno card value\b|never carries\b|never on\b|\bnot carried\b/i;
 
 /* ── 1 & 2. Flow confusion ─────────────────────────────────────────────────── */
 
@@ -128,10 +134,10 @@ for (const file of DOCS) {
   const lines = readFileSync(full, 'utf8').split('\n');
 
   /*
-   * 3. Removed callbacks.
+   * 3. Card values read off a snapshot.
    *
-   * Prose wraps, so "`onStateChange` … was\nremoved" is one sentence across two lines. The marker
-   * is looked for in a small WINDOW around the mention rather than on the line alone — the same rule
+   * Prose wraps, so "`s.last4` … does not\nexist" is one sentence across two lines. The marker is
+   * looked for in a small WINDOW around the mention rather than on the line alone — the same rule
    * `verify-docs.mjs` uses, and for the same reason: otherwise the docs would have to be written to
    * suit the scanner.
    */
@@ -140,11 +146,11 @@ for (const file of DOCS) {
   const revived = lines
     .map((text, i) => ({ text, number: i + 1, index: i }))
     .filter(({ text, index }) =>
-      REMOVED_CALLBACKS.some((name) => text.includes(name)) && !REMOVAL_MARKER.test(windowAround(index))
+      LEAKED_READS.some((pattern) => pattern.test(text)) && !REMOVAL_MARKER.test(windowAround(index))
     );
   check(
     revived.length === 0,
-    `${file} presents no removed state callback as available` +
+    `${file} documents no card value as readable from an emitted snapshot` +
       (revived.length ? ` (line ${revived[0].number}: ${revived[0].text.trim().slice(0, 70)})` : '')
   );
 
@@ -228,9 +234,9 @@ const fallbackCaught = sectionsOf(
 ).some((section) => section.lines.some(({ text }) => /fall(s|ing)?[ -]?back|fallback/i.test(text) && !/never|not a|no fallback|does not/i.test(text)));
 check(fallbackCaught, 'the gate catches Flow 3 described as a fallback');
 
-const callbackCaught = ['Use onStateChange to enable your button.']
-  .some((text) => REMOVED_CALLBACKS.some((name) => text.includes(name)) && !REMOVAL_MARKER.test(text));
-check(callbackCaught, 'the gate catches a revived state callback');
+const leakCaught = ['Show the card with s.last4 from the snapshot.']
+  .some((text) => LEAKED_READS.some((pattern) => pattern.test(text)) && !REMOVAL_MARKER.test(text));
+check(leakCaught, 'the gate catches a card value documented as readable from a snapshot');
 
 const hostOwnsCaught = sectionsOf(
   '## Flow 3 — vault disabled\n\nWith vaulting off your app keeps its own card entry.\n'.split('\n'),
@@ -257,10 +263,14 @@ check(
   'the gate still allows describing the old host-owned arrangement in order to say it is gone'
 );
 
-const allowedMention = 'onStateChange was removed in this release.';
+/*
+ * The sentence the docs actually need to be able to write. If this ever starts failing, the gate has
+ * become one that forbids disclaiming a leak, which is worse than not having it.
+ */
+const allowedMention = 'VGS carries bin and last4 on s.last4; this library carries neither.';
 check(
-  !(REMOVED_CALLBACKS.some((n) => allowedMention.includes(n)) && !REMOVAL_MARKER.test(allowedMention)),
-  'the gate still allows naming a removed callback in order to say it is gone'
+  !(LEAKED_READS.some((p) => p.test(allowedMention)) && !REMOVAL_MARKER.test(allowedMention)),
+  'the gate still allows naming a card value in order to say it is not carried'
 );
 
 if (failures.length) {

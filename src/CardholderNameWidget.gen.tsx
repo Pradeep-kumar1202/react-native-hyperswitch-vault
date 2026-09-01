@@ -7,6 +7,8 @@ import * as React from 'react';
 
 import * as CardholderNameWidgetJS from './CardholderNameWidget.bs.js';
 
+import type {cardholderNameState as VaultPublicState_cardholderNameState} from './VaultPublicState.gen';
+
 import type {errorDisplay as CardFieldOptions_errorDisplay} from './CardFieldOptions.gen';
 
 import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
@@ -20,6 +22,7 @@ export type Props = {
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cardholderNameState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string
@@ -32,6 +35,7 @@ export const make: React.ComponentType<{
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cardholderNameState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string

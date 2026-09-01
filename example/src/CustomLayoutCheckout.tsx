@@ -37,6 +37,7 @@ import {
   type WidgetHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {fetchMerchantSession, vaultPaymentFrom} from './merchantServer';
+import {logFieldState, logFormState} from './eventLog';
 
 const MERCHANT = 'Arrive Group';
 const BRAND = '#0B5FBF';
@@ -51,10 +52,13 @@ const cardAppearance: VaultFormAppearance = {
   borderRadius: 12,
   inputHeight: 52,
   /*
-   * Deliberately NO brandIconMode. This screen is the zero-configuration icon case: with neither a
-   * field option nor a form-wide one, the brand mark resolves to 'hidden'. It previously set
-   * 'animated' here, which is an explicit opt-in — and is why a mark appeared on a
-   * `<CardNumberWidget placeholder="Card Number" />` that had asked for nothing.
+   * Still NO form-wide brandIconMode, on purpose. Setting it here is what previously made a mark
+   * appear on a `<CardNumberWidget placeholder="Card Number" />` that had asked for nothing —
+   * form-wide is a blunt instrument, and with neither a field option nor a form-wide one the mark
+   * resolves to 'hidden'.
+   *
+   * The card number opts in for itself instead, below. That is the arrangement worth showing: the
+   * default stays off, and one field asks for artwork.
    */
 };
 
@@ -72,6 +76,8 @@ export function CustomLayoutCheckout() {
   const [sessionSerial, setSessionSerial] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [paying, setPaying] = useState(false);
+  /* Fed by `onFormStateChange`; false until every gate the library checks is satisfied. */
+  const [formReady, setFormReady] = useState(false);
   /* The merchant's own field. The SDK neither sees nor sends it. */
   const [plate, setPlate] = useState('');
 
@@ -128,7 +134,8 @@ export function CustomLayoutCheckout() {
    * The library publishes no form state, so this is the merchant's own gate. It stays enabled while
    * idle: an incomplete card is answered with `validation_error` and makes no network request.
    */
-  const canPay = !paying;
+  /* Driven by the form callback now, not just by "is a request in flight". */
+  const canPay = !paying && formReady;
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -166,17 +173,36 @@ export function CustomLayoutCheckout() {
               ref={formRef}
               session={phase.session}
               environment="sandbox"
-              appearance={cardAppearance}>
+              appearance={cardAppearance}
+              onFormStateChange={state => {
+                logFormState(state);
+                setFormReady(state.canSubmit);
+              }}>
 
               {/*
                 * The exact reported integration: a placeholder and nothing else. The cardholder
                 * name is OPTIONAL in a custom layout — a provider with only number, expiry and CVC
                 * submits perfectly well — and is shown here because this checkout wants it.
                 */}
-              <CardholderNameWidget placeholder="Name on card" />
-              <CardNumberWidget placeholder="Card Number" />
-              <CardExpiryWidget placeholder="Expiry" />
-              <CardCVCWidget placeholder="CVC" />
+              {/*
+                * Every field reports its own state. `logFieldState` prints only what changed, and
+                * refuses to print anything card-shaped — a demonstration of the boundary, not a
+                * safeguard the snapshots need.
+                */}
+              <CardholderNameWidget placeholder="Name on card" onStateChange={logFieldState} />
+              {/*
+                * `animated` cycles Visa / Mastercard / Amex / Diners / Discover / JCB in the icon
+                * slot while the field is empty and no brand is detected, then settles on the real
+                * mark once the number identifies one. `standard` is the same thing without the
+                * cycle. Per-field, so the other three widgets are unaffected.
+                */}
+              <CardNumberWidget
+                placeholder="Card Number"
+                brandIconMode="animated"
+                onStateChange={logFieldState}
+              />
+              <CardExpiryWidget placeholder="Expiry" onStateChange={logFieldState} />
+              <CardCVCWidget placeholder="CVC" onStateChange={logFieldState} />
 
               <View style={styles.controls}>
                 <Chip label="Focus number" onPress={() => numberRef.current?.focus()} />

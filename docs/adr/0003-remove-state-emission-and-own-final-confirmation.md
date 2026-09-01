@@ -2,7 +2,18 @@
 
 **Status:** Accepted · supersedes the emission surface of [ADR-0002](0002-merchant-public-api-contract.md)
 · its flow model is amended by [ADR-0004](0004-library-owns-every-new-card-flow.md)
+· **its removal of state emission is superseded by
+[ADR-0005](0005-restore-card-safe-state-emission.md)**
 
+> **Emission is back.** The decision below to remove `onStateChange` / `onFormStateChange` no
+> longer holds: [ADR-0005](0005-restore-card-safe-state-emission.md) restores them with the payload
+> pinned to an exact member set by a build gate. The reasoning below is retained because ADR-0005
+> answers it point by point — in particular, this record's claim that emission had "no remaining
+> consumer" is the part that turned out to be wrong.
+>
+> **The rest of this ADR stands unchanged.** The library still owns the final payment confirmation
+> and the payment-method token still never reaches a merchant.
+>
 > **Amended.** This record described three flows, the third of which was "the library is not
 > involved": with vaulting off, the host kept its own card entry and its own confirm. ADR-0004
 > removed that third arrangement. Every new-card flow now renders the library's fields; vaulting

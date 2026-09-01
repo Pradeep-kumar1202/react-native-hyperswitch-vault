@@ -225,11 +225,20 @@ export function SaveCardScreen() {
 
 You supply the button. The component owns only the card fields.
 
-**There is no readiness callback to wait for.** The library emits nothing as the customer types —
-no validity, no focus, no brand, no completion. Enable your button and let `tokenize()` answer: it
-returns `validation_error` or `not_ready` **without making any network request**, and the inline
-field errors appear on screen at the same time. The only state worth tracking is whether your own
-promise is still pending, as `busy` does above.
+**You do not have to wait for a readiness callback.** Enable your button and let `tokenize()`
+answer: it returns `validation_error` or `not_ready` **without making any network request**, and the
+inline field errors appear on screen at the same time. The only state this example tracks is whether
+its own promise is still pending, as `busy` does above.
+
+If you would rather disable the button until the form is ready, §3.6 shows how —
+`onFormStateChange` reports readiness continuously, from the same field-presence and validity checks
+the submit gate applies.
+
+One gap to close yourself on this page: `canSubmit` treats a **missing** session as acceptable,
+because a form mounted without one is a valid direct-confirmation form (Flow 3). `tokenize()` is the
+flow that *requires* a session, so gate on `sessionStatus === 'valid'` as well if you use it —
+otherwise a form completed while the session is still loading reports `canSubmit: true` and
+`tokenize()` answers `invalid_session`.
 
 ### 3.3 `environment` selects the vault host
 
@@ -268,7 +277,89 @@ place `<CardholderNameField />` yourself or omit it — tokenization still succe
 Like every other field, it is library-owned: you can style and label it, and there is no supported
 way to read or set what the customer typed.
 
-### 3.6 The ref handle
+### 3.6 Knowing what the customer has typed
+
+The library reports **state**, never values. Pass `onStateChange` to any field, or
+`onFormStateChange` to the form, and drive your own chrome from it:
+
+```tsx
+const [canPay, setCanPay] = useState(false);
+
+<HyperswitchVaultForm
+  ref={formRef}
+  session={session}
+  environment="sandbox"
+  onFormStateChange={s => setCanPay(s.canSubmit)}
+/>
+<Button title="Pay" disabled={!canPay} onPress={pay} />
+```
+
+Per field, for a tick or a border colour:
+
+```tsx
+<CardNumberField
+  onStateChange={s => {
+    setNumberValid(s.valid);
+    setBrandIcon(s.brand);
+    setNumberError(s.touched ? s.error?.message : undefined);
+  }}
+/>
+```
+
+| Member | On | Meaning |
+| --- | --- | --- |
+| `status` | every field | `empty`, `incomplete` or `complete` |
+| `valid` | every field | would this field pass submission right now |
+| `touched` | every field | the customer has interacted with it — use this to decide whether *your* chrome should complain yet |
+| `focused` | every field | the cursor is in it |
+| `error` | every field | `{code, message}` for what is on screen now, or absent |
+| `brand` | card number | the detected scheme, or `unknown` |
+| `isCoBadged` | card number | the customer is being offered a genuine choice of network |
+| `eligibility` | card number | `unknown`, `pending`, `allowed` or `denied` |
+| `canSubmit` | form | fields mounted, all values valid, an accepted network, the session not *unusable*, nothing in flight. An **absent** session passes — see the note in §3.2 if you call `tokenize()` |
+| `fieldsReady` | form | exactly one of each required field is mounted |
+| `sessionStatus` | form | `valid`, `invalid`, or `absent` when the form was mounted without a session |
+| `complete` / `valid` | form | all fields complete; and complete with an accepted network |
+| `submitting` | form | an operation is in flight |
+| `networkError` | form | present when the network in force is not one you accept — the reason `valid` and `canSubmit` are false |
+| `fields` | form | the four field states, `cardholderName` present only when this form owns that field |
+
+`canSubmit` deliberately does **not** consult `eligibility`. A denial is the backend's verdict on a
+correctly-typed card, not something the customer can fix by retyping; folding it in would leave you
+unable to tell "still typing" from "this card was refused". Read `eligibility` yourself if you want
+to react to it — `confirmPayment()` answers `card_not_eligible` when it matters.
+
+The cardholder name is optional, so its `valid` is always `true`; use its `status` to tell whether
+anything was typed.
+
+Both callbacks fire **once on mount** and again **only when the snapshot actually changes**, by
+structural comparison — so an inline arrow function is safe, and a keystroke that changes nothing
+observable emits nothing. Pass no callback and the library derives nothing at all.
+
+### Drawing your own errors
+
+The library paints nothing by default. `errorDisplay` starts at `none`, and at `none` an invalid
+field keeps its normal border and normal text — no red, no colour the library chose for you. The
+problem reaches you through the callbacks above, and you draw it however your design system says:
+
+```tsx
+<CardNumberField
+  onStateChange={s => setNumberError(s.touched ? s.error?.message : undefined)}
+/>
+{numberError ? <YourOwnErrorText>{numberError}</YourOwnErrorText> : null}
+```
+
+Set `errorDisplay="inline"` if you would rather the library draw them. Then the message, the field
+border and the typed text all paint — every one of them in the `errorColor` you passed on
+`appearance`. There is no third option where the library picks a colour of its own.
+
+**No card value is on any snapshot.** Not the PAN, not a BIN, not the last four, not the length of
+what was typed, not the expiry parts, not the CVC, and never the payment-method token. If you have
+integrated VGS Collect before, this is the one place the shapes differ: VGS carries `bin` and
+`last4` and this library carries neither. `scripts/verify-event-surface.mjs` pins the exact member
+set against the published declarations, so the payload cannot grow without failing the build.
+
+### 3.7 The ref handle
 
 ```ts
 tokenize(): Promise<VaultTokenizeResult>            // Flow 1 — this guide

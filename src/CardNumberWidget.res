@@ -17,10 +17,21 @@ let make = React.forwardRef((
     "accessibilityHint": option<string>,
     "testID": option<string>,
     "brandIconMode": option<CardFieldOptions.brandIconMode>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
+    "onStateChange": option<VaultPublicState.cardNumberState => unit>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardNumberWidget")
+
+  VaultStateEmitter.use(
+    ~build=() => ctx.publicSnapshot().cardNumber,
+    ~equal=VaultPublicState.cardNumberEq,
+    ~notify=props["onStateChange"],
+  )
   let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {

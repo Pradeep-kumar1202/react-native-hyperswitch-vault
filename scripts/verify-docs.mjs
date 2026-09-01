@@ -75,6 +75,7 @@ const HISTORICAL_MARKER = /Historical \/ removed design/;
 const ACCEPTED = [
   'docs/adr/0003-remove-state-emission-and-own-final-confirmation.md',
   'docs/adr/0004-library-owns-every-new-card-flow.md',
+  'docs/adr/0005-restore-card-safe-state-emission.md',
 ];
 const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
 

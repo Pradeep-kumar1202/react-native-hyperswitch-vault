@@ -9,6 +9,8 @@ import * as CardCVCWidgetJS from './CardCVCWidget.bs.js';
 
 import type {cvcIconDisplay as CardFieldOptions_cvcIconDisplay} from './CardFieldOptions.gen';
 
+import type {cvcState as VaultPublicState_cvcState} from './VaultPublicState.gen';
+
 import type {errorDisplay as CardFieldOptions_errorDisplay} from './CardFieldOptions.gen';
 
 import type {fieldStyles as CardFieldStyles_fieldStyles} from './CardFieldStyles.gen';
@@ -23,6 +25,7 @@ export type Props = {
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cvcState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string
@@ -36,6 +39,7 @@ export const make: React.ComponentType<{
   readonly errorDisplay?: CardFieldOptions_errorDisplay; 
   readonly label?: string; 
   readonly labelBehavior?: CardFieldOptions_labelBehavior; 
+  readonly onStateChange?: (_1:VaultPublicState_cvcState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
   readonly testID?: string

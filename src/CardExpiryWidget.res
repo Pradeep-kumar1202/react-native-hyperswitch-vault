@@ -17,10 +17,21 @@ let make = React.forwardRef((
     "accessibilityLabel": option<string>,
     "accessibilityHint": option<string>,
     "testID": option<string>,
+    /*
+     * Called with one snapshot on mount and again whenever THIS field's state actually changes, by
+     * structural comparison. Carries no card value — see `VaultPublicState`.
+     */
+    "onStateChange": option<VaultPublicState.expiryState => unit>,
   },
   ref,
 ) => {
   let ctx = VaultWidgetContext.useRequired("CardExpiryWidget")
+
+  VaultStateEmitter.use(
+    ~build=() => ctx.publicSnapshot().expiry,
+    ~equal=VaultPublicState.expiryEq,
+    ~notify=props["onStateChange"],
+  )
   let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {

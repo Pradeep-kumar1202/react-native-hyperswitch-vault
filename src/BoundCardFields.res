@@ -77,11 +77,17 @@ module CardholderName = {
   ) => {
     let resolved = CardFieldOptions.resolveCardholderName(options)
     /*
-     * Deliberately NOT registered with the presence gate. The cardholder name is optional, so a
-     * custom layout that omits it must still be able to submit; registering it would make the gate
-     * demand a field the contract says is optional.
+     * Registered, but under a kind `VaultFormHost.requiredKinds` does not list — so the presence
+     * gate still does not demand it and a custom layout that omits it still submits, which is what
+     * the previous "deliberately NOT registered" arrangement was protecting.
+     *
+     * It is registered because the FORM STATE has to report whether this field exists, and in a
+     * custom layout only the merchant knows: they place the widgets. `cardholderNameMode` used to
+     * stand in for that and was wrong here — it defaults to `#collect`, so a layout with only
+     * number/expiry/CVC reported a `fields.cardholderName` that was not on screen.
      */
     let controller = ctx.controller
+    React.useEffect0(() => Some(controller.register(VaultCardController.CardholderNameKind)))
     <CardFields.CardholderName
       ?styles
       value=controller.values.cardholderName

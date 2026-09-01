@@ -561,7 +561,7 @@ pixel has been rendered.
 | max OS font scale with a placeholder | placeholder and typed text stay centred and unclipped |
 | `layout="stacked"` vs `"inline"` | stacked gives three rows; inline puts expiry and CVC side by side, and reverses under RTL |
 | `fieldArrangement="fused"` at inline | shared edges read as one line on both platforms |
-| `errorDisplay="none"` with an invalid field | nothing appears and the layout does not shift |
+| `errorDisplay="none"` with an invalid field | nothing appears, the border and typed text stay their normal colours, and the layout does not shift |
 | `errorDisplay="inline"` | the message appears without pushing the Pay button under the user's finger |
 | `brandIconMode` `'hidden'` → `'standard'` / `cvcIcon` off then on | no reserved space when off; correct density artwork when on |
 | `brandIconMode="animated"` on `appearance`, `'hidden'` on the field | the field's mark stays off — the field value wins over the form-wide one |

@@ -279,15 +279,40 @@ idempotency key. The library never retries anything.
 
 ---
 
-## No state events
+## State events
 
-Typing, focusing, blurring, validating and brand detection produce **zero** external callbacks.
-`onStateChange` and `onFormStateChange` were removed, along with `CardFormState`, `VaultFormState`,
-`VaultFieldState`, `canSubmit`, `fieldsReady` and `complete` — see
-[ADR-0003](docs/adr/0003-remove-state-emission-and-own-final-confirmation.md).
+The form tells you what the customer has typed **about**, never what they typed.
 
-The operations answer the same questions without a network request, which is why nothing was lost
-except a callback channel out of the component that owns the card values.
+```tsx
+<CardNumberField
+  onStateChange={s => {
+    s.valid;        // would this field pass submission right now?
+    s.status;       // 'empty' | 'incomplete' | 'complete'
+    s.touched;      // has the customer been here yet — should your chrome complain?
+    s.focused;      // is the cursor in it?
+    s.brand;        // 'visa' | 'mastercard' | … | 'unknown'   (card number only)
+    s.error?.code;  // 'required' | 'invalid_card_number' | …
+  }}
+/>
+
+<HyperswitchVault.CardForm
+  session={session}
+  environment="sandbox"
+  onFormStateChange={s => setPayEnabled(s.canSubmit)}
+/>
+```
+
+`onStateChange` is available on all four fields; `onFormStateChange` on the ready-made form and the
+provider. Both fire once on mount and again only when the snapshot actually changes, so an inline
+arrow function is safe and typing a digit that changes nothing observable emits nothing.
+
+**No card value is on any snapshot** — no PAN, no BIN, no last four, not even the length of what was
+typed, and never the payment-method token. That is the line where this parts company with VGS
+Collect, whose per-field update carries `bin` and `last4`. `verify-event-surface.mjs` pins the exact
+member set against the packed declarations, so the payload cannot be widened without failing the
+build. See [ADR-0005](docs/adr/0005-restore-card-safe-state-emission.md).
+
+Pass no callback and nothing is derived at all.
 
 ---
 
@@ -409,4 +434,5 @@ only the client-safe session response.
 | [docs/app-integration.md](docs/app-integration.md) | all three flows, the operations, and the input contracts |
 | [docs/control-surface.md](docs/control-surface.md) | what you can and cannot control or observe |
 | [docs/public-api-baseline.md](docs/public-api-baseline.md) | the complete published surface |
-| [docs/adr/0003-…md](docs/adr/0003-remove-state-emission-and-own-final-confirmation.md) | why state emission was removed and the library owns the confirmation |
+| [docs/adr/0003-…md](docs/adr/0003-remove-state-emission-and-own-final-confirmation.md) | why the library owns the confirmation (its emission removal is superseded) |
+| [docs/adr/0005-…md](docs/adr/0005-restore-card-safe-state-emission.md) | why state emission is back, and how the payload is pinned |

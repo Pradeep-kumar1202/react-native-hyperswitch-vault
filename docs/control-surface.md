@@ -26,22 +26,29 @@ supported way to do it?
 | Know whether an operation is running | yes | track your own promise |
 | Read the PAN, expiry, CVC or cardholder name | **no** | there is no accessor, in any form |
 | Set a card value | **no** | the fields are not controlled inputs |
-| Subscribe to typing, focus, validity or brand | **no** | the state-emission surface was removed |
+| Subscribe to typing, focus, validity or brand | **yes** | `onStateChange` per field, `onFormStateChange` for the form ([ADR-0005](adr/0005-restore-card-safe-state-emission.md)) |
 | Pre-disable a button from library state | **no** | call the operation; it answers without a request |
 | Call the tokenization transport yourself | **no** | it is internal and has no export |
 | Receive the intermediate token in Flow 2 | **no** | `VaultPaymentResult` has no `token` member |
 
 ---
 
-## 2. What was removed, and what replaced it
+## 2. What you may observe, and what you may not
 
-ADR-0003 removed every state-emission callback: `onStateChange` (per field and form-wide),
-`onFormStateChange`, and the types they carried (`CardFormState`, `VaultFormState`,
-`VaultFieldState`, `canSubmit`, `fieldsReady`, `complete`, brand events, focus and validation
-snapshots). None of these exists any more.
+ADR-0003 removed every state-emission callback. [ADR-0005](adr/0005-restore-card-safe-state-emission.md)
+restored them, because the claim they had no consumer was wrong: `submit()` answers "may I submit?"
+at one instant on demand, and a merchant drawing their own chrome needs the answer continuously,
+while the customer types.
 
-The replacement is not another callback. It is that **the operations already answer the question**,
-without a network request:
+What came back is **state**, never values. `onStateChange` per field and `onFormStateChange` for the
+form report validity, completeness, focus, whether the field has been touched, the message already
+on screen, and — for the card number — the detected scheme, whether the card is co-badged and its
+eligibility verdict. They carry no PAN, no BIN, no last four, not even the length of what was typed.
+`verify-event-surface.mjs` pins that member by member against the packed declarations, so widening
+the payload is a build failure rather than a review comment.
+
+Some questions are still answered by the operations rather than a callback, without a network
+request:
 
 | Old question | New answer |
 |---|---|
@@ -95,6 +102,12 @@ Neither exposes a value, in either direction.
 | `layout` | ready-made form | `stacked` (default) or `inline` (expiry and CVC share a row) |
 | `fieldArrangement` | ready-made form | `separate` (default) or `fused` (joined borders) |
 | `fieldOptions` | per field | which elements exist: placeholder, label, `labelBehavior`, `errorDisplay`, accessibility text, `testID`, `brandIconMode` (card number only), `cvcIcon` (CVC only) |
+
+`errorDisplay` governs **all** error presentation — the inline message, the field border and the
+typed text — not the message alone. At its default `none` an invalid field is drawn exactly like a
+valid one and the problem reaches you through `onStateChange` / `onFormStateChange` instead. At
+`inline` all three paint, in the `errorColor` you passed. The library never picks an error colour of
+its own.
 | `fieldStyles` | per field | style slots: `root`, `input`, `placeholder`, `error`, `accessory` (not on expiry) |
 | `disabled` | form-wide | genuinely non-interactive inputs |
 | `accessible` | form-wide | forwarded to the underlying inputs |
@@ -143,7 +156,7 @@ Every claim on this page is gated, not asserted:
 
 | Claim | Gate |
 |---|---|
-| No state-emission surface in the published types | `verify-event-surface.mjs` |
+| The emitted payload is exactly its allowlist — no card value, no wider, no narrower | `verify-event-surface.mjs` |
 | `token` appears in the tokenize result and nowhere else | `verify-result-mapping.mjs`, `verify-publishable.mjs`, `verify-merchant-only.mjs` |
 | Host input is narrow; card keys rejected at depth | `verify-noncard-input.mjs` |
 | Every outcome maps to a safe result with a fixed message | `verify-result-mapping.mjs`, `verify-final-confirm.mjs` |

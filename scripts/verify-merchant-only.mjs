@@ -320,8 +320,14 @@ export const n3 = <CardNumberField value="4242424242424242" />;
 export const n4 = <CardNumberField onChange={() => {}} />;
 // @ts-expect-error - the transport is not exported
 export const n5 = HyperswitchVault.confirmPaymentMethodSession;
-// @ts-expect-error - state emission was removed
-export const n6 = <CardNumberField onStateChange={(s: unknown) => s} />;
+/*
+ * ADR-0005 restored emission, so the callback itself is legitimate now. What must still be rejected
+ * is reading a card value off the snapshot it hands you — the boundary the callback was allowed
+ * back across.
+ */
+export const n6ok = <CardNumberField onStateChange={(s) => s.valid} />;
+// @ts-expect-error - no card value on an emitted snapshot
+export const n6 = <CardNumberField onStateChange={(s) => s.last4} />;
 // @ts-expect-error - the ambiguous submit() was replaced by tokenize()/confirmPayment()
 export const n7 = (ref: React.RefObject<VaultFormHandle>) => ref.current!.submit;
 export const n8 = async (ref: React.RefObject<VaultFormHandle>) => {
