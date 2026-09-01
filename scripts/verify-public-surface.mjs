@@ -1,21 +1,28 @@
 #!/usr/bin/env node
 /*
- * Root-entry surface drift gate.
+ * Entry surface drift gate.
  *
- * WHY THIS EXISTS. The package root has two halves that are compiled by different tools and can
- * disagree without either one failing:
+ * WHY THIS EXISTS. Every published entry has two halves that are compiled by different tools and
+ * can disagree without either one failing:
  *
- *   src/standalone-entry.mjs  -> Rollup -> dist/{esm,cjs}/index.js   (the RUNTIME values)
- *   src/public.ts             -> tsc    -> dist/types/public.d.ts    (the TYPES)
+ *   src/standalone-entry.mjs    -> Rollup -> dist/{esm,cjs}/index.js          (the RUNTIME values)
+ *   src/public.ts               -> tsc    -> dist/types/public.d.ts           (the TYPES)
  *
- * tsc runs with `emitDeclarationOnly`, so nothing in public.ts ever executes. A value exported from
- * public.ts but not from standalone-entry.mjs type-checks perfectly and is `undefined` at runtime;
- * the reverse ships a value no merchant can see. Neither shows up in any other check.
+ *   src/orchestration-entry.mjs -> Rollup -> dist/{esm,cjs}/orchestration.js
+ *   src/orchestration.ts        -> tsc    -> dist/types/orchestration.d.ts
  *
- * This gate reads the two sources and requires their exported VALUE names to be identical, and it
- * additionally requires the runtime namespace object's member names to match the declared one.
+ * tsc runs with `emitDeclarationOnly`, so nothing in the .ts files ever executes. A value exported
+ * from the types but not from the entry type-checks perfectly and is `undefined` at runtime; the
+ * reverse ships a value no consumer can see. Neither shows up in any other check.
  *
- * Type-only exports are deliberately not compared: they exist only in public.ts by definition.
+ * This gate reads each pair and requires their exported VALUE names to be identical, requires the
+ * root's runtime namespace object's member names to match the declared one, and requires the two
+ * surfaces to be DISJOINT: the merchant root must never grow an orchestration name, and the
+ * orchestration entry must never grow a component. That disjointness is what keeps
+ * `confirmTokenizedCardPayment` — alias input, for payment-methods only — out of every merchant
+ * integration path.
+ *
+ * Type-only exports are deliberately not compared: they exist only in the .ts files by definition.
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +31,8 @@ import path from 'node:path';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const runtimeFile = path.join(root, 'src/standalone-entry.mjs');
 const typesFile = path.join(root, 'src/public.ts');
+const orchestrationRuntimeFile = path.join(root, 'src/orchestration-entry.mjs');
+const orchestrationTypesFile = path.join(root, 'src/orchestration.ts');
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -67,27 +76,61 @@ const valueExports = (source) => {
   return names;
 };
 
+const comparePair = (runtimeNames, typeNames, runtimeLabel, typesLabel) => {
+  for (const name of runtimeNames) {
+    if (!typeNames.has(name)) {
+      fail(
+        `\`${name}\` is exported at runtime (${runtimeLabel}) but has no declaration in ` +
+          `${typesLabel} — consumers would get an untyped export`
+      );
+    }
+  }
+  for (const name of typeNames) {
+    if (!runtimeNames.has(name)) {
+      fail(
+        `\`${name}\` is declared in ${typesLabel} but is NOT exported at runtime ` +
+          `(${runtimeLabel}) — it would type-check and be \`undefined\` on a device`
+      );
+    }
+  }
+};
+
 const runtimeNames = valueExports(runtimeSource);
 const typeNames = valueExports(typesSource);
 
 if (runtimeNames.size === 0) die('parsed no value exports from standalone-entry.mjs');
 if (typeNames.size === 0) die('parsed no value exports from public.ts');
+comparePair(runtimeNames, typeNames, 'standalone-entry.mjs', 'public.ts');
 
-for (const name of runtimeNames) {
-  if (!typeNames.has(name)) {
+/* ── 1b. the orchestration pair, and its disjointness from the root ───────── */
+
+const orchestrationRuntimeSource = stripComments(read(orchestrationRuntimeFile));
+const orchestrationTypesSource = stripComments(read(orchestrationTypesFile));
+const orchestrationRuntimeNames = valueExports(orchestrationRuntimeSource);
+const orchestrationTypeNames = valueExports(orchestrationTypesSource);
+
+if (orchestrationRuntimeNames.size === 0) die('parsed no value exports from orchestration-entry.mjs');
+if (orchestrationTypeNames.size === 0) die('parsed no value exports from orchestration.ts');
+comparePair(
+  orchestrationRuntimeNames,
+  orchestrationTypeNames,
+  'orchestration-entry.mjs',
+  'orchestration.ts'
+);
+
+for (const name of orchestrationRuntimeNames) {
+  if (runtimeNames.has(name)) {
     fail(
-      `\`${name}\` is exported at runtime (standalone-entry.mjs) but has no declaration in ` +
-        `public.ts — merchants would get an untyped export`
+      `\`${name}\` is exported from BOTH entries — the merchant root and the orchestration ` +
+        `surface must stay disjoint`
     );
   }
 }
-for (const name of typeNames) {
-  if (!runtimeNames.has(name)) {
-    fail(
-      `\`${name}\` is declared in public.ts but is NOT exported at runtime ` +
-        `(standalone-entry.mjs) — it would type-check and be \`undefined\` on a device`
-    );
-  }
+if ([...runtimeNames, ...typeNames].some((n) => /orchestrat|Tokenized/i.test(n))) {
+  fail('the merchant root exports an orchestration-shaped name — that surface belongs to ./orchestration only');
+}
+if (/\breact\b/i.test(orchestrationRuntimeSource)) {
+  fail('orchestration-entry.mjs mentions React — the orchestration entry is a plain function surface, no components');
 }
 
 /* ── 2. the namespace object's members must match on both sides ───────────── */
@@ -128,6 +171,8 @@ if (runtimeNamespace && declaredNamespace) {
   console.log('\nroot entry surface');
   console.log(`  value exports          ${[...runtimeNames].sort().join(', ')}`);
   console.log(`  HyperswitchVault.*     ${runtimeMembers.join(', ')}`);
+  console.log('\n' + 'orchestration entry surface');
+  console.log(`  value exports          ${[...orchestrationRuntimeNames].sort().join(', ')}`);
 }
 
 /* ── 3. no wrapper components ─────────────────────────────────────────────── */

@@ -33,3 +33,15 @@ export type hostCustomerAcceptance = {
   readonly acceptedAt: string; 
   readonly online: hostOnlineAcceptance
 };
+
+export type providerTokenizedCard = {
+  readonly cardNumberAlias: string; 
+  readonly cardCvcAlias: string; 
+  readonly expiryMonth: string; 
+  readonly expiryYear: string; 
+  readonly cardHolderName?: string; 
+  readonly cardNetwork?: string; 
+  readonly lastFour?: string; 
+  readonly binNumber?: string; 
+  readonly nickName?: string
+};

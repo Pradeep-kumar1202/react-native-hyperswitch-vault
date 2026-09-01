@@ -328,7 +328,11 @@ check(accepts('http://localhost:5252', 'sandbox'), 'loopback http is accepted in
 check(accepts('http://10.0.2.2:5252', 'sandbox'), 'the Android emulator host is accepted in sandbox');
 check(!accepts('http://192.168.1.5:5252', 'sandbox'), 'a non-loopback http host is rejected even in sandbox');
 check(!accepts('https://user:pass@host.example', 'production'), 'credentials in the authority are rejected');
-check(!accepts('https://host.example/path', 'production'), 'a path is rejected');
+check(accepts('https://host.example/api', 'production'), 'a path prefix is accepted (client-core bases end in /api)');
+check(
+  Endpoint.resolveBaseUrl({ baseUrl: 'https://host.example/api/' }, 'production')._0 === 'https://host.example/api',
+  'a path prefix is kept and its trailing slashes are stripped'
+);
 check(!accepts('https://host.example/?q=1', 'production'), 'a query is rejected');
 check(!accepts('https://host.example/#frag', 'production'), 'a fragment is rejected');
 check(!accepts('not a url', 'production'), 'an unparseable value is rejected');

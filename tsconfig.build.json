@@ -23,6 +23,7 @@
   },
   "include": [
     "src/public.ts",
+    "src/orchestration.ts",
     "src/jsx-global.ts",
     "src/merchantTypes.ts",
     "src/styleTypes.ts",

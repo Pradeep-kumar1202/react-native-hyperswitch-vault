@@ -60,8 +60,8 @@ console.log('\nEntry points');
 const packed = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
 const subpaths = Object.keys(packed.exports ?? {});
 check(
-  JSON.stringify(subpaths.sort()) === JSON.stringify(['.', './package.json']),
-  `the export map publishes only the root (got: ${subpaths.join(', ')})`
+  JSON.stringify(subpaths.sort()) === JSON.stringify(['.', './orchestration', './package.json']),
+  `the export map publishes the root and ./orchestration only (got: ${subpaths.join(', ')})`
 );
 
 const req = createRequire(path.join(workspace, 'probe.js'));
@@ -70,6 +70,22 @@ for (const removed of [`${PKG}/embedded`, `${PKG}/vault`]) {
   let resolved = null;
   try { resolved = req.resolve(removed); } catch { /* expected */ }
   check(resolved === null, `${removed} does not resolve`);
+}
+
+/*
+ * `./orchestration` is the host-facing entry for payment-methods (externally tokenized cards). It
+ * must RESOLVE — a subpath in the export map that doesn't is a broken publish — while staying off
+ * the merchant surface, which sections 3 and 4 prove.
+ */
+{
+  let resolved = null;
+  try { resolved = req.resolve(`${PKG}/orchestration`); } catch { /* checked below */ }
+  check(resolved !== null, `${PKG}/orchestration resolves`);
+}
+for (const deep of [`${PKG}/orchestration/internal`, `${PKG}/dist/esm/orchestration.js`]) {
+  let resolved = null;
+  try { resolved = req.resolve(deep); } catch { /* expected */ }
+  check(resolved === null, `deep import ${deep.replace(PKG, '…')} is refused`);
 }
 
 for (const deep of [
@@ -95,10 +111,17 @@ for (const gone of ['dist/esm/embedded.js', 'dist/cjs/embedded.js', 'dist/types/
                     'dist/esm/vault.js', 'dist/cjs/vault.js', 'dist/types/vault.d.ts']) {
   check(!files.includes(gone), `no ${gone} is shipped`);
 }
-check(
-  files.filter((f) => /^dist\/(esm|cjs)\/.*\.js$/.test(f) && !f.endsWith('package.json')).length === 2,
-  'exactly two runtime bundles ship (one esm, one cjs)'
-);
+{
+  const shipped = files.filter((f) => /^dist\/(esm|cjs)\/.*\.js$/.test(f)).sort();
+  check(
+    JSON.stringify(shipped) ===
+      JSON.stringify([
+        'dist/cjs/index.js', 'dist/cjs/orchestration.js',
+        'dist/esm/index.js', 'dist/esm/orchestration.js',
+      ]),
+    `exactly the two entry bundles ship per format (got: ${shipped.join(', ')})`
+  );
+}
 
 /* ── 2. Declarations ───────────────────────────────────────────────────────── */
 
@@ -152,12 +175,32 @@ const INPUT_DECL = 'VaultFormCoordinator.gen.d.ts';
  * file and one exact type.
  */
 const ELIGIBILITY_DECL = 'VaultFormOptions.gen.d.ts';
+/*
+ * ── THE ORCHESTRATION EXEMPTION ──────────────────────────────────────────────
+ *
+ * The `./orchestration` entry HANDS IN a canonical provider-tokenized card (the backend's
+ * `vault_data_card` shape): alias stand-ins, the real expiry, and PROVIDER-REPORTED masked
+ * digits. These member names are forbidden everywhere else precisely so that the two orchestration
+ * declarations are the only ones that may carry them — each pinned to its exact narrow type, so a
+ * widening still fails. The merchant root re-exports none of this (section 1 + the surface gate).
+ */
+const ORCHESTRATION_CARD_DECL = 'VaultConfirmBody.gen.d.ts';
+const ORCHESTRATION_INPUT_DECL = 'VaultOrchestration.gen.d.ts';
 const INPUT_EXEMPT = {
   [INPUT_DECL]: {
     sdkAuthorization: /^string$/,
     paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
   },
   [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/ },
+  [ORCHESTRATION_CARD_DECL]: {
+    expiryMonth: /^string$/,
+    expiryYear: /^string$/,
+    binNumber: /^string$/,
+  },
+  [ORCHESTRATION_INPUT_DECL]: {
+    sdkAuthorization: /^string$/,
+    paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
+  },
 };
 const isExemptInput = ({ file, name, type }) =>
   INPUT_EXEMPT[file]?.[name]?.test(String(type).replace(/\s+/g, ''));
@@ -245,6 +288,38 @@ for (const [name, code] of bundles) {
   );
   check(!/VaultEmbedded|selectCardFields/.test(code), `${name} contains no /embedded code`);
   check(!/react-final-form|__card_cvc_unbound|__card_network_unbound/.test(code), `${name} contains no React Final Form integration`);
+}
+
+/*
+ * The orchestration bundles are a PLAIN FUNCTION surface: no React, no components, and no PMS
+ * transport — the external flow has no call 1, its token was minted by the provider. The root
+ * bundle above stays self-contained (separate Rollup configuration), so these checks and the ones
+ * above cannot interfere.
+ */
+const orchestrationBundles = ['dist/esm/orchestration.js', 'dist/cjs/orchestration.js']
+  .map((f) => [f, readFileSync(path.join(pkgDir, f), 'utf8')]);
+
+for (const [name, code] of orchestrationBundles) {
+  check(!/from\s*['"]react['"]|require\(\s*['"]react['"]/.test(code), `${name} imports no React`);
+  check(
+    !/payment-method-sessions|confirmPaymentMethodSession/.test(code),
+    `${name} contains no PMS transport (this flow has no call 1)`
+  );
+  check(/vault_card/.test(code), `${name} writes the vault_card subtree`);
+  const exportBlock =
+    code.match(/export\s*\{[^}]*\}/g)?.join('\n') ??
+    (code.match(/exports\.[A-Za-z0-9_]+\s*=/g) ?? []).join('\n');
+  check(
+    /confirmTokenizedCardPayment/.test(exportBlock),
+    `${name} exports confirmTokenizedCardPayment`
+  );
+  const exportedNames = new Set(
+    [...exportBlock.matchAll(/(?:exports\.|\b)([A-Za-z0-9_]+)(?:\s*=|\s*\}|,)/g)].map((m) => m[1])
+  );
+  check(
+    ![...exportedNames].some((n) => /^(HyperswitchVault|Card[A-Z])/.test(n)),
+    `${name} exports no component — the provider renders the fields in this flow`
+  );
 }
 
 /* ── 5. A merchant consumer compiles, and the removed surfaces do not ──────── */
@@ -340,6 +415,24 @@ export const n9 = async (ref: React.RefObject<VaultFormHandle>) => {
   // @ts-expect-error - a tokenize success carries the token and nothing else
   return r.status === 'success' ? r.card : undefined;
 };
+
+/* ── ORCHESTRATION — its own subpath, its own audience, never the root ── */
+import {confirmTokenizedCardPayment, type ProviderTokenizedCard} from '${PKG}/orchestration';
+
+export const orchestrated = async () => {
+  const card: ProviderTokenizedCard = {
+    cardNumberAlias: 'tok_num', cardCvcAlias: 'tok_cvc',
+    expiryMonth: '03', expiryYear: '2030', lastFour: '4242',
+  };
+  const r = await confirmTokenizedCardPayment({
+    tokenizedCard: card, paymentId: 'pay_1', sdkAuthorization: 'intent', environment: 'sandbox',
+  });
+  return r.status === 'requires_customer_action' ? r.nextAction.type_ : r.status;
+};
+// @ts-expect-error - the merchant root does not export the orchestration function
+export const o1 = HyperswitchVault.confirmTokenizedCardPayment;
+// @ts-expect-error - a raw card-number member is not part of the canonical card
+export const o2: ProviderTokenizedCard = {cardNumber: '4242424242424242', cardCvcAlias: 'c', expiryMonth: '01', expiryYear: '2030'};
 `;
 writeFileSync(path.join(workspace, 'consumer.tsx'), consumer);
 
@@ -367,4 +460,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log('\n[verify-merchant-only] OK - one entry, no raw card data on the public surface');
+console.log('\n[verify-merchant-only] OK - two disjoint entries, no raw card data on the merchant surface');

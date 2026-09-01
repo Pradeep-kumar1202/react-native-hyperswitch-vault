@@ -158,6 +158,9 @@ let encodeCustomerAcceptance = (acceptance: hostCustomerAcceptance): JSON.t => {
 /*
  * The `vault_card` subtree. The minted token stands in for the PAN and CVC; the expiry and the
  * masked digits come from what call 1 reported back, never from the card fields directly.
+ *
+ * `bin_number` is OMITTED when call 1 did not report one — the backend field is an Option, and an
+ * empty string is a value, not an absence.
  */
 let vaultCardSubtree = (~token: string, ~metadata: VaultConfirm.vaultCardMetadata): JSON.t =>
   [
@@ -166,8 +169,65 @@ let vaultCardSubtree = (~token: string, ~metadata: VaultConfirm.vaultCardMetadat
     ("card_exp_month", metadata.expiryMonth->JSON.Encode.string),
     ("card_exp_year", metadata.expiryYear->JSON.Encode.string),
     ("last_four", metadata.last4Digits->JSON.Encode.string),
-    ("bin_number", metadata.binNumber->Option.getOr("")->JSON.Encode.string),
   ]
+  ->Array.concat(VaultConfirm.optionalEntry("bin_number", metadata.binNumber))
+  ->Dict.fromArray
+  ->JSON.Encode.object
+
+/*
+ * ── THE CANONICAL PROVIDER-TOKENIZED CARD ──────────────────────────────────────
+ *
+ * A card tokenized by an EXTERNAL vault (VGS today), parsed into this shape by
+ * @juspay-tech/react-native-hyperswitch-payment-methods — the package that owns provider
+ * knowledge. This library never sees a provider response and never learns which provider made the
+ * aliases: the backend resolves the vault connector from the merchant profile, so no provenance
+ * field exists here.
+ *
+ * `cardNumberAlias` / `cardCvcAlias` are the provider's stand-in strings. The library cannot
+ * cryptographically prove a string is an alias rather than a PAN; the boundary is which package may
+ * reach this type at all (the orchestration entry, never the merchant root).
+ *
+ * `lastFour` / `binNumber` are PROVIDER-REPORTED metadata or nothing. They are never derived from
+ * the alias: a format-preserving alias's digits are not the card's digits, so a sliced "BIN" would
+ * be fabricated data on a payment request.
+ */
+@genType
+type providerTokenizedCard = {
+  cardNumberAlias: string,
+  cardCvcAlias: string,
+  expiryMonth: string,
+  expiryYear: string,
+  cardHolderName?: string,
+  cardNetwork?: string,
+  lastFour?: string,
+  binNumber?: string,
+  nickName?: string,
+}
+
+/* "3" → "03"; already-two-digit months pass through untouched. */
+let padExpiryMonth = (month: string) => {
+  let trimmed = month->String.trim
+  trimmed->String.length === 1 ? `0${trimmed}` : trimmed
+}
+
+/*
+ * The `vault_card` subtree for an EXTERNALLY tokenized card — the same backend shape as
+ * `vaultCardSubtree`, fed by provider aliases instead of a minted token. Field names match the
+ * backend's `ProxyCardData` exactly; `card_network` goes through the same enum allowlist as the
+ * direct flow, and every optional value is omitted when absent, never written as "".
+ */
+let externalCardSubtree = (~card: providerTokenizedCard): JSON.t =>
+  [
+    ("card_number", card.cardNumberAlias->String.trim->JSON.Encode.string),
+    ("card_cvc", card.cardCvcAlias->String.trim->JSON.Encode.string),
+    ("card_exp_month", card.expiryMonth->padExpiryMonth->JSON.Encode.string),
+    ("card_exp_year", card.expiryYear->VaultConfirm.requestExpiryYear->JSON.Encode.string),
+  ]
+  ->Array.concat(VaultConfirm.optionalEntry("card_holder_name", card.cardHolderName))
+  ->Array.concat(VaultConfirm.optionalEntry("card_network", card.cardNetwork->cardNetworkToWire))
+  ->Array.concat(VaultConfirm.optionalEntry("last_four", card.lastFour))
+  ->Array.concat(VaultConfirm.optionalEntry("bin_number", card.binNumber))
+  ->Array.concat(VaultConfirm.optionalEntry("nick_name", card.nickName))
   ->Dict.fromArray
   ->JSON.Encode.object
 
@@ -231,6 +291,12 @@ type cardPayload =
       cardNetwork: option<string>,
       nickName: option<string>,
     })
+  /*
+   * A card an EXTERNAL vault tokenized, handed in through the orchestration entry (never the
+   * merchant root). Carries aliases only — the closed variant still makes "a token AND a PAN" and
+   * "neither" unrepresentable.
+   */
+  | ExternalTokenPayload({card: providerTokenizedCard})
 
 /*
  * `client_secret` is deliberately absent: a payment-intent `sdkAuthorization` is always present in
@@ -255,6 +321,7 @@ let build = (
   | TokenPayload({mode: #payment_token}) => None
   | DirectPayload({card, cardholderName, cardNetwork, nickName}) =>
     Some(("card", directCardSubtree(~card, ~cardholderName, ~cardNetwork, ~nickName)))
+  | ExternalTokenPayload({card}) => Some(("vault_card", externalCardSubtree(~card)))
   }
 
   let finalPaymentMethodData =
@@ -271,6 +338,8 @@ let build = (
     | TokenPayload({mode: #vault_card}) => None
     /* No token exists in direct mode, so there is nothing that could be sent as one. */
     | DirectPayload(_) => None
+    /* The aliases live inside vault_card; nothing here is a payment_token. */
+    | ExternalTokenPayload(_) => None
     },
     finalPaymentMethodData->Option.map(data => ("payment_method_data", data)),
     customerAcceptance->Option.map(acceptance => (

@@ -41,18 +41,24 @@ const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 console.log('Export map');
 
+/*
+ * Two executable entries, each with its own audience: the root is the merchant card form; the
+ * `./orchestration` subpath is the host-facing confirm for payment-methods (externally tokenized
+ * cards). `verify-public-surface.mjs` keeps the two surfaces disjoint; `verify-merchant-only.mjs`
+ * proves the root never re-exports the orchestration function.
+ */
 const subpaths = Object.keys(pkg.exports ?? {});
 const executable = subpaths.filter((s) => s !== './package.json');
 check(
-  JSON.stringify(executable) === JSON.stringify(['.']),
-  `the only executable export is the root (got: ${executable.join(', ') || 'none'})`
+  JSON.stringify([...executable].sort()) === JSON.stringify(['.', './orchestration']),
+  `the executable exports are the root and ./orchestration (got: ${executable.join(', ') || 'none'})`
 );
 check(
   subpaths.includes('./package.json'),
   '`./package.json` is present as the one metadata export'
 );
 check(
-  JSON.stringify([...subpaths].sort()) === JSON.stringify(['.', './package.json']),
+  JSON.stringify([...subpaths].sort()) === JSON.stringify(['.', './orchestration', './package.json']),
   `no other subpath is published (got: ${subpaths.join(', ')})`
 );
 for (const gone of ['./embedded', './vault']) {
@@ -97,12 +103,16 @@ if (packedFiles.length > 0) {
 
   const bundles = packedFiles.filter((f) => /^dist\/(esm|cjs)\/[^/]+\.js$/.test(f));
   check(
-    JSON.stringify(bundles.sort()) === JSON.stringify(['dist/cjs/index.js', 'dist/esm/index.js']),
-    `exactly one runtime bundle per format would be packed (got: ${bundles.join(', ')})`
+    JSON.stringify(bundles.sort()) ===
+      JSON.stringify([
+        'dist/cjs/index.js', 'dist/cjs/orchestration.js',
+        'dist/esm/index.js', 'dist/esm/orchestration.js',
+      ]),
+    `exactly the two entry bundles per format would be packed (got: ${bundles.join(', ')})`
   );
 
   const ALLOWED = [
-    /^dist\/(esm|cjs)\/index\.js$/,
+    /^dist\/(esm|cjs)\/(index|orchestration)\.js$/,
     /^dist\/(esm|cjs)\/package\.json$/,
     /^dist\/types\/[A-Za-z0-9_.-]+\.d\.ts$/,
     /^dist\/assets\/[A-Za-z0-9@._-]+\.png$/,
@@ -177,6 +187,18 @@ if (!existsSync(declDir)) {
    * this member.
    */
   const ELIGIBILITY_DECL = 'VaultFormOptions.gen.d.ts';
+  /*
+   * ── THE ORCHESTRATION EXEMPTION ────────────────────────────────────────────
+   *
+   * The `./orchestration` entry (for payment-methods, never merchants — the root exports none of
+   * it) HANDS IN a canonical provider-tokenized card: alias stand-ins plus the card's real expiry
+   * and PROVIDER-REPORTED masked digits, exactly the backend's `vault_data_card` shape. Those
+   * member names are forbidden everywhere else precisely so that this is the only declaration
+   * that can carry them; each is pinned to its exact narrow type, so widening any of them to an
+   * open map or `any` still fails.
+   */
+  const ORCHESTRATION_CARD_DECL = 'VaultConfirmBody.gen.d.ts';
+  const ORCHESTRATION_INPUT_DECL = 'VaultOrchestration.gen.d.ts';
   const INPUT_EXEMPT = {
     [INPUT_DECL]: {
       sdkAuthorization: /^string$/,
@@ -184,6 +206,15 @@ if (!existsSync(declDir)) {
       paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
     },
     [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/ },
+    [ORCHESTRATION_CARD_DECL]: {
+      expiryMonth: /^string$/,
+      expiryYear: /^string$/,
+      binNumber: /^string$/,
+    },
+    [ORCHESTRATION_INPUT_DECL]: {
+      sdkAuthorization: /^string$/,
+      paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
+    },
   };
   const isExemptInput = ({ file, name, type }) =>
     INPUT_EXEMPT[file]?.[name]?.test(type.replace(/\s+/g, ''));

@@ -17,6 +17,13 @@
       "require": "./dist/cjs/index.js",
       "default": "./dist/esm/index.js"
     },
+    "./orchestration": {
+      "types": "./dist/types/orchestration.d.ts",
+      "react-native": "./dist/esm/orchestration.js",
+      "import": "./dist/esm/orchestration.js",
+      "require": "./dist/cjs/orchestration.js",
+      "default": "./dist/esm/orchestration.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -53,7 +60,7 @@
     "verify:treeshaking": "node scripts/verify-treeshaking.mjs",
     "verify:style-bridge": "node scripts/verify-style-bridge.mjs",
     "verify:tarball": "node scripts/verify-tarball.mjs",
-    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs && node scripts/verify-treeshaking.mjs && node scripts/verify-style-bridge.mjs && node scripts/verify-event-surface.mjs && node scripts/verify-package-contents.mjs && node scripts/verify-merchant-only.mjs && node scripts/verify-docs.mjs && node scripts/verify-flow-docs.mjs && node scripts/verify-publishable.mjs && node scripts/verify-card-source.mjs && node scripts/verify-final-confirm.mjs && node scripts/verify-noncard-input.mjs && node scripts/verify-eligibility.mjs",
+    "verify": "node scripts/verify-icon-coverage.mjs && node scripts/verify-result-mapping.mjs && node scripts/verify-tarball.mjs && node scripts/verify-consumers.mjs && node scripts/verify-treeshaking.mjs && node scripts/verify-style-bridge.mjs && node scripts/verify-event-surface.mjs && node scripts/verify-package-contents.mjs && node scripts/verify-merchant-only.mjs && node scripts/verify-docs.mjs && node scripts/verify-flow-docs.mjs && node scripts/verify-publishable.mjs && node scripts/verify-card-source.mjs && node scripts/verify-final-confirm.mjs && node scripts/verify-noncard-input.mjs && node scripts/verify-eligibility.mjs && node scripts/verify-orchestration.mjs",
     "build:clean": "rescript clean && node scripts/clean.mjs && node scripts/check-submodule.mjs && node scripts/verify-icon-coverage.mjs && rescript && node scripts/check-generated.mjs && node scripts/verify-public-surface.mjs && node scripts/clean-declarations.mjs && tsc -p tsconfig.build.json && node scripts/clean-bundles.mjs && rollup -c && node scripts/copy-assets.mjs && node scripts/emit-package-type.mjs && tsc -p tsconfig.consumer.json && node scripts/verify-docs.mjs && node scripts/verify-flow-docs.mjs && node scripts/verify-publishable.mjs",
     "verify:event-surface": "node scripts/verify-event-surface.mjs",
     "verify:package-contents": "node scripts/verify-package-contents.mjs",
@@ -65,6 +72,7 @@
     "verify:final-confirm": "node scripts/verify-final-confirm.mjs",
     "verify:noncard-input": "node scripts/verify-noncard-input.mjs",
     "verify:eligibility": "node scripts/verify-eligibility.mjs",
+    "verify:orchestration": "node scripts/verify-orchestration.mjs",
     "verify:rn-matrix": "node scripts/verify-rn-matrix.mjs",
     "verify:scancard-packaging": "node scripts/verify-scancard-packaging.mjs"
   },

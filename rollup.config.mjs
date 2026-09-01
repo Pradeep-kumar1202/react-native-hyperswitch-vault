@@ -89,12 +89,10 @@ const outputs = (chunkPrefix) => [
 
 export default [
   /*
-   * ONE entry, because there is one product: the merchant card form.
-   *
-   * The `/embedded` controlled fields and the `/vault` transport subpath were removed in the
-   * merchant-only scope reset. The PMS confirmation transport still exists — the merchant form
-   * cannot tokenize without it — but it is now reachable only from inside this bundle, never as a
-   * separately importable entry.
+   * THE MERCHANT ENTRY: the card form. The `/embedded` controlled fields and the `/vault`
+   * transport subpath were removed in the merchant-only scope reset. The PMS confirmation
+   * transport still exists — the merchant form cannot tokenize without it — but it is reachable
+   * only from inside this bundle, never as a separately importable entry.
    */
   {
     input: {index: 'src/standalone-entry.mjs'},
@@ -102,5 +100,23 @@ export default [
     plugins,
     treeshake,
     output: outputs('shared'),
+  },
+  /*
+   * THE ORCHESTRATION ENTRY: `confirmTokenizedCardPayment` for payment-methods (externally
+   * tokenized cards). A SEPARATE configuration on purpose, not a second input above: with one
+   * configuration Rollup would hoist the shared transport modules into common chunks, and
+   * `scripts/verify-merchant-only.mjs` proves runtime containment by reading dist/esm/index.js
+   * ALONE. Keeping the root bundle self-contained keeps that proof byte-stable; the price is that
+   * the few shared body/transport modules are duplicated into orchestration.js, which no app pays
+   * for unless it actually imports the subpath. This entry has no React and no components — the
+   * provider renders the fields — so the whole bundle is a plain async function and its
+   * dependencies.
+   */
+  {
+    input: {orchestration: 'src/orchestration-entry.mjs'},
+    external: (id) => hostRuntime.includes(id) || isImageAsset(id),
+    plugins,
+    treeshake,
+    output: outputs('orch'),
   },
 ];

@@ -77,6 +77,7 @@ const ACCEPTED = [
   'docs/adr/0004-library-owns-every-new-card-flow.md',
   'docs/adr/0005-restore-card-safe-state-emission.md',
   'docs/adr/0006-default-ui.md',
+  'docs/adr/0007-orchestration-entry-for-externally-tokenized-cards.md',
 ];
 const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
 
