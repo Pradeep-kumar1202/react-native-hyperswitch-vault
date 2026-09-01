@@ -1,13 +1,13 @@
 /**
- * Error presentation is opt-in, and it is the merchant's colour.
+ * Error presentation is one switch, and it is the merchant's colour.
  *
- * `errorDisplay` used to govern the error MESSAGE only. A merchant who configured nothing got no
- * message and a red field anyway, because the border and the typed text read the theme's danger
- * colour directly — a judgement painted onto their form in a colour they never chose.
+ * `errorDisplay` used to govern the error MESSAGE only, so a merchant got no message and a red
+ * field anyway — a judgement painted onto their form in a colour they never chose. One switch now
+ * governs the message, the border and the typed text together.
  *
- * Now one switch governs all three. `#none` (the default) paints nothing and the merchant hears
- * about the problem through the state event; `#inline` paints message, border and text, all in the
- * `errorColor` they passed.
+ * The DEFAULT is `inline`: a form that configures nothing shows its errors, in the `errorColor`
+ * passed on `appearance`. `errorDisplay="none"` paints nothing and the merchant hears about the
+ * problem through the state event instead.
  *
  * Sensitive values are compared as booleans inside this file only.
  *
@@ -70,6 +70,7 @@ const BAD_NUMBER = '4242424242424241';
 const flat = (style: unknown): Record<string, unknown> =>
   (StyleSheet.flatten(style as never) ?? {}) as Record<string, unknown>;
 
+/* `undefined` exercises the DEFAULT, which is now `inline`. */
 const mount = (errorDisplay?: 'none' | 'inline') => {
   let r!: Renderer;
   ReactTestRenderer.act(() => {
@@ -96,8 +97,8 @@ const enterBadNumberAndBlur = (r: Renderer) => {
   ReactTestRenderer.act(() => numberInput(r).props.onBlur());
 };
 
-it('paints nothing when errorDisplay is left at its default', () => {
-  const r = mount();
+it('paints nothing when errorDisplay is none', () => {
+  const r = mount('none');
   enterBadNumberAndBlur(r);
 
   /* Not the merchant's error colour, and not the library's old #DF1B41 either. */
@@ -111,8 +112,8 @@ it('paints nothing when errorDisplay is left at its default', () => {
   ReactTestRenderer.act(() => r.unmount());
 });
 
-it('paints border and text in the merchant colour when errorDisplay is inline', () => {
-  const r = mount('inline');
+it('paints border and text in the merchant colour by default', () => {
+  const r = mount();
   enterBadNumberAndBlur(r);
 
   expect(flat(borderedContainer(r).props.style).borderColor).toBe(MERCHANT_ERROR);
@@ -122,7 +123,7 @@ it('paints border and text in the merchant colour when errorDisplay is inline', 
 });
 
 it('leaves a VALID field alone under either setting', () => {
-  for (const mode of [undefined, 'inline' as const]) {
+  for (const mode of [undefined, 'none' as const]) {
     const r = mount(mode);
     ReactTestRenderer.act(() => numberInput(r).props.onChangeText('4242424242424242'));
     ReactTestRenderer.act(() => numberInput(r).props.onBlur());

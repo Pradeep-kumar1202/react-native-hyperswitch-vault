@@ -539,16 +539,20 @@ in the automated suite performs a live request, and no production request has ev
 
 ---
 
-## 13. Merchant UI reset — defaults and prop-controlled presentation
+## 13. Default UI — what ships, and stripping it back
 
 **Not yet performed.** The rendered-tree proofs are `react-test-renderer` plus Metro bundling; no
 pixel has been rendered.
 
 | Check | Expect |
 |---|---|
-| the zero-configuration form on a device | three empty, neutral boxes — no placeholder, label, icon or error text, and no gaps where they would be |
-| tap through the blank form | focus ring moves, keyboard opens, auto-advance still works with nothing visible to read |
-| VoiceOver / TalkBack on the blank form | each field is still announced "Card number" / "Expiration date" / "Security code" |
+| the zero-configuration form on a device | four complete fields — floating label, brand mark on the number, CVC glyph, and an inline message after an invalid blur |
+| `unstyled` on the provider | four bare inputs: no box, no border, no background, no fixed height, nothing but text you position yourself |
+| `unstyled` with a per-feature prop, e.g. `unstyled errorDisplay="inline"` | still bare — `unstyled` wins over the per-feature props rather than being overridden by them |
+| **floating-label cost while typing a full PAN** | no dropped frames and no lag on a low-end Android device. The lift animation is JS-driven (`fontSize` and `height` cannot use the native driver) and now runs only on the down/up transition, not per keystroke — this row exists to confirm that on real hardware |
+| **the floating touch target** | tapping the TOP third of a field still focuses it. Floating mode gives the input 70% height and bottom alignment, so the whole box must still respond, not just the lower two thirds |
+| tap through an `unstyled` form | focus ring moves, keyboard opens, auto-advance still works with nothing visible to read |
+| VoiceOver / TalkBack on an `unstyled` form | each field is still announced "Card number" / "Expiration date" / "Security code" |
 | `labelBehavior="static"` | the label sits above the box and never overlaps the placeholder at any font scale |
 | `labelBehavior="floating"` | the animation is unchanged, and no second placeholder shows behind it |
 | `labelBehavior="none"`, empty field | the placeholder sits on the vertical centre line of the box, not below it |
@@ -563,10 +567,10 @@ pixel has been rendered.
 | `fieldArrangement="fused"` at inline | shared edges read as one line on both platforms |
 | `errorDisplay="none"` with an invalid field | nothing appears, the border and typed text stay their normal colours, and the layout does not shift |
 | `errorDisplay="inline"` | the message appears without pushing the Pay button under the user's finger |
-| `brandIconMode` `'hidden'` → `'standard'` / `cvcIcon` off then on | no reserved space when off; correct density artwork when on |
+| `brandIconMode` `'standard'` → `'hidden'` / `cvcIcon` on then off | correct density artwork when on; no reserved space when off |
 | `brandIconMode="animated"` on `appearance`, `'hidden'` on the field | the field's mark stays off — the field value wins over the form-wide one |
 | VoiceOver / TalkBack over an enabled brand or CVC icon | the icon is skipped entirely; it is never announced as a button and never takes focus |
-| max OS font scale, blank default | the empty boxes keep their height and do not clip |
+| max OS font scale, default form | the floating labels and marks keep their positions and do not clip |
 
 ---
 
@@ -605,7 +609,7 @@ pixel has been rendered.
 | 10.11 | Accessibility and screen-reader interaction | ☐ | ☐ |
 | 11 | External-consumer install, artwork density, Hermes release build | ☐ | ☐ |
 | 12 | Real sandbox tokenization | ☐ | ☐ |
-| 13 | Merchant UI reset: blank defaults, labels, layout, icons, errors | ☐ | ☐ |
+| 13 | Default UI: what ships, `unstyled`, labels, layout, icons, errors | ☐ | ☐ |
 
 Record the device model and OS version beside the ticks — keyboard and text-measurement behaviour
 varies more between OS versions than between devices. File a failure with the platform, the OS

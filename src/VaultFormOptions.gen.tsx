@@ -51,6 +51,8 @@ export type localisationLabels = {
   readonly expiryFloatingLabel?: string; 
   readonly cvcPlaceholder?: string; 
   readonly cvcFloatingLabel?: string; 
+  readonly cardholderNamePlaceholder?: string; 
+  readonly cardholderNameFloatingLabel?: string; 
   readonly selectCardBrandLabel?: string
 };
 

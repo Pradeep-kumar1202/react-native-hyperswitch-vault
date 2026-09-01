@@ -22,6 +22,11 @@ let make = React.forwardRef((
      * structural comparison. Carries no card value — see `VaultPublicState`.
      */
     "onStateChange": option<VaultPublicState.expiryState => unit>,
+    /*
+     * Strip this field to a bare `TextInput`. Absent => the provider's `unstyled`, then `false`;
+     * `unstyled={false}` keeps this field's UI inside an unstyled provider.
+     */
+    "unstyled": option<bool>,
   },
   ref,
 ) => {
@@ -47,6 +52,7 @@ let make = React.forwardRef((
     accessibilityLabel: ?props["accessibilityLabel"],
     accessibilityHint: ?props["accessibilityHint"],
     testID: ?props["testID"],
+    unstyled: ?props["unstyled"],
   }
 
   <BoundCardFields.Expiry

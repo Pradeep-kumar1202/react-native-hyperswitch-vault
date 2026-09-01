@@ -34,7 +34,7 @@ module Number = {
     /* Which visual elements exist. Absent => the blank default field. */
     ~options: option<CardFieldOptions.cardNumberOptions>=?,
   ) => {
-    let resolved = CardFieldOptions.resolveCardNumber(options)
+    let resolved = CardFieldOptions.resolveCardNumber(options, ~formWideUnstyled=ctx.unstyled, ~labels=ctx.labels)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.CardNumberKind,
@@ -75,7 +75,7 @@ module CardholderName = {
     ~styles: option<CardFieldStyles.fieldStyles>=?,
     ~options: option<CardFieldOptions.cardholderNameOptions>=?,
   ) => {
-    let resolved = CardFieldOptions.resolveCardholderName(options)
+    let resolved = CardFieldOptions.resolveCardholderName(options, ~formWideUnstyled=ctx.unstyled, ~labels=ctx.labels)
     /*
      * Registered, but under a kind `VaultFormHost.requiredKinds` does not list — so the presence
      * gate still does not demand it and a custom layout that omits it still submits, which is what
@@ -123,7 +123,7 @@ module Expiry = {
     /* Which visual elements exist. Absent => the blank default field. */
     ~options: option<CardFieldOptions.expiryOptions>=?,
   ) => {
-    let resolved = CardFieldOptions.resolveExpiry(options)
+    let resolved = CardFieldOptions.resolveExpiry(options, ~formWideUnstyled=ctx.unstyled, ~labels=ctx.labels)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.ExpiryKind,
@@ -171,7 +171,7 @@ module Cvc = {
     /* Which visual elements exist. Absent => the blank default field. */
     ~options: option<CardFieldOptions.cvcOptions>=?,
   ) => {
-    let resolved = CardFieldOptions.resolveCvc(options)
+    let resolved = CardFieldOptions.resolveCvc(options, ~formWideUnstyled=ctx.unstyled, ~labels=ctx.labels)
     let defaultRenderError = useBinding(
       ctx,
       VaultCardController.CvcKind,
@@ -206,7 +206,7 @@ module Cvc = {
       borderBottomRightRadius=ctx.theme.borderRadius
       borderBottomWidth=ctx.theme.borderWidth
       borderRightWidth=ctx.theme.borderWidth
-      iconRight={switch CardFieldOptions.cvcIconOf(options) {
+      iconRight={switch CardFieldOptions.cvcIconOf(options, ~unstyled=resolved.unstyled) {
       | #none => CardInput.NoIcon
       | #default =>
         CardInput.CustomIcon(

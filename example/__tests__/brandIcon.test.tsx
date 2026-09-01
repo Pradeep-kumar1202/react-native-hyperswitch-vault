@@ -7,8 +7,9 @@
  * field option unset, so `appearance` is what resolves. The precedence between the two is proved
  * separately in `defaultUi.test.tsx`.
  *
- * The CVC icon is a separate control (`cvcIcon`) with no form-wide counterpart, and is turned on
- * here so that "hidden" can be shown to remove the brand accessory only.
+ * The CVC icon is a separate control (`cvcIcon`) with no form-wide counterpart. It is left at its
+ * default here — which is now `default`, i.e. shown — so that "hidden" can be shown to remove the
+ * brand accessory only.
  *
  * @format
  */
@@ -36,7 +37,6 @@ const mount = async (mode?: string) => {
         session={session}
         environment="sandbox"
         appearance={mode ? ({brandIconMode: mode} as any) : undefined}
-        fieldOptions={{cvc: {cvcIcon: 'default'}}}
       />,
     );
   });
@@ -59,8 +59,31 @@ it('standard: renders the placeholder icon empty, and a brand icon once detected
   await ReactTestRenderer.act(() => tree.unmount());
 });
 
-it('default (no mode) is hidden: only the CVC icon remains', async () => {
+it('default (no mode) is standard: the brand mark and the CVC icon both render', async () => {
+  /*
+   * This assertion is the inversion. It read `toBe(1) // cvc only` while artwork was opt-in; a
+   * merchant who configured nothing got no mark. The default is `standard` now, so the same
+   * zero-configuration form renders the placeholder mark beside the CVC glyph.
+   */
   const tree = await mount();
+  expect(images(tree).length).toBe(2);                 // waitcard + cvc
+  await type(tree, '4242424242424242');
+  expect(images(tree).length).toBe(2);                 // visa + cvc
+  await ReactTestRenderer.act(() => tree.unmount());
+});
+
+it('the field option still overrides the form-wide default', async () => {
+  /* `hidden` on the field must beat the (now visible) library default. */
+  let tree!: Renderer;
+  await ReactTestRenderer.act(() => {
+    tree = ReactTestRenderer.create(
+      <HyperswitchVaultForm
+        session={session}
+        environment="sandbox"
+        fieldOptions={{cardNumber: {brandIconMode: 'hidden'}}}
+      />,
+    );
+  });
   expect(images(tree).length).toBe(1);                 // cvc only
   await ReactTestRenderer.act(() => tree.unmount());
 });

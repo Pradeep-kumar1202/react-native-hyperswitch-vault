@@ -1,10 +1,14 @@
 /**
- * THE ZERO-CONFIGURATION CONTRACT.
+ * THE DEFAULT-UI CONTRACT.
  *
- * With no visual configuration the library renders four empty, neutral inputs and nothing else:
- * cardholder name, card number, expiry and CVC. The cardholder name is always rendered by the
- * ready-made form (optional to mount in a custom layout), and is blank like the rest by default.
- * This file is the proof, taken from the rendered React Native tree of the PUBLISHED package.
+ * With no visual configuration the library renders a COMPLETE form: placeholder, floating label,
+ * brand mark, CVC glyph and inline errors, across cardholder name, card number, expiry and CVC.
+ * `unstyled` strips all of it back to bare text inputs. This file is the proof of both halves,
+ * taken from the rendered React Native tree of the PUBLISHED package.
+ *
+ * It used to assert the opposite — every element was opt-in and a bare field rendered nothing but a
+ * box. That contract did not disappear; it moved onto `unstyled`, and the first block below is the
+ * same set of assertions pointed at the escape hatch.
  *
  * Sensitive values are asserted as booleans inside this file only. Nothing is printed or
  * snapshotted.
@@ -144,12 +148,146 @@ const expectNoNativePlaceholder = (r: Renderer) => {
   for (const i of inputs(r)) expect(i.props.placeholder).toBeUndefined();
 };
 
+/*
+ * `unstyled` is what a blank form means now. The library renders a complete UI by default, so the
+ * "empty, neutral inputs" contract this block asserts moved from the default onto the escape hatch
+ * — the assertions inside are the SAME assertions, still worth holding, now proving that the opt-out
+ * really does strip everything rather than merely restyling it.
+ */
 const zeroConfigForm = () =>
+  mount(<HyperswitchVault.CardForm session={session} environment="sandbox" unstyled />);
+
+const defaultForm = () =>
   mount(<HyperswitchVault.CardForm session={session} environment="sandbox" />);
 
-/* ── The blank default ────────────────────────────────────────────────────── */
+/*
+ * Everything a field can render, turned off — the isolation baseline for "turns on exactly one
+ * thing". While the defaults were blank a bare `<CardExpiryField />` contributed nothing and the
+ * claim was differential for free. The defaults render a full UI now, so a sibling field would
+ * contribute a placeholder, a floating label and an error line, and "exactly one" would be counting
+ * the default instead of the option.
+ *
+ * `unstyled` is deliberately NOT used for this: it wins over the per-feature props, so the field
+ * under test could not then ask for the one thing it is testing.
+ */
+const BARE_TEXT = {
+  placeholder: '',
+  label: '',
+  labelBehavior: 'none',
+  errorDisplay: 'none',
+} as const;
+const BARE_NUMBER = {...BARE_TEXT, brandIconMode: 'hidden'} as const;
+const BARE_CVC = {...BARE_TEXT, cvcIcon: 'none'} as const;
 
-describe('zero configuration renders four empty, neutral fields and nothing else', () => {
+/* ── The default form ─────────────────────────────────────────────────────── */
+
+describe('zero configuration renders a complete form', () => {
+  it('every field carries a floating label with the library string', () => {
+    const r = defaultForm();
+
+    /*
+     * `labelBehavior` defaults to `floating`, and a floating label REPLACES the overlay
+     * placeholder — so the placeholder strings arrive as the labels' resting text, not as overlays.
+     */
+    expect(placeholderOverlays(r)).toHaveLength(0);
+    expect(animatedElements(r).length).toBeGreaterThan(0);
+
+    const shown = visibleStrings(r);
+    for (const expected of ['Card number', 'MM / YY', 'CVC', 'Name on card']) {
+      expect({expected, present: shown.includes(expected)}).toEqual({expected, present: true});
+    }
+
+    ReactTestRenderer.act(() => r.unmount());
+  });
+
+  it('the card number shows the brand mark, and the CVC its glyph', () => {
+    const r = defaultForm();
+    const artwork = () =>
+      r.root.findAll((n) => typeof n.type === 'string' && n.props?.source !== undefined);
+
+    /* Generic placeholder mark plus the CVC hint, before anything is typed. */
+    expect(artwork()).toHaveLength(2);
+
+    ReactTestRenderer.act(() =>
+      by(r, 'CardNumberInputTestId').props.onChangeText('4242424242424242'),
+    );
+    /* Still two — the generic mark became the Visa mark, it did not add one. */
+    expect(artwork()).toHaveLength(2);
+
+    ReactTestRenderer.act(() => r.unmount());
+  });
+
+  it('shows an inline error after an invalid blur, without being asked', () => {
+    const r = defaultForm();
+    const errors = () =>
+      r.root.findAll(
+        (n) => typeof n.type === 'string' && n.props?.testID === 'CardFieldErrorTestId',
+      );
+
+    expect(errors()).toHaveLength(0);
+    ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onChangeText('4242'));
+    ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onBlur({nativeEvent: {}}));
+    expect(errors()).toHaveLength(1);
+
+    ReactTestRenderer.act(() => r.unmount());
+  });
+
+  it('is strictly bigger than the same form unstyled', () => {
+    /*
+     * The differential that makes "unstyled really strips it" and "the default really adds it" one
+     * claim rather than two. A default form that had been styled flat would serialise to the same
+     * size as the unstyled one.
+     */
+    const full = defaultForm();
+    const bare = zeroConfigForm();
+    expect(JSON.stringify(full.toJSON()).length).toBeGreaterThan(
+      JSON.stringify(bare.toJSON()).length,
+    );
+    /* And both still mount the same four inputs — this removes chrome, never fields. */
+    expect(inputs(full)).toHaveLength(4);
+    expect(inputs(bare)).toHaveLength(4);
+
+    ReactTestRenderer.act(() => full.unmount());
+    ReactTestRenderer.act(() => bare.unmount());
+  });
+
+  it('a merchant localisation string replaces the library one', () => {
+    const r = mount(
+      <HyperswitchVault.CardForm
+        session={session}
+        environment="sandbox"
+        /*
+         * The RESTING text of a floating label is `placeholder ?? label` (`CardInput.floatingResting`),
+         * so the placeholder string is the one on screen before the field is focused. These strings
+         * were dead code until the default UI began reading them — `localisation.labels` type-checked
+         * and did nothing.
+         */
+        localisation={{labels: {cardNumberPlaceholder: 'Karte'}}}
+      />,
+    );
+    expect(visibleStrings(r)).toContain('Karte');
+    expect(visibleStrings(r)).not.toContain('Card number');
+    ReactTestRenderer.act(() => r.unmount());
+  });
+
+  it('placeholder="" turns the text off without turning the field off', () => {
+    const r = mount(
+      <HyperswitchVaultFormProvider session={session} environment="sandbox">
+        <CardNumberField placeholder="" label="" labelBehavior="none" />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
+      </HyperswitchVaultFormProvider>,
+    );
+    /* No text anywhere, but the input and its box are still there. */
+    expect(visibleStrings(r)).toEqual([]);
+    expect(inputs(r)).toHaveLength(3);
+    ReactTestRenderer.act(() => r.unmount());
+  });
+});
+
+/* ── The stripped form ────────────────────────────────────────────────────── */
+
+describe('unstyled renders four empty, neutral fields and nothing else', () => {
   it('four TextInputs, all with an empty internal value', () => {
     const r = zeroConfigForm();
     const found = inputs(r);
@@ -212,7 +350,11 @@ describe('zero configuration renders four empty, neutral fields and nothing else
   });
 
   it('stacked layout with separate containers', () => {
-    const r = zeroConfigForm();
+    /*
+     * The DEFAULT form, not the unstyled one: this is about layout geometry, and `unstyled` removes
+     * the bordered box entirely — there would be nothing left to measure.
+     */
+    const r = defaultForm();
 
     /* No row: expiry and CVC are stacked, not side by side. */
     const rows = r.root
@@ -253,9 +395,9 @@ describe('zero configuration renders four empty, neutral fields and nothing else
     ReactTestRenderer.act(() => r.unmount());
   });
 
-  it('the custom layout is blank by default too', () => {
+  it('the custom layout strips the same way', () => {
     const r = mount(
-      <HyperswitchVaultFormProvider session={session} environment="sandbox">
+      <HyperswitchVaultFormProvider session={session} environment="sandbox" unstyled>
         <CardNumberField />
         <CardExpiryField />
         <CardCVCField />
@@ -275,6 +417,12 @@ describe('zero configuration renders four empty, neutral fields and nothing else
 });
 
 /* ── Placeholder text is never a value ────────────────────────────────────── */
+/*
+ * Every mount in these two blocks starts from `unstyled`, and then asks for the ONE thing it is
+ * testing. That is what keeps "turns on exactly one thing" a differential claim: with the default
+ * UI on, the other three fields would each contribute a placeholder, a floating label, an icon and
+ * an error line, and "exactly one" would be measuring the default rather than the option.
+ */
 
 describe('placeholder text is never treated as a field value', () => {
   it('a placeholder leaves the internal value empty and never reaches tokenization', async () => {
@@ -285,9 +433,10 @@ describe('placeholder text is never treated as a field value', () => {
         session={session}
         environment="sandbox"
         fieldOptions={{
-          cardNumber: {placeholder: '4242 4242 4242 4242'},
-          expiry: {placeholder: '12/30'},
-          cvc: {placeholder: '123'},
+          cardNumber: {placeholder: '4242 4242 4242 4242', labelBehavior: 'none'},
+          expiry: {placeholder: '12/30', labelBehavior: 'none'},
+          cvc: {placeholder: '123', labelBehavior: 'none'},
+          cardholderName: BARE_TEXT,
         }}
       />,
     );
@@ -353,7 +502,12 @@ describe('each option turns on exactly one thing', () => {
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        fieldOptions={{cardNumber: {placeholder: 'Card number'}}}
+        fieldOptions={{
+          cardNumber: {...BARE_NUMBER, placeholder: 'Card number'},
+          expiry: BARE_TEXT,
+          cvc: BARE_CVC,
+          cardholderName: BARE_TEXT,
+        }}
       />,
     );
 
@@ -370,9 +524,14 @@ describe('each option turns on exactly one thing', () => {
   it('labelBehavior="static" renders a Text label above and the placeholder inside', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField label="Card number" labelBehavior="static" placeholder="4242 …" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardNumberField
+          {...BARE_NUMBER}
+          label="Card number"
+          labelBehavior="static"
+          placeholder="4242 …"
+        />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -389,8 +548,8 @@ describe('each option turns on exactly one thing', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
         <CardNumberField label="Card number" labelBehavior="floating" placeholder="Card number" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -405,9 +564,9 @@ describe('each option turns on exactly one thing', () => {
   it('labelBehavior="floating" with no text renders nothing rather than inventing a string', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField labelBehavior="floating" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardNumberField {...BARE_NUMBER} labelBehavior="floating" />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -426,8 +585,8 @@ describe('each option turns on exactly one thing', () => {
           labelBehavior="floating"
           styles={{placeholder: {fontSize: 22}, label: {fontSize: 9}}}
         />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -457,9 +616,9 @@ describe('each option turns on exactly one thing', () => {
     for (const [display, expected] of [['none', 0], ['inline', 1]] as const) {
       const r = mount(
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
-          <CardNumberField errorDisplay={display} />
-          <CardExpiryField />
-          <CardCVCField />
+          <CardNumberField {...BARE_NUMBER} errorDisplay={display} />
+          <CardExpiryField {...BARE_TEXT} />
+          <CardCVCField {...BARE_CVC} />
         </HyperswitchVaultFormProvider>,
       );
 
@@ -477,8 +636,8 @@ describe('each option turns on exactly one thing', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
         <CardNumberField brandIconMode="standard" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
     expect(r.root.findAll((n) => n.props?.source !== undefined).length).toBeGreaterThan(0);
@@ -495,8 +654,8 @@ describe('each option turns on exactly one thing', () => {
 
     const c = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField />
-        <CardExpiryField />
+        <CardNumberField {...BARE_NUMBER} />
+        <CardExpiryField {...BARE_TEXT} />
         <CardCVCField cvcIcon="default" />
       </HyperswitchVaultFormProvider>,
     );
@@ -558,8 +717,8 @@ describe('each option turns on exactly one thing', () => {
           accessibilityHint="16 chiffres"
           testID="my-card-number"
         />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -577,8 +736,8 @@ describe('each option turns on exactly one thing', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
         <CardNumberField placeholder="Card number" labelBehavior="static" label="Card" brandIconMode="standard" errorDisplay="inline" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -611,8 +770,8 @@ describe('each option turns on exactly one thing', () => {
           labelBehavior="static"
           styles={{container: [[sheet.box], null, {borderWidth: 3}], label: sheet.label}}
         />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
@@ -655,7 +814,12 @@ describe('each option turns on exactly one thing', () => {
         ref={formRef}
         session={session}
         environment="sandbox"
-        fieldOptions={{cardNumber: {errorDisplay: 'inline'}}}
+        fieldOptions={{
+          cardNumber: {...BARE_NUMBER, errorDisplay: 'inline'},
+          expiry: BARE_TEXT,
+          cvc: BARE_CVC,
+          cardholderName: BARE_TEXT,
+        }}
       />,
     );
 
@@ -685,7 +849,7 @@ describe('each option turns on exactly one thing', () => {
 /*
  * `brandIconMode` is resolved in exactly one place:
  *
- *   fieldOptions.cardNumber.brandIconMode  →  appearance.brandIconMode  →  'hidden'
+ *   fieldOptions.cardNumber.brandIconMode  →  appearance.brandIconMode  →  'standard'
  *
  * The matrix below is every combination of the two public inputs (5 field values × 5 appearance
  * values, counting "absent"), so there is no pair whose outcome is undefined or order-dependent.
@@ -700,21 +864,39 @@ describe('brand-icon precedence is total and unambiguous', () => {
         session={session}
         environment="sandbox"
         appearance={appearanceMode ? {brandIconMode: appearanceMode} : undefined}
-        fieldOptions={field ? {cardNumber: {brandIconMode: field}} : undefined}
+        fieldOptions={{
+          /*
+           * The other three fields are silenced explicitly. This matrix counts accessory
+           * containers, and the CVC's own glyph is on by default now — it would add one to every
+           * cell and turn a precedence test into a count of unrelated defaults.
+           */
+          cardNumber: field ? {brandIconMode: field} : undefined,
+          expiry: BARE_TEXT,
+          cvc: BARE_CVC,
+          cardholderName: BARE_TEXT,
+        }}
       />,
     );
     /* An accessory container exists iff the resolved mode is not `hidden`. */
     const containers = r.root.findAll(
       (n) => typeof n.type === 'string' && n.props?.accessibilityElementsHidden === true,
     ).length;
-    const images = r.root.findAll((n) => n.props?.source !== undefined).length;
+    /* Host elements only: a composite `Image` and its host child both carry `source`. */
+    const images = r.root.findAll(
+      (n) => typeof n.type === 'string' && n.props?.source !== undefined,
+    ).length;
     ReactTestRenderer.act(() => r.unmount());
     return {containers, images};
   };
 
   it('every field × appearance combination resolves to exactly one outcome', () => {
+    /*
+     * The tail of this chain inverted with the default-UI change: it read `?? 'hidden'` while
+     * artwork was opt-in. The chain itself — field beats form-wide beats library — is unchanged,
+     * and that is the property this matrix exists to prove is TOTAL.
+     */
     const expectedResolved = (field?: Mode, appearanceMode?: Mode): Mode =>
-      field ?? appearanceMode ?? 'hidden';
+      field ?? appearanceMode ?? 'standard';
 
     for (const field of [undefined, ...MODES]) {
       for (const appearanceMode of [undefined, ...MODES]) {
@@ -737,8 +919,9 @@ describe('brand-icon precedence is total and unambiguous', () => {
     expect(artworkCount('standard', 'hidden').containers).toBe(1);
   });
 
-  it('with neither supplied the default is hidden', () => {
-    expect(artworkCount(undefined, undefined)).toEqual({containers: 0, images: 0});
+  it('with neither supplied the default is standard', () => {
+    /* One container, one image: the generic placeholder mark before a brand is detected. */
+    expect(artworkCount(undefined, undefined)).toEqual({containers: 1, images: 1});
   });
 
   it('hideGeneric keeps the container but shows no artwork until a brand is detected', () => {
@@ -746,7 +929,12 @@ describe('brand-icon precedence is total and unambiguous', () => {
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        fieldOptions={{cardNumber: {brandIconMode: 'hideGeneric'}}}
+        fieldOptions={{
+          cardNumber: {brandIconMode: 'hideGeneric'},
+          expiry: BARE_TEXT,
+          cvc: BARE_CVC,
+          cardholderName: BARE_TEXT,
+        }}
       />,
     );
 
@@ -865,11 +1053,15 @@ describe('enabled icons are decorative, not interactive', () => {
   });
 
   it('disabled icons render no element and reserve no space', () => {
+    /*
+     * Explicitly disabled now. Both icons are on by DEFAULT, so a bare mount is the "on" case —
+     * the differential below would be comparing a tree against itself.
+     */
     const off = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardNumberField {...BARE_NUMBER} />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
     const bare = JSON.stringify(off.toJSON());
@@ -889,15 +1081,20 @@ describe('enabled icons are decorative, not interactive', () => {
 /* ── The reported hidden-icon case, exactly as integrated ─────────────────── */
 
 /*
- * REPORTED: `<CardNumberWidget placeholder="Card Number" />` showed a brand mark after a Visa PAN
- * was typed, with no `brandIconMode` passed.
+ * The placeholder-only integration — the case a merchant once reported as a bug.
  *
- * The library default was NOT at fault — the example screen that produced the screenshot set
- * `appearance.brandIconMode: 'animated'`, an explicit form-wide opt-in that a field with no option
- * of its own correctly inherits. These tests pin the contract down from both sides so the
- * distinction cannot silently rot: nothing asked for → hidden; something asked for → honoured.
+ * REPORTED, historically: `<CardNumberWidget placeholder="Card Number" />` showed a brand mark
+ * after a Visa PAN was typed, with no `brandIconMode` passed. At the time that was a defect,
+ * because artwork was opt-in and nothing had opted in. (The screenshot's real cause was an
+ * `appearance.brandIconMode: 'animated'` on the example screen, correctly inherited.)
+ *
+ * THE DEFAULT-UI CHANGE DELIBERATELY REVERSES THAT VERDICT. The library ships a complete UI now,
+ * so a field that asks for nothing is meant to show the mark, and the reported behaviour is the
+ * intended behaviour. This block is kept rather than deleted because the other half of its claim is
+ * unchanged and is the part that actually rots: an explicit value must still be honoured at either
+ * level, and `hidden` must still mean hidden.
  */
-describe('the reported placeholder-only integration shows no brand icon', () => {
+describe('the placeholder-only integration shows the default brand icon', () => {
   const VISA = '4242424242424242';
 
   /* host images only: a composite Image and its host child both carry `source` */
@@ -923,9 +1120,10 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
    * is the part that remains observable and is what actually matters here — zero accessory
    * containers and zero brand images.
    */
-  const assertNoIcon = (r: Renderer) => {
-    expect(accessories(r)).toHaveLength(0);                              // zero accessory containers
-    expect(artwork(r)).toHaveLength(0);                                  // zero brand images
+  /* Nothing asked for → the default mark. This is the assertion that inverted. */
+  const assertDefaultIcon = (r: Renderer) => {
+    expect(accessories(r)).toHaveLength(1);                              // one accessory container
+    expect(artwork(r)).toHaveLength(1);                                  // one brand image
   };
 
   it('CardNumberWidget: brand detected, zero icon, zero reserved width', () => {
@@ -934,15 +1132,19 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
         session={session}
         environment="sandbox">
         <CardNumberWidget placeholder="Card Number" />
-        <CardExpiryWidget />
-        <CardCVCWidget />
+        <CardExpiryWidget {...BARE_TEXT} />
+        <CardCVCWidget {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
 
-    /* the input's layout before and after must be identical — no accessory took width */
+    /*
+     * The input still declares `width: 100%` either way — the accessory is a sibling in the row, so
+     * enabling it does not rewrite the input's own style. That was worth asserting when the mark
+     * was not supposed to be there and is worth asserting now for the opposite reason.
+     */
     const widthBefore = flat(by(r, 'CardNumberInputTestId').props.style).width;
     typeVisa(r);
-    assertNoIcon(r);
+    assertDefaultIcon(r);
     expect(flat(by(r, 'CardNumberInputTestId').props.style).width).toBe(widthBefore);
     expect(widthBefore).toBe('100%');
 
@@ -955,12 +1157,12 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
         session={session}
         environment="sandbox">
         <CardNumberField placeholder="Card Number" />
-        <CardExpiryField />
-        <CardCVCField />
+        <CardExpiryField {...BARE_TEXT} />
+        <CardCVCField {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
     typeVisa(r);
-    assertNoIcon(r);
+    assertDefaultIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 
@@ -969,27 +1171,32 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
       <HyperswitchVault.CardForm
         session={session}
         environment="sandbox"
-        fieldOptions={{cardNumber: {placeholder: 'Card Number'}}}
+        fieldOptions={{
+          cardNumber: {placeholder: 'Card Number'},
+          expiry: BARE_TEXT,
+          cvc: BARE_CVC,
+          cardholderName: BARE_TEXT,
+        }}
       />,
     );
     typeVisa(r);
-    assertNoIcon(r);
+    assertDefaultIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 
-  it('an appearance that omits brandIconMode still resolves to hidden', () => {
+  it('an appearance that omits brandIconMode still resolves to the default', () => {
     const r = mount(
       <HyperswitchVaultFormProvider
         session={session}
         environment="sandbox"
         appearance={{primaryColor: '#0E7C86', inputHeight: 52, borderRadius: 12}}>
         <CardNumberWidget placeholder="Card Number" />
-        <CardExpiryWidget />
-        <CardCVCWidget />
+        <CardExpiryWidget {...BARE_TEXT} />
+        <CardCVCWidget {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
     typeVisa(r);
-    assertNoIcon(r);
+    assertDefaultIcon(r);
     ReactTestRenderer.act(() => r.unmount());
   });
 
@@ -1006,8 +1213,8 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
       const r = mount(
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
           <CardNumberWidget placeholder="Card Number" brandIconMode={mode} />
-          <CardExpiryWidget />
-          <CardCVCWidget />
+          <CardExpiryWidget {...BARE_TEXT} />
+          <CardCVCWidget {...BARE_CVC} />
         </HyperswitchVaultFormProvider>,
       );
       typeVisa(r);
@@ -1022,8 +1229,8 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
           environment="sandbox"
           appearance={{brandIconMode: mode}}>
           <CardNumberWidget placeholder="Card Number" />
-          <CardExpiryWidget />
-          <CardCVCWidget />
+          <CardExpiryWidget {...BARE_TEXT} />
+          <CardCVCWidget {...BARE_CVC} />
         </HyperswitchVaultFormProvider>,
       );
       typeVisa(r);
@@ -1036,8 +1243,8 @@ describe('the reported placeholder-only integration shows no brand icon', () => 
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
         <CardNumberWidget placeholder="Card Number" brandIconMode="hideGeneric" />
-        <CardExpiryWidget />
-        <CardCVCWidget />
+        <CardExpiryWidget {...BARE_TEXT} />
+        <CardCVCWidget {...BARE_CVC} />
       </HyperswitchVaultFormProvider>,
     );
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onChangeText('9999'));

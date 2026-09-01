@@ -72,9 +72,19 @@ const formRef = useRef<VaultFormHandle>(null);
 />;
 ```
 
-**`fieldOptions` is not optional decoration — it is how you get a visible form.** With no visual
-configuration the library renders empty, neutral inputs and nothing else: no placeholder, no label,
-no icon, no error text, and no space reserved for any of them. The library owns the card values; you
+**`fieldOptions` is how you change the form, not how you get one.** With no configuration at all
+the library renders a complete field: a floating label carrying its own string, the brand mark on
+the card number, the CVC glyph and inline validation messages. Every element is individually
+switchable, and `unstyled` removes all of them — and the bordered box with them — leaving a plain
+`TextInput`:
+
+```tsx
+<CardNumberField />           {/* full UI */}
+<CardNumberField unstyled />  {/* a bare TextInput you position and style yourself */}
+```
+
+`unstyled` wins over the per-feature props: it is the "there is no UI" answer, not a different set
+of defaults. Accessibility labels, keyboard type, length limits and the CVC's masking survive it. The library owns the card values; you
 own how the checkout looks.
 
 **4. Tokenize when your button is pressed**
@@ -335,7 +345,7 @@ turns an element on.
 ```
 
 Per-field option props are flattened on the individual widgets (`<CardNumberField placeholder="…" />`)
-and grouped on the ready-made form. Accessibility labels stay on even when everything else is blank.
+and grouped on the ready-made form. Accessibility labels stay on even under `unstyled`.
 
 The complete inventory is in [control-surface.md](docs/control-surface.md) and
 [public-api-baseline.md](docs/public-api-baseline.md).
@@ -436,3 +446,4 @@ only the client-safe session response.
 | [docs/public-api-baseline.md](docs/public-api-baseline.md) | the complete published surface |
 | [docs/adr/0003-…md](docs/adr/0003-remove-state-emission-and-own-final-confirmation.md) | why the library owns the confirmation (its emission removal is superseded) |
 | [docs/adr/0005-…md](docs/adr/0005-restore-card-safe-state-emission.md) | why state emission is back, and how the payload is pinned |
+| [docs/adr/0006-…md](docs/adr/0006-default-ui.md) | why the library ships a UI by default, and what `unstyled` removes |

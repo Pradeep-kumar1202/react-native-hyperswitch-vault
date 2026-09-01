@@ -37,6 +37,7 @@ export type Props = {
   readonly localisation?: VaultFormOptions_localisation; 
   readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
   readonly session?: VaultFormOptions_vaultSession; 
+  readonly unstyled?: boolean; 
   readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 };
 
@@ -52,5 +53,6 @@ export const make: React.ComponentType<{
   readonly localisation?: VaultFormOptions_localisation; 
   readonly onFormStateChange?: (_1:VaultPublicState_vaultFormState) => void; 
   readonly session?: VaultFormOptions_vaultSession; 
+  readonly unstyled?: boolean; 
   readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
 }> = HyperswitchVaultFormProviderJS.make as any;

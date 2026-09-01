@@ -109,6 +109,12 @@ let make = React.forwardRef((
      * structural comparison. Passing an inline arrow function is safe: the callback is held in a
      * ref, so its identity changing emits nothing.
      */
+    /*
+     * Strip every field back to a bare `TextInput` — no border, background, fixed height,
+     * placeholder, label, icon or error line. Behaviour and accessibility survive. A field may
+     * override this in either direction with its own `unstyled`.
+     */
+    "unstyled": option<bool>,
     "onFormStateChange": option<VaultPublicState.vaultFormState => unit>,
   },
   ref,
@@ -125,6 +131,7 @@ let make = React.forwardRef((
     ~vaultEndpoint=props["vaultEndpoint"],
     ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
     ~onFormStateChange=props["onFormStateChange"],
+    ~unstyled=props["unstyled"]->Option.getOr(CardFieldOptions.defaultUnstyled),
   )
 
   React.useImperativeHandle0(ref, () => {

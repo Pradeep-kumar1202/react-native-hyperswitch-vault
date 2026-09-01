@@ -43,7 +43,7 @@ Source of truth for the old behaviour: `src/components/dynamic/CardElement.res` 
 | Error timing (touched / active / blurred) | Ported | `CardStateReducer.numberError` / `expiryError` / `cvcError`, reproducing the original conditions |
 | Error priority: number → expiry → CVC → network → eligibility | Ported | `CardFormView`; the form-level pair is ordered last, as before |
 | One shared error line in the fused layout | Ported | `CardFormView.fusedFieldError` |
-| Per-field error lines in the split layout | Ported | `CardFields.ErrorSlot`, opt-in via `errorDisplay` — which now gates the border and text tint too |
+| Per-field error lines in the split layout | Ported | `CardFields.ErrorSlot`, on by default via `errorDisplay` — which gates the border and text tint too |
 | Message text and localisation | Ported | `localisation.validationMessages`; client-core passes the same `localeObject` strings it used before |
 
 ## Card network

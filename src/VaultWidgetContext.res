@@ -13,6 +13,11 @@ type contextValue = {
   isProcessing: bool,
   onAnalytics: CardFormTypes.analyticsEvent => unit,
   /*
+   * The form-wide `unstyled`, already defaulted. A field's own `unstyled` overrides it in either
+   * direction, so `unstyled={false}` inside an unstyled provider keeps that one field's UI.
+   */
+  unstyled: bool,
+  /*
    * The merchant-facing snapshot, carried so a field widget can emit its OWN state.
    *
    * A THUNK, not a record: it is invoked only inside an emitter's `build`, which runs only when a
@@ -52,6 +57,7 @@ module ErrorText = {
     ~errorStyle: option<CardFieldStyles.textStyleProp>=?,
   ) =>
     <Text
+      testID=CardTestIds.errorTextTestId
       style={Style.s({
         color: theme.dangerColor,
         fontFamily: theme.fontFamily,

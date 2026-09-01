@@ -20,7 +20,8 @@ export type fieldOptions = {
   readonly errorDisplay?: errorDisplay; 
   readonly accessibilityLabel?: string; 
   readonly accessibilityHint?: string; 
-  readonly testID?: string
+  readonly testID?: string; 
+  readonly unstyled?: boolean
 };
 
 export type cardNumberOptions = {
@@ -31,6 +32,7 @@ export type cardNumberOptions = {
   readonly accessibilityLabel?: string; 
   readonly accessibilityHint?: string; 
   readonly testID?: string; 
+  readonly unstyled?: boolean; 
   readonly brandIconMode?: brandIconMode
 };
 
@@ -46,6 +48,7 @@ export type cvcOptions = {
   readonly accessibilityLabel?: string; 
   readonly accessibilityHint?: string; 
   readonly testID?: string; 
+  readonly unstyled?: boolean; 
   readonly cvcIcon?: cvcIconDisplay
 };
 

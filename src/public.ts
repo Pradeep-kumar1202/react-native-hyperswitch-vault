@@ -194,8 +194,10 @@ type VaultFormComponent<P> = React.ForwardRefExoticComponent<
  * ── Field options: which visual elements exist ────────────────────────────────
  *
  * Separate from `styles`, which says how the enabled elements look. With no options a field renders
- * an empty, neutral input: no placeholder, no label, no animation, no icon, no error text and no
- * space reserved for any of them.
+ * a COMPLETE UI: a floating label carrying the library's own string, the brand mark on the card
+ * number, the CVC glyph, and inline validation messages. Each element is individually switchable,
+ * and `unstyled` removes all of them — and the bordered box with them — leaving a plain
+ * `TextInput` that keeps its accessibility label, keyboard type, length limit and CVC masking.
  *
  * The option props are FLATTENED onto the component rather than nested, because a merchant placing
  * one field writes `<CardNumberField placeholder="Card number" />`. The grouped `fieldOptions`
@@ -317,7 +319,7 @@ export type VaultCVCIconDisplay = cvcIconDisplay;
  * existing appearance-level spelling and merchants may already reference it.
  *
  * Precedence, resolved in exactly one place:
- *   fieldOptions.cardNumber.brandIconMode  →  appearance.brandIconMode  →  'hidden'
+ *   fieldOptions.cardNumber.brandIconMode  →  appearance.brandIconMode  →  'standard'
  */
 export type VaultBrandIconMode = fieldBrandIconMode;
 

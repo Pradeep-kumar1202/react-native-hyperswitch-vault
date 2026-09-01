@@ -42,6 +42,14 @@ export function BareMinimumFields({session, onResult}: BareMinimumFieldsProps) {
         session={session}
         environment="sandbox"
         /*
+         * The point of this screen. The library renders a complete UI by default, so "bare minimum"
+         * now has to ASK to be bare — `unstyled` gives four plain `TextInput`s with no box, no
+         * placeholder, no label, no icon and no error line, which the merchant positions and styles
+         * entirely themselves. Accessibility labels, keyboard types, length limits and the CVC's
+         * masking survive it; those are behaviour, not decoration.
+         */
+        unstyled
+        /*
          * OBSERVE ONLY. The button stays enabled on purpose: this screen exists to show that a
          * premature press is answered with `validation_error` and makes no network request, so
          * nothing here is gated on `canSubmit`. `CustomLayoutCheckout` shows the other style,

@@ -261,7 +261,7 @@ plain-`http` loopback base is tolerated.
 |---|---|---|
 | `appearance` | `VaultFormAppearance` | colours, radius, border width, font, input height — every field optional |
 | `disabled` | `boolean` | makes the inputs genuinely non-interactive |
-| `fieldOptions` | `VaultFormFieldOptions` | which visual elements each field renders. With none, the form is empty neutral inputs — see the README. |
+| `fieldOptions` | `VaultFormFieldOptions` | which visual elements each field renders. With none, every element is on — see the README. |
 | `fieldStyles` | `VaultFormFieldStyles` | per-field style slots |
 | `layout` | `VaultFormLayout` | `"stacked"` (default) gives each field its own row; `"inline"` puts expiry and CVC side by side. |
 | `fieldArrangement` | `VaultFieldArrangement` | `"separate"` (default) gives each field its own bordered box; `"fused"` joins them. |
@@ -338,9 +338,10 @@ observable emits nothing. Pass no callback and the library derives nothing at al
 
 ### Drawing your own errors
 
-The library paints nothing by default. `errorDisplay` starts at `none`, and at `none` an invalid
-field keeps its normal border and normal text — no red, no colour the library chose for you. The
-problem reaches you through the callbacks above, and you draw it however your design system says:
+The library draws errors by default, in **your** colour: `errorDisplay` starts at `inline`, and the
+message, border and typed text all take the `errorColor` you passed on `appearance`. Set it to
+`none` and an invalid field keeps its normal border and normal text — the problem then reaches you
+through the callbacks above, and you draw it however your design system says:
 
 ```tsx
 <CardNumberField

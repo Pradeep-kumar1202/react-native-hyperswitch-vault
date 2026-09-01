@@ -104,16 +104,18 @@ Neither exposes a value, in either direction.
 | `fieldOptions` | per field | which elements exist: placeholder, label, `labelBehavior`, `errorDisplay`, accessibility text, `testID`, `brandIconMode` (card number only), `cvcIcon` (CVC only) |
 
 `errorDisplay` governs **all** error presentation — the inline message, the field border and the
-typed text — not the message alone. At its default `none` an invalid field is drawn exactly like a
-valid one and the problem reaches you through `onStateChange` / `onFormStateChange` instead. At
-`inline` all three paint, in the `errorColor` you passed. The library never picks an error colour of
-its own.
+typed text — not the message alone. Its default is `inline`, so a form that configures nothing shows
+its errors, in the `errorColor` you passed on `appearance`; the library never picks an error colour
+of its own. At `none` an invalid field is drawn exactly like a valid one and the problem reaches you
+through `onStateChange` / `onFormStateChange` instead.
 | `fieldStyles` | per field | style slots: `root`, `input`, `placeholder`, `error`, `accessory` (not on expiry) |
 | `disabled` | form-wide | genuinely non-interactive inputs |
 | `accessible` | form-wide | forwarded to the underlying inputs |
 
-**Defaults are blank on purpose.** With no options a field renders an empty, neutral input: no
-placeholder, no label, no icon, no inline error, and no space reserved for any of them. Accessibility
+**Defaults are complete on purpose.** With no options a field renders a floating label carrying
+the library's own string, the brand mark (card number), the CVC glyph and inline validation
+messages. `unstyled` strips every one of them, and the bordered box too, leaving a plain
+`TextInput` — it wins over the per-feature props rather than merely changing their defaults. Accessibility
 labels stay on regardless — a blank field is still announced correctly to a screen reader.
 
 Field options decide **whether an element exists**; field styles decide **how it looks**. A style

@@ -76,6 +76,7 @@ const ACCEPTED = [
   'docs/adr/0003-remove-state-emission-and-own-final-confirmation.md',
   'docs/adr/0004-library-owns-every-new-card-flow.md',
   'docs/adr/0005-restore-card-safe-state-emission.md',
+  'docs/adr/0006-default-ui.md',
 ];
 const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
 

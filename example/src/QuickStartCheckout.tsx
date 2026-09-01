@@ -22,9 +22,10 @@ import {
 import {fetchMerchantSession, vaultPaymentFrom, directPaymentFrom} from './merchantServer';
 
 /*
- * WHICH ELEMENTS EXIST. With no `fieldOptions` the form renders four empty, neutral inputs —
- * no placeholder, no label, no icon, no error text. That is deliberate: the library owns the card
- * values, the merchant owns the look. Pick what this checkout should show.
+ * WHICH ELEMENTS EXIST. Every one of these is now ON by default, so this block changes nothing that
+ * matters — it is kept because it is the readable way to SEE what a field can render, and because
+ * naming the strings here is how a merchant would localise them without a `localisation` prop.
+ * Delete it entirely and this checkout looks the same.
  */
 const fieldOptions: VaultFormFieldOptions = {
   cardholderName: {placeholder: 'Name on card', errorDisplay: 'inline'},

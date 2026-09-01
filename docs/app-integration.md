@@ -283,8 +283,10 @@ Nothing comes back. The library attaches the name to `payment_method_data.card.c
 a direct confirm, and to the card object of the tokenization request on a vault one, and never
 returns, emits or logs it.
 
-**The library's own field is deliberately bare.** In `'collect'` it is a plain uncontrolled input:
-empty and optional, no visible label, no placeholder, no validation, no error message, no icon. It
+**The library's own field is drawn like the others.** In `'collect'` it renders with a floating
+"Name on card" label. It stays optional and uncontrolled, and the library forms no verdict about it:
+no validation, and therefore no error message however `errorDisplay` is set. `unstyled` reduces it
+to a plain input like any other field. It
 keeps an internal accessibility label, trims outer whitespace only when the request is built, and
 omits `card_holder_name` entirely when blank. Merchant-configurable validation and messages are not
 implemented yet.

@@ -52,13 +52,11 @@ const cardAppearance: VaultFormAppearance = {
   borderRadius: 12,
   inputHeight: 52,
   /*
-   * Still NO form-wide brandIconMode, on purpose. Setting it here is what previously made a mark
-   * appear on a `<CardNumberWidget placeholder="Card Number" />` that had asked for nothing —
-   * form-wide is a blunt instrument, and with neither a field option nor a form-wide one the mark
-   * resolves to 'hidden'.
+   * No form-wide brandIconMode. The card number sets its own `animated` below, which is the
+   * arrangement worth showing: form-wide is a blunt instrument, and per-field is how you say
+   * "this one, differently".
    *
-   * The card number opts in for itself instead, below. That is the arrangement worth showing: the
-   * default stays off, and one field asks for artwork.
+   * It no longer decides WHETHER a mark appears — artwork is on by default — only which one.
    */
 };
 
@@ -189,7 +187,6 @@ export function CustomLayoutCheckout() {
                 * refuses to print anything card-shaped — a demonstration of the boundary, not a
                 * safeguard the snapshots need.
                 */}
-              <CardholderNameWidget placeholder="Name on card" onStateChange={logFieldState} />
               {/*
                 * `animated` cycles Visa / Mastercard / Amex / Diners / Discover / JCB in the icon
                 * slot while the field is empty and no brand is detected, then settles on the real
@@ -203,6 +200,7 @@ export function CustomLayoutCheckout() {
               />
               <CardExpiryWidget placeholder="Expiry" onStateChange={logFieldState} />
               <CardCVCWidget placeholder="CVC" onStateChange={logFieldState} />
+              <CardholderNameWidget placeholder="Name on card" onStateChange={logFieldState} />
 
               <View style={styles.controls}>
                 <Chip label="Focus number" onPress={() => numberRef.current?.focus()} />

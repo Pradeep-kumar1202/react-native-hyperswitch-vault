@@ -133,129 +133,61 @@ let make = (
     None
   }, (showFloating, state))
 
-  React.useEffect3(() => {
-    if showFloating {
+  /*
+   * ── ANIMATE ON THE TRANSITION, NOT ON EVERY KEYSTROKE ────────────────────────────────────────
+   *
+   * The label's position is a function of one BOOLEAN — is the field focused or non-empty — but
+   * this effect used to depend on `state`, the string. So it restarted a 200 ms JS-driven timing on
+   * every character: four fields times sixteen PAN digits is sixty-four restarted rAF loops to type
+   * one card, each interpolating `fontSize` and `height` across the bridge. That was tolerable
+   * while floating labels were opt-in. They are the default now, so it is everyone's cost.
+   *
+   * Depending on `lifted` instead runs it twice per field per session — down and up — with an
+   * identical visual result.
+   *
+   * The ref suppresses the MOUNT animation. Without it a form animates all four labels on first
+   * paint, from a value the effect above has just set to the same target, which is both wrong to
+   * look at and (with the default bezier easing) the thing that makes a plain `mount()` in a test
+   * environment schedule a timer it does not expect.
+   *
+   * NOT a candidate for `useNativeDriver: true`: the animated properties are `fontSize` and
+   * `height`, neither of which the native driver supports — it would throw at runtime. The loop can
+   * be run less often; it cannot be moved off the JS thread.
+   */
+  let lifted = isFocused || state !== ""
+  let liftedRef = React.useRef(lifted)
+
+  React.useEffect2(() => {
+    if showFloating && liftedRef.current !== lifted {
       Animated.timing(
         animatedValue,
         {
-          toValue: if isFocused || state != "" {
-            1.->Animated.Value.Timing.fromRawValue
-          } else {
-            0.->Animated.Value.Timing.fromRawValue
-          },
+          toValue: lifted
+            ? 1.->Animated.Value.Timing.fromRawValue
+            : 0.->Animated.Value.Timing.fromRawValue,
           duration: 200.,
           useNativeDriver: false,
         },
       )->Animated.start
     }
+    liftedRef.current = lifted
 
     None
-  }, (showFloating, isFocused, state))
+  }, (showFloating, lifted))
 
-  <View style={s({width: 100.->pct})}>
-    {switch staticLabel {
-    | None => React.null
-    | Some(text) =>
-      <Text
-        style={s({
-          fontFamily: theme.fontFamily,
-          fontSize: (fontSize +. theme.placeholderTextSizeAdjust -. 3.) *. theme.fontScale,
-          color: theme.placeholderColor,
-          marginBottom: 4.->dp,
-        })->CardFieldStyles.withText(styles->CardFieldStyles.labelOf)}>
-        {React.string(text)}
-      </Text>
-    }}
-    <View
-      style={array([
-        theme.bgStyle,
-        s({
-          backgroundColor: theme.inputBackground,
-          borderTopWidth: borderTopWidth->Option.getOr(theme.borderWidth),
-          borderBottomWidth: borderBottomWidth->Option.getOr(theme.borderWidth),
-          borderLeftWidth: borderLeftWidth->Option.getOr(theme.borderWidth),
-          borderRightWidth: borderRightWidth->Option.getOr(theme.borderWidth),
-          borderTopLeftRadius: borderTopLeftRadius->Option.getOr(theme.borderRadius),
-          borderTopRightRadius: borderTopRightRadius->Option.getOr(theme.borderRadius),
-          borderBottomLeftRadius: borderBottomLeftRadius->Option.getOr(theme.borderRadius),
-          borderBottomRightRadius: borderBottomRightRadius->Option.getOr(theme.borderRadius),
-          height: theme.inputHeight->dp,
-          flexDirection: #row,
-          /*
-           * The error BORDER is opt-in on the same switch as the error message. With
-           * `errorDisplay = #none` (the default) an invalid field is bordered exactly like a valid
-           * one — focused or not — and the merchant hears about the problem through the state
-           * event instead, to draw however they like. Only `#inline` paints, and it paints in the
-           * merchant's own `errorColor`.
-           */
-          borderColor: isValid || options.errorDisplay !== #inline
-            ? isFocused ? theme.primaryColor : theme.normalBorderColor
-            : theme.errorBorderColor,
-          width: 100.->pct,
-          paddingHorizontal: 13.->dp,
-          alignItems: #center,
-          justifyContent: #center,
-        }),
-        theme.shadowStyle,
-      ])->CardFieldStyles.withView(styles->CardFieldStyles.containerOf)}>
-      <View
-        style={s({
-          flex: 1.,
-          position: #relative,
-          height: 100.->pct,
-          /*
-           * `flex-end` ONLY in floating mode. The floating label is absolutely positioned at
-           * `top: 0` and interpolates its height, so the input has to sit at the bottom to leave
-           * it room. In `none` and `static` there is no such element, and pushing the input down
-           * left the free space asymmetric — all of it above, none below — which is what put the
-           * placeholder and the typed text visibly below the centre of the box.
-           */
-          justifyContent: showFloating ? #"flex-end" : #center,
-        })}>
-        {showFloating
-          ? <Animated.View
-              pointerEvents=#none
-              style={s({
-                top: 0.->dp,
-                position: #absolute,
-                height: animatedValue
-                ->Animated.Interpolation.interpolate({
-                  inputRange: [0., 1.],
-                  outputRange: [
-                    "100%",
-                    `${((theme.inputHeight +. 10.) /. 1.4)->Float.toString}%`,
-                  ]->Animated.Interpolation.fromStringArray,
-                })
-                ->Animated.StyleProp.size,
-                justifyContent: #center,
-              })}>
-              <Animated.Text
-                style={array([
-                  s({
-                    fontFamily: theme.fontFamily,
-                    fontWeight: isFocused || state != "" ? #500 : #normal,
-                    fontSize: animatedValue
-                    ->Animated.Interpolation.interpolate({
-                      inputRange: [0., 1.],
-                      outputRange: [
-                        restingFontSize,
-                        floatingFontSize,
-                      ]->Animated.Interpolation.fromFloatArray,
-                    })
-                    ->Animated.StyleProp.float,
-                    color: theme.placeholderColor,
-                  }),
-                ])->CardFieldStyles.withText(
-                  isFocused || state != "" ? labelSlot.rest : placeholderSlot.rest,
-                )}>
-                {React.string(
-                  (
-                    isFocused || state != "" ? floatingLifted : floatingResting
-                  )->Option.getOr(""),
-                )}
-              </Animated.Text>
-            </Animated.View>
-          : React.null}
+  /*
+   * The input itself, extracted so `unstyled` can render it with no wrappers at all.
+   *
+   * `unstyled` means the chrome is NOT RENDERED, never styled flat — ADR-0004 makes that
+   * distinction binding, and a zeroed-out `View` is still a node in the tree. So the bordered box,
+   * the inner flex container, the static label and the accessory slot all cease to exist, and what
+   * is left is a `TextInput` the merchant positions themselves.
+   *
+   * Height is the one property that cannot simply be dropped: the styled tree gives the input
+   * `height: 100%` of a fixed-height box, and `100%` of an auto-height parent collapses to nothing.
+   * Unstyled therefore lets the platform size the field, which is what a plain `TextInput` does.
+   */
+  let inputElement = (~unstyled: bool) =>
         <TextInput
           ref=?{reference->Option.map(ref => ref->ReactNative.Ref.value)}
           style={array([
@@ -274,7 +206,9 @@ let make = (
                * platform inside the full height — and the touch target is the whole field rather
                * than the lower two thirds of it.
                */
-              height: showFloating ? (theme.inputHeight *. 0.7)->dp : 100.->pct,
+              height: unstyled
+                ? Style.auto
+                : showFloating ? (theme.inputHeight *. 0.7)->dp : 100.->pct,
               width: 100.->pct,
               /*
                * Android only; iOS centres a single-line field's text itself. This is an alignment
@@ -315,82 +249,192 @@ let make = (
           pointerEvents=#auto
           ?accessible
         />
-        {showOverlayPlaceholder
-          ? <View
-              pointerEvents=#none
-              /*
-               * Hidden from assistive technology. The TextInput carries its own
-               * `accessibilityLabel` (and optional hint), so announcing this too would repeat it.
-               */
-              accessible={false}
-              accessibilityElementsHidden={true}
-              importantForAccessibility={#"no-hide-descendants"}
-              style={s({
-                position: #absolute,
-                top: 0.->dp,
-                left: 0.->dp,
-                right: 0.->dp,
-                bottom: 0.->dp,
-                /*
-                 * Centred by LAYOUT. The overlay covers exactly the box the TextInput fills, and
-                 * both centre their single line inside it, so the placeholder and the typed text
-                 * share one vertical centre at any height, font size or font scale — with no
-                 * offset, transform or platform constant involved.
-                 *
-                 * It is rendered AFTER the TextInput so it paints on top: a merchant may put a
-                 * `backgroundColor` in `styles.input`, and as an earlier sibling the placeholder
-                 * would have been painted underneath it and disappeared. It only exists while the
-                 * value is empty, so it can never cover typed text, and `pointerEvents="none"`
-                 * keeps taps and the caret going to the input beneath.
-                 */
-                justifyContent: #center,
-              })}>
-              <Text
-                numberOfLines={1}
-                style={s({
-                  fontFamily: theme.fontFamily,
-                  fontSize: (fontSize +. theme.placeholderTextSizeAdjust) *. theme.fontScale,
-                  color: theme.placeholderColor,
-                  /* Inherited from `styles.input`, then overridable by `styles.placeholder`. */
-                  textAlign: ?inputTextAlign,
-                  /* Dim with the field it belongs to while a submission is in flight. */
-                  opacity: isProcessing ? 0.5 : 1.,
-                })->CardFieldStyles.withText(styles->CardFieldStyles.placeholderOf)}>
-                {React.string(options.placeholder->Option.getOr(""))}
-              </Text>
-            </View>
-          : React.null}
-      </View>
-      {switch iconRight {
-      | NoIcon => React.null
-      | CustomIcon(element) =>
-        /*
-         * A NON-INTERACTIVE container.
-         *
-         * A decorative accessory has no action: `CardIcons` and `CardIcons.Cvc` render an `Image`
-         * and nothing else. It used to be wrapped in a `Pressable` anyway, which made it a touch
-         * responder and put a pressable in the tree for something that does not respond to a press.
-         * A plain `View` is what it is.
-         *
-         * `accessibilityElementsHidden` / `importantForAccessibility` keep it out of the
-         * accessibility tree entirely: it duplicates information the field's own
-         * `accessibilityLabel` already carries, and announcing decoration is noise.
-         *
-         * An accessory that carries CONTROLS uses `InteractiveIcon` below and gets none of this.
-         */
-        <View
-          accessible={false}
-          accessibilityElementsHidden={true}
-          importantForAccessibility={#"no-hide-descendants"}
-          style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
-          element
-        </View>
-      | InteractiveIcon(element) =>
-        /* Same slot, same merchant style hook — but reachable, focusable and announced. */
-        <View style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
-          element
-        </View>
+
+  if options.unstyled {
+    inputElement(~unstyled=true)
+  } else {
+    <View style={s({width: 100.->pct})}>
+      {switch staticLabel {
+      | None => React.null
+      | Some(text) =>
+        <Text
+          style={s({
+            fontFamily: theme.fontFamily,
+            fontSize: (fontSize +. theme.placeholderTextSizeAdjust -. 3.) *. theme.fontScale,
+            color: theme.placeholderColor,
+            marginBottom: 4.->dp,
+          })->CardFieldStyles.withText(styles->CardFieldStyles.labelOf)}>
+          {React.string(text)}
+        </Text>
       }}
+      <View
+        style={array([
+          theme.bgStyle,
+          s({
+            backgroundColor: theme.inputBackground,
+            borderTopWidth: borderTopWidth->Option.getOr(theme.borderWidth),
+            borderBottomWidth: borderBottomWidth->Option.getOr(theme.borderWidth),
+            borderLeftWidth: borderLeftWidth->Option.getOr(theme.borderWidth),
+            borderRightWidth: borderRightWidth->Option.getOr(theme.borderWidth),
+            borderTopLeftRadius: borderTopLeftRadius->Option.getOr(theme.borderRadius),
+            borderTopRightRadius: borderTopRightRadius->Option.getOr(theme.borderRadius),
+            borderBottomLeftRadius: borderBottomLeftRadius->Option.getOr(theme.borderRadius),
+            borderBottomRightRadius: borderBottomRightRadius->Option.getOr(theme.borderRadius),
+            height: theme.inputHeight->dp,
+            flexDirection: #row,
+            /*
+             * The error BORDER is opt-in on the same switch as the error message. With
+             * `errorDisplay = #none` (the default) an invalid field is bordered exactly like a valid
+             * one — focused or not — and the merchant hears about the problem through the state
+             * event instead, to draw however they like. Only `#inline` paints, and it paints in the
+             * merchant's own `errorColor`.
+             */
+            borderColor: isValid || options.errorDisplay !== #inline
+              ? isFocused ? theme.primaryColor : theme.normalBorderColor
+              : theme.errorBorderColor,
+            width: 100.->pct,
+            paddingHorizontal: 13.->dp,
+            alignItems: #center,
+            justifyContent: #center,
+          }),
+          theme.shadowStyle,
+        ])->CardFieldStyles.withView(styles->CardFieldStyles.containerOf)}>
+        <View
+          style={s({
+            flex: 1.,
+            position: #relative,
+            height: 100.->pct,
+            /*
+             * `flex-end` ONLY in floating mode. The floating label is absolutely positioned at
+             * `top: 0` and interpolates its height, so the input has to sit at the bottom to leave
+             * it room. In `none` and `static` there is no such element, and pushing the input down
+             * left the free space asymmetric — all of it above, none below — which is what put the
+             * placeholder and the typed text visibly below the centre of the box.
+             */
+            justifyContent: showFloating ? #"flex-end" : #center,
+          })}>
+          {showFloating
+            ? <Animated.View
+                pointerEvents=#none
+                style={s({
+                  top: 0.->dp,
+                  position: #absolute,
+                  height: animatedValue
+                  ->Animated.Interpolation.interpolate({
+                    inputRange: [0., 1.],
+                    outputRange: [
+                      "100%",
+                      `${((theme.inputHeight +. 10.) /. 1.4)->Float.toString}%`,
+                    ]->Animated.Interpolation.fromStringArray,
+                  })
+                  ->Animated.StyleProp.size,
+                  justifyContent: #center,
+                })}>
+                <Animated.Text
+                  style={array([
+                    s({
+                      fontFamily: theme.fontFamily,
+                      fontWeight: isFocused || state != "" ? #500 : #normal,
+                      fontSize: animatedValue
+                      ->Animated.Interpolation.interpolate({
+                        inputRange: [0., 1.],
+                        outputRange: [
+                          restingFontSize,
+                          floatingFontSize,
+                        ]->Animated.Interpolation.fromFloatArray,
+                      })
+                      ->Animated.StyleProp.float,
+                      color: theme.placeholderColor,
+                    }),
+                  ])->CardFieldStyles.withText(
+                    isFocused || state != "" ? labelSlot.rest : placeholderSlot.rest,
+                  )}>
+                  {React.string(
+                    (
+                      isFocused || state != "" ? floatingLifted : floatingResting
+                    )->Option.getOr(""),
+                  )}
+                </Animated.Text>
+              </Animated.View>
+            : React.null}
+        {inputElement(~unstyled=false)}
+          {showOverlayPlaceholder
+            ? <View
+                pointerEvents=#none
+                /*
+                 * Hidden from assistive technology. The TextInput carries its own
+                 * `accessibilityLabel` (and optional hint), so announcing this too would repeat it.
+                 */
+                accessible={false}
+                accessibilityElementsHidden={true}
+                importantForAccessibility={#"no-hide-descendants"}
+                style={s({
+                  position: #absolute,
+                  top: 0.->dp,
+                  left: 0.->dp,
+                  right: 0.->dp,
+                  bottom: 0.->dp,
+                  /*
+                   * Centred by LAYOUT. The overlay covers exactly the box the TextInput fills, and
+                   * both centre their single line inside it, so the placeholder and the typed text
+                   * share one vertical centre at any height, font size or font scale — with no
+                   * offset, transform or platform constant involved.
+                   *
+                   * It is rendered AFTER the TextInput so it paints on top: a merchant may put a
+                   * `backgroundColor` in `styles.input`, and as an earlier sibling the placeholder
+                   * would have been painted underneath it and disappeared. It only exists while the
+                   * value is empty, so it can never cover typed text, and `pointerEvents="none"`
+                   * keeps taps and the caret going to the input beneath.
+                   */
+                  justifyContent: #center,
+                })}>
+                <Text
+                  numberOfLines={1}
+                  style={s({
+                    fontFamily: theme.fontFamily,
+                    fontSize: (fontSize +. theme.placeholderTextSizeAdjust) *. theme.fontScale,
+                    color: theme.placeholderColor,
+                    /* Inherited from `styles.input`, then overridable by `styles.placeholder`. */
+                    textAlign: ?inputTextAlign,
+                    /* Dim with the field it belongs to while a submission is in flight. */
+                    opacity: isProcessing ? 0.5 : 1.,
+                  })->CardFieldStyles.withText(styles->CardFieldStyles.placeholderOf)}>
+                  {React.string(options.placeholder->Option.getOr(""))}
+                </Text>
+              </View>
+            : React.null}
+        </View>
+        {switch iconRight {
+        | NoIcon => React.null
+        | CustomIcon(element) =>
+          /*
+           * A NON-INTERACTIVE container.
+           *
+           * A decorative accessory has no action: `CardIcons` and `CardIcons.Cvc` render an `Image`
+           * and nothing else. It used to be wrapped in a `Pressable` anyway, which made it a touch
+           * responder and put a pressable in the tree for something that does not respond to a press.
+           * A plain `View` is what it is.
+           *
+           * `accessibilityElementsHidden` / `importantForAccessibility` keep it out of the
+           * accessibility tree entirely: it duplicates information the field's own
+           * `accessibilityLabel` already carries, and announcing decoration is noise.
+           *
+           * An accessory that carries CONTROLS uses `InteractiveIcon` below and gets none of this.
+           */
+          <View
+            accessible={false}
+            accessibilityElementsHidden={true}
+            importantForAccessibility={#"no-hide-descendants"}
+            style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
+            element
+          </View>
+        | InteractiveIcon(element) =>
+          /* Same slot, same merchant style hook — but reachable, focusable and announced. */
+          <View style={s({})->CardFieldStyles.withView(styles->CardFieldStyles.accessoryOf)}>
+            element
+          </View>
+        }}
+      </View>
     </View>
-  </View>
+  }
 }

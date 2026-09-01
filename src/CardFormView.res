@@ -46,13 +46,21 @@ let make = (
    * Inline errors are per-field in every layout EXCEPT the fused one, where the three fields share
    * a single bottom line — there is nowhere else to put it. A field whose `errorDisplay` is `none`
    * still contributes nothing, in either layout.
+   *
+   * Read off the RESOLVED options, not re-derived here. Three hand-written `Option.getOr(#none)`
+   * used to sit at this spot, one per field — a second definition of a default whose only other
+   * home is `CardFieldOptions.resolveWith`. They agreed by coincidence, and the coincidence was
+   * load-bearing: change the default in one place and this form paints error-coloured borders
+   * (`CardInput` reads the resolved value) while refusing to render the message (this decides who
+   * claims the fused line). Going through the resolver makes that divergence impossible, and makes
+   * the compiler drag these three call sites along whenever the resolver's signature changes.
    */
-  let inlineFor = (options: option<CardFieldOptions.fieldOptions>) =>
-    options->Option.flatMap(o => o.errorDisplay)->Option.getOr(#none) === #inline
-  let numberInline =
-    numberOptions->Option.flatMap(o => o.errorDisplay)->Option.getOr(#none) === #inline
-  let expiryInline = inlineFor(expiryOptions)
-  let cvcInline = cvcOptions->Option.flatMap(o => o.errorDisplay)->Option.getOr(#none) === #inline
+  let rendersInline = (resolved: CardFieldOptions.resolved) => resolved.errorDisplay === #inline
+  let resolveInline = resolve =>
+    resolve(~formWideUnstyled=ctx.unstyled, ~labels)->rendersInline
+  let numberInline = resolveInline(CardFieldOptions.resolveCardNumber(numberOptions, ...))
+  let expiryInline = resolveInline(CardFieldOptions.resolveExpiry(expiryOptions, ...))
+  let cvcInline = resolveInline(CardFieldOptions.resolveCvc(cvcOptions, ...))
 
 
   /*
@@ -177,6 +185,10 @@ let make = (
               ~brandIconMode=CardFieldOptions.resolveBrandIconMode(
                 numberOptions,
                 ~formWide=ctx.brandIconMode,
+                ~unstyled=CardFieldOptions.unstyledFor(
+                  numberOptions->Option.flatMap(o => o.unstyled),
+                  ~formWide=ctx.unstyled,
+                ),
               ),
             )}
             borderBottomWidth=?{fused ? Some(theme.borderWidth /. 2.) : None}

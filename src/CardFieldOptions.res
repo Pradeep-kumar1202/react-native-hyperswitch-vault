@@ -11,17 +11,25 @@
  * A style value must never decide whether an element exists. `styles.placeholder` says how the
  * placeholder looks; only `options.placeholder` decides whether there is one at all.
  *
- * ── WHY EVERY DEFAULT IS OFF ───────────────────────────────────────────────────────────────────
+ * ── WHY EVERY DEFAULT IS ON ────────────────────────────────────────────────────────────────────
  *
- * The zero-configuration form renders three empty, neutral inputs and nothing else: no placeholder,
- * no label, no animation, no icons, no error text, no reserved space for any of them. The library's
- * job is to own the card values and tokenize them; the merchant's job is to decide what their
- * checkout looks like. Inheriting a presentation the merchant did not ask for made the second job
- * harder, not easier.
+ * The zero-configuration form renders a complete, usable field: placeholder, floating label, brand
+ * mark, CVC glyph and inline errors. `unstyled` strips all of it back to a bare `TextInput`.
  *
- * Accessibility is the one exception, and it is not a visual element: a blank field is still
- * announced as "Card number" to a screen reader, because removing that would be a regression for
- * users who cannot see the layout the merchant built.
+ * This block used to argue the opposite, and the argument was coherent: the library owns the card
+ * values, the merchant owns the checkout's appearance, so inheriting a presentation nobody asked
+ * for makes the merchant's job harder. What it got wrong is what a merchant meets first. A blank
+ * rectangle is not a neutral starting point — it reads as a broken integration, and the README had
+ * to carry a sentence explaining that `fieldOptions` "is not optional decoration, it is how you get
+ * a visible form". A default that needs that sentence is the wrong default.
+ *
+ * The ownership argument survives intact, because it was never really about defaults: every element
+ * is still individually switchable, `unstyled` still yields a plain input, and no merchant is
+ * prevented from drawing their own. What changed is which of the two costs a line of code.
+ *
+ * Accessibility and input behaviour are not part of this decision in either direction. A field is
+ * announced as "Card number", keeps its keyboard type and length limit, and masks the CVC, whether
+ * or not it is drawn — see `unstyled` in `resolveWith`.
  */
 
 @genType
@@ -58,6 +66,15 @@ type fieldOptions = {
   accessibilityLabel?: string,
   accessibilityHint?: string,
   testID?: string,
+  /*
+   * Strip this field back to a bare `TextInput`: no border, no background, no fixed height, no
+   * placeholder, label, icon or error line. What survives is behaviour and accessibility —
+   * `accessibilityLabel`, `testID`, keyboard type, length limit and the CVC's masking.
+   *
+   * Absent => the provider's `unstyled`, and then `false`. A field may set `unstyled={false}` to
+   * keep the full UI inside an unstyled provider.
+   */
+  unstyled?: bool,
 }
 
 @genType
@@ -69,6 +86,15 @@ type cardNumberOptions = {
   accessibilityLabel?: string,
   accessibilityHint?: string,
   testID?: string,
+  /*
+   * Strip this field back to a bare `TextInput`: no border, no background, no fixed height, no
+   * placeholder, label, icon or error line. What survives is behaviour and accessibility —
+   * `accessibilityLabel`, `testID`, keyboard type, length limit and the CVC's masking.
+   *
+   * Absent => the provider's `unstyled`, and then `false`. A field may set `unstyled={false}` to
+   * keep the full UI inside an unstyled provider.
+   */
+  unstyled?: bool,
   /*
    * Card number only — the expiry and CVC option types have no such member at all.
    * Absent => fall back to `appearance.brandIconMode`, and then to `hidden`.
@@ -92,6 +118,15 @@ type cvcOptions = {
   accessibilityLabel?: string,
   accessibilityHint?: string,
   testID?: string,
+  /*
+   * Strip this field back to a bare `TextInput`: no border, no background, no fixed height, no
+   * placeholder, label, icon or error line. What survives is behaviour and accessibility —
+   * `accessibilityLabel`, `testID`, keyboard type, length limit and the CVC's masking.
+   *
+   * Absent => the provider's `unstyled`, and then `false`. A field may set `unstyled={false}` to
+   * keep the full UI inside an unstyled provider.
+   */
+  unstyled?: bool,
   /* CVC only. */
   cvcIcon?: cvcIconDisplay,
 }
@@ -167,6 +202,7 @@ type resolved = {
   accessibilityLabel: string,
   accessibilityHint: option<string>,
   testID: string,
+  unstyled: bool,
 }
 
 /*
@@ -174,11 +210,48 @@ type resolved = {
  * than carried into the rendered element — `testID: " foo "` should find the same node as
  * `testID: "foo"`.
  */
+/*
+ * Placeholder and label need THREE answers, not two, now that absent means "use the library's
+ * string": inherit it, replace it, or turn it off. `trimmed` collapses `""` to `None`, which is
+ * indistinguishable from absent — so a merchant who wants no placeholder would have no way to say
+ * so short of `unstyled`, which removes everything else too.
+ *
+ * `placeholder=""` means "no placeholder". That is what a bare `<TextInput placeholder="" />` does
+ * in React Native, so it needs no new type on the public surface and no second way to spell "off".
+ */
+type textChoice =
+  | Inherit
+  | Off
+  | Text(string)
+
+let merchantText = (value: option<string>): textChoice =>
+  switch value {
+  | None => Inherit
+  | Some(text) =>
+    let text = text->String.trim
+    text === "" ? Off : Text(text)
+  }
+
 let trimmed = (value: option<string>) =>
   value->Option.flatMap(text => {
     let text = text->String.trim
     text === "" ? None : Some(text)
   })
+
+/*
+ * ── THE DEFAULTS, IN ONE BLOCK ─────────────────────────────────────────────────────────────────
+ *
+ * Every visual default the library has. `resolveWith` below claims to be "the only place a default
+ * lives" and it was not true: `cvcIconOf` carried its own, and `VaultFormHost` carried the
+ * form-wide brand-icon one, and `CardFormView` re-derived the error one three times. Naming them
+ * here makes the claim true and makes changing the library's default presentation a single,
+ * reviewable edit to four lines rather than an archaeology exercise across four files.
+ */
+let defaultLabelBehavior: labelBehavior = #floating
+let defaultErrorDisplay: errorDisplay = #inline
+let defaultBrandIconMode: brandIconMode = #standard
+let defaultCvcIcon: cvcIconDisplay = #default
+let defaultUnstyled: bool = false
 
 /*
  * `~defaultAccessibilityLabel` and `~defaultTestID` are library constants per field, not merchant
@@ -192,19 +265,63 @@ let resolveWith = (
   ~accessibilityLabel,
   ~accessibilityHint,
   ~testID,
+  ~unstyled,
   ~defaultAccessibilityLabel: string,
   ~defaultTestID: string,
+  /* Already `provider prop ?? defaultUnstyled` by the time it reaches here. */
+  ~formWideUnstyled: bool,
+  /* This field's strings, from `localisation.labels` or the library's own. */
+  ~defaultPlaceholder: string,
+  ~defaultLabel: string,
 ): resolved => {
-  placeholder: trimmed(placeholder),
-  label: trimmed(label),
-  labelBehavior: labelBehavior->Option.getOr(#none),
-  errorDisplay: errorDisplay->Option.getOr(#none),
-  accessibilityLabel: trimmed(accessibilityLabel)->Option.getOr(defaultAccessibilityLabel),
-  accessibilityHint: trimmed(accessibilityHint),
-  testID: trimmed(testID)->Option.getOr(defaultTestID),
+  let unstyled = unstyled->Option.getOr(formWideUnstyled)
+
+  /*
+   * `unstyled` WINS over the per-feature options — it is not merely a different set of defaults.
+   *
+   * The two escape hatches answer two different asks. Per-feature props are "change the UI";
+   * `unstyled` is "there is no UI, give me a text input". Letting a stray `errorDisplay` survive
+   * `unstyled` would put an element inside a field that has no box to hold it, and would make the
+   * rendered result depend on which of two props the reader noticed first.
+   *
+   * So the resolved record tells the truth: under `unstyled` every visual member reads off, and
+   * nothing downstream has to re-check the flag to know what it is looking at.
+   */
+  let inherited = fallback => unstyled ? None : Some(fallback)
+  let chrome = (explicit, fallback) => unstyled ? fallback : explicit->Option.getOr(fallback)
+
+  {
+    placeholder: unstyled
+      ? None
+      : switch merchantText(placeholder) {
+        | Inherit => inherited(defaultPlaceholder)
+        | Off => None
+        | Text(text) => Some(text)
+        },
+    label: unstyled
+      ? None
+      : switch merchantText(label) {
+        | Inherit => inherited(defaultLabel)
+        | Off => None
+        | Text(text) => Some(text)
+        },
+    labelBehavior: chrome(labelBehavior, unstyled ? #none : defaultLabelBehavior),
+    errorDisplay: chrome(errorDisplay, unstyled ? #none : defaultErrorDisplay),
+    accessibilityLabel: trimmed(accessibilityLabel)->Option.getOr(defaultAccessibilityLabel),
+    accessibilityHint: trimmed(accessibilityHint),
+    testID: trimmed(testID)->Option.getOr(defaultTestID),
+    unstyled,
+  }
 }
 
-let resolveField = (options: option<fieldOptions>, ~defaultAccessibilityLabel, ~defaultTestID) =>
+let resolveField = (
+  options: option<fieldOptions>,
+  ~defaultAccessibilityLabel,
+  ~defaultTestID,
+  ~formWideUnstyled,
+  ~defaultPlaceholder,
+  ~defaultLabel,
+) =>
   resolveWith(
     ~placeholder=options->Option.flatMap(o => o.placeholder),
     ~label=options->Option.flatMap(o => o.label),
@@ -213,11 +330,19 @@ let resolveField = (options: option<fieldOptions>, ~defaultAccessibilityLabel, ~
     ~accessibilityLabel=options->Option.flatMap(o => o.accessibilityLabel),
     ~accessibilityHint=options->Option.flatMap(o => o.accessibilityHint),
     ~testID=options->Option.flatMap(o => o.testID),
+    ~unstyled=options->Option.flatMap(o => o.unstyled),
     ~defaultAccessibilityLabel,
     ~defaultTestID,
+    ~formWideUnstyled,
+    ~defaultPlaceholder,
+    ~defaultLabel,
   )
 
-let resolveCardNumber = (options: option<cardNumberOptions>) =>
+let resolveCardNumber = (
+  options: option<cardNumberOptions>,
+  ~formWideUnstyled,
+  ~labels: CardFormTypes.cardLabels,
+) =>
   resolveWith(
     ~placeholder=options->Option.flatMap(o => o.placeholder),
     ~label=options->Option.flatMap(o => o.label),
@@ -226,25 +351,47 @@ let resolveCardNumber = (options: option<cardNumberOptions>) =>
     ~accessibilityLabel=options->Option.flatMap(o => o.accessibilityLabel),
     ~accessibilityHint=options->Option.flatMap(o => o.accessibilityHint),
     ~testID=options->Option.flatMap(o => o.testID),
+    ~unstyled=options->Option.flatMap(o => o.unstyled),
     ~defaultAccessibilityLabel="Card number",
     ~defaultTestID=CardTestIds.cardNumberInputTestId,
+    ~formWideUnstyled,
+    ~defaultPlaceholder=labels.cardNumberPlaceholder,
+    ~defaultLabel=labels.cardNumberFloatingLabel,
   )
 
-let resolveExpiry = (options: option<expiryOptions>) =>
+let resolveExpiry = (
+  options: option<expiryOptions>,
+  ~formWideUnstyled,
+  ~labels: CardFormTypes.cardLabels,
+) =>
   resolveField(
     options,
     ~defaultAccessibilityLabel="Expiration date",
     ~defaultTestID=CardTestIds.expiryInputTestId,
+    ~formWideUnstyled,
+    ~defaultPlaceholder=labels.expiryPlaceholder,
+    ~defaultLabel=labels.expiryFloatingLabel,
   )
 
-let resolveCardholderName = (options: option<cardholderNameOptions>) =>
+let resolveCardholderName = (
+  options: option<cardholderNameOptions>,
+  ~formWideUnstyled,
+  ~labels: CardFormTypes.cardLabels,
+) =>
   resolveField(
     options,
     ~defaultAccessibilityLabel="Cardholder name",
     ~defaultTestID=CardTestIds.cardholderNameInputTestId,
+    ~formWideUnstyled,
+    ~defaultPlaceholder=labels.cardholderNamePlaceholder,
+    ~defaultLabel=labels.cardholderNameFloatingLabel,
   )
 
-let resolveCvc = (options: option<cvcOptions>) =>
+let resolveCvc = (
+  options: option<cvcOptions>,
+  ~formWideUnstyled,
+  ~labels: CardFormTypes.cardLabels,
+) =>
   resolveWith(
     ~placeholder=options->Option.flatMap(o => o.placeholder),
     ~label=options->Option.flatMap(o => o.label),
@@ -253,8 +400,12 @@ let resolveCvc = (options: option<cvcOptions>) =>
     ~accessibilityLabel=options->Option.flatMap(o => o.accessibilityLabel),
     ~accessibilityHint=options->Option.flatMap(o => o.accessibilityHint),
     ~testID=options->Option.flatMap(o => o.testID),
+    ~unstyled=options->Option.flatMap(o => o.unstyled),
     ~defaultAccessibilityLabel="Security code",
     ~defaultTestID=CardTestIds.cvcInputTestId,
+    ~formWideUnstyled,
+    ~defaultPlaceholder=labels.cvcPlaceholder,
+    ~defaultLabel=labels.cvcFloatingLabel,
   )
 
 /*
@@ -270,10 +421,16 @@ let resolveCvc = (options: option<cvcOptions>) =>
 let resolveBrandIconMode = (
   options: option<cardNumberOptions>,
   ~formWide: brandIconMode,
-): brandIconMode => options->Option.flatMap(o => o.brandIconMode)->Option.getOr(formWide)
+  ~unstyled: bool,
+): brandIconMode =>
+  unstyled ? #hidden : options->Option.flatMap(o => o.brandIconMode)->Option.getOr(formWide)
 
-let cvcIconOf = (options: option<cvcOptions>) =>
-  options->Option.flatMap(o => o.cvcIcon)->Option.getOr(#none)
+let cvcIconOf = (options: option<cvcOptions>, ~unstyled: bool) =>
+  unstyled ? #none : options->Option.flatMap(o => o.cvcIcon)->Option.getOr(defaultCvcIcon)
+
+/* The field-then-form precedence for `unstyled` itself, so no caller re-derives it. */
+let unstyledFor = (fieldUnstyled: option<bool>, ~formWide: bool) =>
+  fieldUnstyled->Option.getOr(formWide)
 
 let cardNumberOf = (options: option<formFieldOptions>) =>
   options->Option.flatMap(o => o.cardNumber)

@@ -102,9 +102,14 @@ const ID = {
   cvc: 'CVCInputTestId',
 } as const;
 
+/*
+ * Errors only. Floating labels and placeholder overlays are `Text` nodes too now that the default
+ * UI renders them, so matching on the element type alone collected "Card number" and "MM / YY"
+ * alongside the validation message. `CardFieldErrorTestId` is on the error element specifically.
+ */
 const messages = (r: Renderer) =>
   r.root
-    .findAll((n) => String(n.type) === 'Text')
+    .findAll((n) => typeof n.type === 'string' && n.props?.testID === 'CardFieldErrorTestId')
     .flatMap((t) => (Array.isArray(t.props.children) ? t.props.children : [t.props.children]))
     .filter((c): c is string => typeof c === 'string' && c.trim() !== '');
 
@@ -311,7 +316,18 @@ describe('§3 each field renders its inline error exactly once', () => {
   });
 
   it('errorDisplay disabled renders nothing at all', () => {
-    const r = mount(<HyperswitchVault.CardForm session={session} environment="sandbox" />);
+    /*
+     * Explicit now. Inline errors are the DEFAULT since the default-UI change, so a bare form is no
+     * longer the "disabled" case — it is the opposite one, covered by the rows above.
+     */
+    const off = {
+      cardNumber: {errorDisplay: 'none'} as const,
+      expiry: {errorDisplay: 'none'} as const,
+      cvc: {errorDisplay: 'none'} as const,
+    };
+    const r = mount(
+      <HyperswitchVault.CardForm session={session} environment="sandbox" fieldOptions={off} />,
+    );
     invalidate(r, ID.number, '4242');
     invalidate(r, ID.cvc, '1');
     expect(messages(r)).toHaveLength(0);
@@ -390,7 +406,18 @@ describe('§5 the placeholder inherits the input alignment unless it overrides i
   const build = (styles: Record<string, unknown>) =>
     mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField placeholder="Card Number" styles={styles as never} />
+        {/*
+          * `labelBehavior="none"` is required to reach the overlay at all: the default is
+          * `floating`, and a floating label REPLACES the overlay placeholder
+          * (`CardInput.showOverlayPlaceholder` is gated on `!floating`). The placeholder string is
+          * still shown — as the floating label's resting text — but it is a different element, and
+          * this section is about the overlay's alignment specifically.
+          */}
+        <CardNumberField
+          placeholder="Card Number"
+          labelBehavior="none"
+          styles={styles as never}
+        />
         <CardExpiryField />
         <CardCVCField />
       </HyperswitchVaultFormProvider>,
@@ -484,7 +511,8 @@ describe('§7 the placeholder shares the field\'s processing and disabled state'
   const opacities = (props: Record<string, unknown>) => {
     const r = mount(
       <HyperswitchVault.CardForm session={session} environment="sandbox"
-        fieldOptions={{cardNumber: {placeholder: 'Card Number'}}} {...props} />,
+        fieldOptions={{cardNumber: {placeholder: 'Card Number', labelBehavior: 'none'}}}
+        {...props} />,
     );
     const out = {
       input: flat(by(r, ID.number).props.style).opacity,
@@ -508,7 +536,7 @@ describe('§7 the placeholder shares the field\'s processing and disabled state'
     const ref = React.createRef<VaultFormHandle>();
     const r = mount(
       <HyperswitchVault.CardForm ref={ref} session={session} environment="sandbox"
-        fieldOptions={{cardNumber: {placeholder: 'Card Number'}}} />,
+        fieldOptions={{cardNumber: {placeholder: 'Card Number', labelBehavior: 'none'}}} />,
     );
     type_(r, ID.number, '4242424242424242');
     type_(r, ID.expiry, '11/29');
@@ -530,7 +558,7 @@ describe('§7 the placeholder shares the field\'s processing and disabled state'
   it('a merchant opacity override replaces it — it is not multiplied', () => {
     const r = mount(
       <HyperswitchVault.CardForm session={session} environment="sandbox" disabled
-        fieldOptions={{cardNumber: {placeholder: 'Card Number'}}}
+        fieldOptions={{cardNumber: {placeholder: 'Card Number', labelBehavior: 'none'}}}
         fieldStyles={{cardNumber: {placeholder: {opacity: 0.25}, input: {opacity: 0.25}}}} />,
     );
     /* exactly the merchant's value, not 0.25 * 0.5 */

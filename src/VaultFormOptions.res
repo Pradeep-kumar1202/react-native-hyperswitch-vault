@@ -51,6 +51,8 @@ type localisationLabels = {
   expiryFloatingLabel?: string,
   cvcPlaceholder?: string,
   cvcFloatingLabel?: string,
+  cardholderNamePlaceholder?: string,
+  cardholderNameFloatingLabel?: string,
   /* Heading of the co-badge network chooser. */
   selectCardBrandLabel?: string,
 }
@@ -172,6 +174,9 @@ let defaultLabels: CardFormTypes.cardLabels = {
   expiryFloatingLabel: "Expiry",
   cvcPlaceholder: "CVC",
   cvcFloatingLabel: "CVC",
+  /* "Name on card" is the string the README already uses for this field. */
+  cardholderNamePlaceholder: "Name on card",
+  cardholderNameFloatingLabel: "Name on card",
 
   notEligibleText: LocaleDataType.defaultLocale.cardNotEligibleText,
   selectCardBrandLabel: LocaleDataType.defaultLocale.selectCardBrand,
@@ -202,6 +207,14 @@ let resolveLabels = (localisation: option<localisation>): CardFormTypes.cardLabe
     expiryFloatingLabel: pick(l => l.expiryFloatingLabel, defaultLabels.expiryFloatingLabel),
     cvcPlaceholder: pick(l => l.cvcPlaceholder, defaultLabels.cvcPlaceholder),
     cvcFloatingLabel: pick(l => l.cvcFloatingLabel, defaultLabels.cvcFloatingLabel),
+    cardholderNamePlaceholder: pick(
+      l => l.cardholderNamePlaceholder,
+      defaultLabels.cardholderNamePlaceholder,
+    ),
+    cardholderNameFloatingLabel: pick(
+      l => l.cardholderNameFloatingLabel,
+      defaultLabels.cardholderNameFloatingLabel,
+    ),
     notEligibleText: defaultLabels.notEligibleText,
     selectCardBrandLabel: pick(l => l.selectCardBrandLabel, defaultLabels.selectCardBrandLabel),
     isRtl: localisation->Option.flatMap(l => l.isRtl)->Option.getOr(defaultLabels.isRtl),

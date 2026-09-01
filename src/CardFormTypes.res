@@ -27,6 +27,8 @@ type cardLabels = {
   expiryFloatingLabel: string,
   cvcPlaceholder: string,
   cvcFloatingLabel: string,
+  cardholderNamePlaceholder: string,
+  cardholderNameFloatingLabel: string,
   notEligibleText: string,
   /* Heading of the co-badge network chooser. */
   selectCardBrandLabel: string,

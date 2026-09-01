@@ -28,7 +28,8 @@ export type Props = {
   readonly onStateChange?: (_1:VaultPublicState_cardNumberState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
-  readonly testID?: string
+  readonly testID?: string; 
+  readonly unstyled?: boolean
 };
 
 export const make: React.ComponentType<{
@@ -42,5 +43,6 @@ export const make: React.ComponentType<{
   readonly onStateChange?: (_1:VaultPublicState_cardNumberState) => void; 
   readonly placeholder?: string; 
   readonly styles?: CardFieldStyles_fieldStyles; 
-  readonly testID?: string
+  readonly testID?: string; 
+  readonly unstyled?: boolean
 }> = CardNumberWidgetJS.make as any;

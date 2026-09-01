@@ -39,6 +39,8 @@ let useHost = (
   ~cardholderNameMode: CardFieldOptions.cardholderNameMode,
   /* Absent means no merchant is listening, and nothing is derived. See `VaultStateEmitter`. */
   ~onFormStateChange: option<VaultPublicState.vaultFormState => unit>,
+  /* Form-wide default for every field's `unstyled`. */
+  ~unstyled: bool,
 ): host => {
   /*
    * The component's session backs `tokenize()` ONLY. A confirmation reads its session from
@@ -69,11 +71,8 @@ let useHost = (
   let brandIconMode =
     appearance
     ->Option.flatMap(a => a.VaultFormOptions.brandIconMode)
-    /*
-     * `#hidden`, not `#standard`. The zero-configuration form renders no artwork; a merchant who
-     * wants one asks for it, either form-wide here or per field.
-     */
-    ->Option.getOr(#hidden)
+    /* The library-wide default, named once in `CardFieldOptions`. */
+    ->Option.getOr(CardFieldOptions.defaultBrandIconMode)
 
   let validators: CardStateReducer.validators = {
     cardNumber: VaultFormOptions.makeCardNumberValidator(messages),
@@ -251,6 +250,7 @@ let useHost = (
       editable: !machinery.isSubmitting && !disabled,
       isProcessing: machinery.isSubmitting || disabled,
       onAnalytics: _ => (),
+      unstyled,
     },
     machinery,
     focusField: controller.focusField,

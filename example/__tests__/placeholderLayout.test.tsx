@@ -157,9 +157,16 @@ const plain = (extra: Record<string, unknown> = {}, appearance?: Record<string, 
       environment="sandbox"
       appearance={appearance as never}
       fieldOptions={{
-        cardNumber: {placeholder: 'Card Number', ...extra},
-        expiry: {placeholder: 'MM/YY', ...extra},
-        cvc: {placeholder: 'CVC', ...extra},
+        /*
+         * `labelBehavior: 'none'` is explicit throughout this file now. The default became
+         * `floating`, and a floating label REPLACES the overlay placeholder — `showOverlayPlaceholder`
+         * is gated on `!floating`. The placeholder string still reaches the screen in the default
+         * form, as the floating label's resting text; this suite is about the OVERLAY element, so
+         * it has to ask for the mode that renders one.
+         */
+        cardNumber: {placeholder: 'Card Number', labelBehavior: 'none', ...extra},
+        expiry: {placeholder: 'MM/YY', labelBehavior: 'none', ...extra},
+        cvc: {placeholder: 'CVC', labelBehavior: 'none', ...extra},
       }}
     />,
   );
@@ -185,15 +192,17 @@ describe('the floating-label geometry no longer applies to plain and static mode
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
         <CardNumberField placeholder="Card Number" label="Card number" labelBehavior="floating" />
-        <CardExpiryField />
-        <CardCVCField />
+        {/* Explicitly plain: floating is the DEFAULT now, so an unconfigured field would float
+          * too and the contrast this test is drawing would vanish. */}
+        <CardExpiryField labelBehavior="none" />
+        <CardCVCField labelBehavior="none" />
       </HyperswitchVaultFormProvider>,
     );
     expect(wrapperOf(r, 'CardNumberInputTestId').justifyContent).toBe('flex-end');
     /* 48 * 0.7 — the label occupies the remaining 30% at the top */
     expect(flat(by(r, 'CardNumberInputTestId').props.style).height).toBeCloseTo(33.6, 5);
     expect(flat(by(r, 'CardNumberInputTestId').props.style).textAlignVertical).toBe('auto');
-    /* the untouched fields are plain, and centre */
+    /* the fields that opted OUT are plain, and centre */
     expect(wrapperOf(r, 'ExpiryInputTestId').justifyContent).toBe('center');
     ReactTestRenderer.act(() => r.unmount());
   });
@@ -250,7 +259,11 @@ describe('placeholder and entered text share one vertical centre', () => {
     it(`the full TextStyle reaches the placeholder: ${name}`, () => {
       const r = mount(
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
-          <CardNumberField placeholder="Card Number" styles={{placeholder: style}} />
+          <CardNumberField
+            placeholder="Card Number"
+            labelBehavior="none"
+            styles={{placeholder: style}}
+          />
           <CardExpiryField />
           <CardCVCField />
         </HyperswitchVaultFormProvider>,
@@ -273,7 +286,11 @@ describe('placeholder and entered text share one vertical centre', () => {
     for (const [name, style] of cases) {
       const r = mount(
         <HyperswitchVaultFormProvider session={session} environment="sandbox">
-          <CardNumberField placeholder="Card Number" styles={{placeholder: style as never}} />
+          <CardNumberField
+            placeholder="Card Number"
+            labelBehavior="none"
+            styles={{placeholder: style as never}}
+          />
           <CardExpiryField />
           <CardCVCField />
         </HyperswitchVaultFormProvider>,
@@ -304,7 +321,11 @@ describe('placeholder and entered text share one vertical centre', () => {
   it('a merchant placeholder font size does NOT drag the input font with it', () => {
     const r = mount(
       <HyperswitchVaultFormProvider session={session} environment="sandbox">
-        <CardNumberField placeholder="Card Number" styles={{placeholder: {fontSize: 28}}} />
+        <CardNumberField
+          placeholder="Card Number"
+          labelBehavior="none"
+          styles={{placeholder: {fontSize: 28}}}
+        />
         <CardExpiryField />
         <CardCVCField />
       </HyperswitchVaultFormProvider>,
@@ -362,7 +383,7 @@ describe('the overlay behaves like a native placeholder', () => {
         ref={formRef}
         session={session}
         environment="sandbox"
-        fieldOptions={{cardNumber: {placeholder: 'Card Number'}}}
+        fieldOptions={{cardNumber: {placeholder: 'Card Number', labelBehavior: 'none'}}}
       />,
     );
     ReactTestRenderer.act(() => by(r, 'CardNumberInputTestId').props.onChangeText('4242424242'));
@@ -391,9 +412,9 @@ describe('a placeholder is never card data', () => {
         session={session}
         environment="sandbox"
         fieldOptions={{
-          cardNumber: {placeholder: '4242 4242 4242 4242'},
-          expiry: {placeholder: '12/30'},
-          cvc: {placeholder: '123'},
+          cardNumber: {placeholder: '4242 4242 4242 4242', labelBehavior: 'none'},
+          expiry: {placeholder: '12/30', labelBehavior: 'none'},
+          cvc: {placeholder: '123', labelBehavior: 'none'},
         }}
       />,
     );
@@ -473,9 +494,9 @@ describe('a placeholder is never card data', () => {
         session={session}
         environment="sandbox"
         fieldOptions={{
-          cardNumber: {placeholder: '4242 4242 4242 4242', errorDisplay: 'inline'},
-          expiry: {placeholder: '12/30'},
-          cvc: {placeholder: '123'},
+          cardNumber: {placeholder: '4242 4242 4242 4242', errorDisplay: 'inline', labelBehavior: 'none'},
+          expiry: {placeholder: '12/30', labelBehavior: 'none'},
+          cvc: {placeholder: '123', labelBehavior: 'none'},
         }}
       />,
     );
@@ -500,9 +521,16 @@ describe('a placeholder is never card data', () => {
         session={session}
         environment="sandbox"
         fieldOptions={{
-          cardNumber: {placeholder: 'Card Number'},
-          expiry: {placeholder: 'MM/YY'},
-          cvc: {placeholder: 'CVC'},
+          cardNumber: {placeholder: 'Card Number', labelBehavior: 'none'},
+          expiry: {placeholder: 'MM/YY', labelBehavior: 'none'},
+          cvc: {placeholder: 'CVC', labelBehavior: 'none'},
+          /*
+           * The cardholder name is named explicitly too. The ready-made form renders it, and at
+           * the default `labelBehavior: 'floating'` its label container also carries
+           * `pointerEvents: 'none'` — so the collector below would count it and the number would
+           * be off by one for a reason that has nothing to do with what this test asserts.
+           */
+          cardholderName: {placeholder: 'Name on card', labelBehavior: 'none'},
         }}
       />,
     );
@@ -524,8 +552,8 @@ describe('a placeholder is never card data', () => {
       return out;
     };
     const rendered = collect(r.toJSON());
-    /* the card number's own overlay is gone (it has a value); the other two remain */
-    expect(rendered).toHaveLength(2);
+    /* the card number's own overlay is gone (it has a value); the other three remain */
+    expect(rendered).toHaveLength(3);
     for (const o of rendered) expect(findDigits(o)).toBe(false);
     /* the walk is not vacuous */
     expect(findDigits({props: {}, children: ['xx4111xx']})).toBe(true);
