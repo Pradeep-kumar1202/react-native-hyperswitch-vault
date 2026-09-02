@@ -31,8 +31,9 @@ import {
   CardNumberField,
   CardExpiryField,
   CardCVCField,
-  type VaultFormHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 const PAN = '4242424242424242';
 const EXPIRY = `12${String((new Date().getFullYear() + 3) % 100).padStart(2, '0')}`;
@@ -178,7 +179,7 @@ describe('the value stays inside the library and reaches only the intended reque
   };
 
   it('sends the typed name as card_holder_name in a direct confirm', async () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
     const r = render(
       <HyperswitchVaultForm
         ref={formRef}
@@ -201,7 +202,7 @@ describe('the value stays inside the library and reaches only the intended reque
   });
 
   it('sends NO card_holder_name when the field was omitted', async () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
     const r = render(
       <HyperswitchVaultForm ref={formRef} environment="sandbox" cardholderName="omit" />,
     );
@@ -222,7 +223,7 @@ describe('the value stays inside the library and reaches only the intended reque
 
   it('publishes no way to read or set the name in either mode', () => {
     for (const mode of ['collect', 'omit'] as const) {
-      const formRef = React.createRef<VaultFormHandle>();
+      const formRef = React.createRef<HostFormHandle>();
       const r = render(
         <HyperswitchVaultForm ref={formRef} environment="sandbox" cardholderName={mode} />,
       );
@@ -240,7 +241,7 @@ describe('the value stays inside the library and reaches only the intended reque
   });
 
   it('focus("cardholderName") is still safe when the field is omitted', () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
     render(<HyperswitchVaultForm ref={formRef} environment="sandbox" cardholderName="omit" />);
     expect(() => formRef.current!.focus('cardholderName')).not.toThrow();
   });

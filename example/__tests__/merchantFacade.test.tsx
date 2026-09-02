@@ -30,7 +30,6 @@ import {
   CardExpiryWidget,
   CardCVCWidget,
   CardholderNameWidget,
-  type HyperswitchVaultFormHandle,
   type WidgetHandle,
   /* Phase 1 additions */
   CardNumberField,
@@ -39,9 +38,10 @@ import {
   CardholderNameField,
   HyperswitchVault,
   type VaultFieldHandle,
-  type VaultFormHandle,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 declare const global: {fetch: unknown};
 
@@ -220,7 +220,7 @@ describe('rendering through the new names is indistinguishable', () => {
   });
 
   it('mixing legacy and canonical names in one layout still yields one working form', async () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
 
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
@@ -235,7 +235,7 @@ describe('rendering through the new names is indistinguishable', () => {
     });
 
     /* All three kinds are mounted exactly once, so submit() must reach validation, not not_ready. */
-    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
+    let result: Awaited<ReturnType<HostFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
       result = await formRef.current!.confirmPayment(paymentWith(session));
     });
@@ -250,8 +250,8 @@ describe('rendering through the new names is indistinguishable', () => {
 /* ── 3. Handles are unchanged under the new type names ────────────────────── */
 
 describe('handles behave identically under the alias types', () => {
-  it('the form handle exposes exactly tokenize / confirmPayment / reset / focus', () => {
-    const formRef = React.createRef<VaultFormHandle>();
+  it('the runtime handle exposes exactly tokenize / confirmPayment / reset / focus (the root type narrows it to three)', () => {
+    const formRef = React.createRef<HostFormHandle>();
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
@@ -292,7 +292,7 @@ describe('handles behave identically under the alias types', () => {
 
   it('a legacy WidgetHandle ref works on a canonical field, and vice versa', () => {
     const widgetRef = React.createRef<WidgetHandle>();
-    const formHandleRef = React.createRef<HyperswitchVaultFormHandle>();
+    const formHandleRef = React.createRef<HostFormHandle>();
 
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
@@ -318,7 +318,7 @@ describe('handles behave identically under the alias types', () => {
 
 describe('the mounted-field registry is unaffected by naming', () => {
   it('a duplicate expressed through two different names is still a duplicate', async () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
@@ -332,7 +332,7 @@ describe('the mounted-field registry is unaffected by naming', () => {
       );
     });
 
-    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
+    let result: Awaited<ReturnType<HostFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
       result = await formRef.current!.confirmPayment(paymentWith(session));
     });
@@ -344,7 +344,7 @@ describe('the mounted-field registry is unaffected by naming', () => {
   });
 
   it('a missing field named canonically still returns not_ready with no request', async () => {
-    const formRef = React.createRef<VaultFormHandle>();
+    const formRef = React.createRef<HostFormHandle>();
     let renderer!: Renderer;
     ReactTestRenderer.act(() => {
       renderer = ReactTestRenderer.create(
@@ -356,7 +356,7 @@ describe('the mounted-field registry is unaffected by naming', () => {
       );
     });
 
-    let result: Awaited<ReturnType<VaultFormHandle['confirmPayment']>> | undefined;
+    let result: Awaited<ReturnType<HostFormHandle['confirmPayment']>> | undefined;
     await ReactTestRenderer.act(async () => {
       result = await formRef.current!.confirmPayment(paymentWith(session));
     });

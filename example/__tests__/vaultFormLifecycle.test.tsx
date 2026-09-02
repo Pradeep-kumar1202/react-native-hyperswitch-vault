@@ -20,10 +20,10 @@ import React from 'react';
 import ReactTestRenderer, {type ReactTestRenderer as Renderer} from 'react-test-renderer';
 import {
   HyperswitchVaultForm,
-  type HyperswitchVaultFormHandle,
   type MerchantSession,
-  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle, VaultPaymentResult} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 /*
  * jest runs these in Node, but the React Native tsconfig types neither Node nor the DOM — by
@@ -183,7 +183,7 @@ beforeEach(() => {
 
 type Mounted = {
   tree: Renderer;
-  ref: React.RefObject<HyperswitchVaultFormHandle | null>;
+  ref: React.RefObject<HostFormHandle | null>;
 };
 
 /*
@@ -206,7 +206,7 @@ afterEach(async () => {
 });
 
 const mount = async (session: MerchantSession): Promise<Mounted> => {
-  const ref = React.createRef<HyperswitchVaultFormHandle>();
+  const ref = React.createRef<HostFormHandle>();
   let tree!: Renderer;
   await ReactTestRenderer.act(() => {
     tree = ReactTestRenderer.create(
@@ -413,7 +413,7 @@ describe('session replacement', () => {
   it('aborts the in-flight request and never reuses the old authorization', async () => {
     const first = sessionWith('pms_fake_OLD');
     const second = sessionWith('pms_fake_NEW');
-    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const ref = React.createRef<HostFormHandle>();
 
     let tree!: Renderer;
     await ReactTestRenderer.act(() => {
@@ -476,7 +476,7 @@ describe('session replacement', () => {
 
     const first = sessionWith('pms_fake_OLD');
     const second = sessionWith('pms_fake_NEW');
-    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const ref = React.createRef<HostFormHandle>();
 
     let tree!: Renderer;
     await ReactTestRenderer.act(() => {

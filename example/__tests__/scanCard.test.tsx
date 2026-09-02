@@ -30,10 +30,9 @@ jest.mock(
 
 import ReactTestRenderer from 'react-test-renderer';
 import {TextInput} from 'react-native';
-import {
-  HyperswitchVaultForm,
-  type VaultFormHandle,
-} from '@juspay-tech/react-native-hyperswitch-vault';
+import {HyperswitchVaultForm} from '@juspay-tech/react-native-hyperswitch-vault';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 const SCANNED_PAN = '4242424242424242';
 const SCANNED_EXPIRY = {month: '11', year: '2032'};
@@ -69,7 +68,7 @@ afterEach(() => {
 });
 
 const mount = () => {
-  const formRef = React.createRef<VaultFormHandle>();
+  const formRef = React.createRef<HostFormHandle>();
   let r!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     r = ReactTestRenderer.create(<HyperswitchVaultForm ref={formRef} environment="sandbox" />);

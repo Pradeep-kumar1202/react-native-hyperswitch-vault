@@ -21,8 +21,12 @@ import {TextInput} from 'react-native';
 import {
   HyperswitchVaultForm,
   type MerchantSession,
-  type VaultFormHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+/*
+ * Live eligibility and the payment flows are the checkout SDK's contract, so the handle is typed
+ * from ./host (vault ADR-0010). The ready-made form is the same runtime object under either type.
+ */
+import type {HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 /* Matches RuPay AND Discover, is Luhn-valid, and is 16 digits — all three are needed. */
 const CO_BADGED = '6522000000000006';
@@ -122,7 +126,7 @@ type MountOptions = {
 };
 
 const mount = (options: MountOptions = {}) => {
-  const formRef = React.createRef<VaultFormHandle>();
+  const formRef = React.createRef<HostFormHandle>();
   let r!: ReactTestRenderer.ReactTestRenderer;
   ReactTestRenderer.act(() => {
     r = ReactTestRenderer.create(

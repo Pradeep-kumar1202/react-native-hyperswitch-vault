@@ -13,7 +13,7 @@ import {
   CardNumberField,
   CardExpiryField,
   CardCVCField,
-  // type MerchantSession,
+  type MerchantSession,
   type VaultFormAppearance,
   type VaultFormHandle,
   type VaultFormState,
@@ -40,17 +40,17 @@ type Outcome =
 export default function App() {
   const formRef = useRef<VaultFormHandle>(null);
 
-  // const [session, setSession] = useState<MerchantSession | null>(null);
+  const [session, setSession] = useState<MerchantSession | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
   const [canSubmit, setCanSubmit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<Outcome>({kind: 'idle'});
 
-  // useEffect(() => {
-  //   fetchMerchantSession()
-  //     .then(setSession)
-  //     .catch(() => setSessionError('Could not reach the merchant server. Is `yarn server` running?'));
-  // }, []);
+  useEffect(() => {
+    fetchMerchantSession()
+      .then(setSession)
+      .catch(() => setSessionError('Could not reach the merchant server. Is `yarn server` running?'));
+  }, []);
 
   const save = useCallback(async () => {
     setBusy(true);
@@ -77,15 +77,15 @@ export default function App() {
     );
   }
 
-  // if (!session) {
-  //   return (
-  //     <SafeAreaView style={styles.root}>
-  //       <View style={styles.centre}>
-  //         <ActivityIndicator color={BRAND} />
-  //       </View>
-  //     </SafeAreaView>
-  //   );
-  // }
+  if (!session) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.centre}>
+          <ActivityIndicator color={BRAND} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.root}>
@@ -97,11 +97,12 @@ export default function App() {
 
         <HyperswitchVaultFormProvider
           ref={formRef}
-          // session={session}
+          session={session}
           environment="sandbox"
           appearance={appearance}
-          onFormStateChange={(state: VaultFormState) => setCanSubmit(state.canSubmit)}>
-                    
+          onFormStateChange={(state: VaultFormState) =>
+            setCanSubmit(state.canSubmit && state.sessionStatus === 'valid')
+          }>
           <View style={styles.field}>
             <CardNumberField />
           </View>
@@ -135,7 +136,7 @@ export default function App() {
         {outcome.kind === 'tokenized' ? (
           <View style={styles.resultOk}>
             <Text style={styles.resultTitle}>Card saved</Text>
-                        <Text style={styles.token} selectable>
+            <Text style={styles.token} selectable>
               {outcome.token}
             </Text>
           </View>

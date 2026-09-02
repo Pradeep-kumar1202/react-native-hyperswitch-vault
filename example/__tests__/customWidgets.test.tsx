@@ -16,11 +16,11 @@ import {
   CardExpiryWidget,
   CardCVCWidget,
   CardholderNameWidget,
-  type HyperswitchVaultFormHandle,
   type WidgetHandle,
   type MerchantSession,
-  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle, VaultPaymentResult} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 declare const global: {fetch: unknown};
 
@@ -175,7 +175,7 @@ type HarnessProps = {
   showCardholderName?: boolean;
   duplicate?: 'number' | 'expiry' | 'cvc' | null;
   session?: MerchantSession;
-  formRef?: React.RefObject<HyperswitchVaultFormHandle | null>;
+  formRef?: React.RefObject<HostFormHandle | null>;
   numberRef?: React.RefObject<WidgetHandle | null>;
   strict?: boolean;
 };
@@ -222,12 +222,12 @@ function Layout(props: HarnessProps) {
 
 type MountedHarness = {
   tree: Renderer;
-  ref: React.RefObject<HyperswitchVaultFormHandle | null>;
+  ref: React.RefObject<HostFormHandle | null>;
   update: (props: HarnessProps) => Promise<void>;
 };
 
 const mountHarness = async (props: HarnessProps = {}): Promise<MountedHarness> => {
-  const ref = React.createRef<HyperswitchVaultFormHandle>();
+  const ref = React.createRef<HostFormHandle>();
   const element = (extra: HarnessProps) => {
     const merged = {...props, ...extra, formRef: ref};
     return merged.strict ? (
@@ -277,7 +277,7 @@ const pressKey = async (tree: Renderer, testID: string, key: string) => {
   });
 };
 
-const submit = async (ref: React.RefObject<HyperswitchVaultFormHandle | null>) => {
+const submit = async (ref: React.RefObject<HostFormHandle | null>) => {
   let result!: VaultPaymentResult;
   await ReactTestRenderer.act(async () => {
     result = await ref.current!.confirmPayment(PAYMENT_VAULT);
@@ -502,8 +502,8 @@ describe('placement errors', () => {
 
 describe('multiple providers on one screen', () => {
   it('keeps registration and card state isolated', async () => {
-    const refA = React.createRef<HyperswitchVaultFormHandle>();
-    const refB = React.createRef<HyperswitchVaultFormHandle>();
+    const refA = React.createRef<HostFormHandle>();
+    const refB = React.createRef<HostFormHandle>();
     let tree!: Renderer;
     await ReactTestRenderer.act(() => {
       tree = ReactTestRenderer.create(
@@ -658,7 +658,7 @@ describe('expiry is canonical in the controller', () => {
    * controller's reducer beside the month and year, so it cannot diverge.
    */
   it('keeps the displayed expiry across an unmount and remount, and clears it on reset', async () => {
-    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const ref = React.createRef<HostFormHandle>();
     const Harness = ({showExpiry}: {showExpiry: boolean}) => (
       <HyperswitchVaultFormProvider
         ref={ref}
@@ -710,7 +710,7 @@ describe('expiry is canonical in the controller', () => {
   });
 
   it('a replaced session cannot restore a stale expiry display', async () => {
-    const ref = React.createRef<HyperswitchVaultFormHandle>();
+    const ref = React.createRef<HostFormHandle>();
     const Harness = ({sessionId}: {sessionId: string}) => (
       <HyperswitchVaultFormProvider
         ref={ref}

@@ -14,11 +14,11 @@ import {
   CardExpiryField,
   CardCVCField,
   type MerchantSession,
-  type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {HyperswitchVaultFormProvider} from '@juspay-tech/react-native-hyperswitch-vault';
-import type {VaultFormHandle} from '@juspay-tech/react-native-hyperswitch-vault';
-import {vaultPaymentFrom} from '../src/merchantServer';
+/* The payment flows are the checkout SDK's contract: handle and result types come from ./host. */
+import type {HostFormHandle, VaultPaymentResult} from '@juspay-tech/react-native-hyperswitch-vault/host';
+import {vaultPaymentFrom} from '../src/hostFlows';
 
 /*
  * The screen this file used to import is gone — the example app is one screen now. The harness is
@@ -32,7 +32,7 @@ function BareMinimumFields({
   session: MerchantSession;
   onResult: (result: VaultPaymentResult) => void;
 }) {
-  const formRef = React.useRef<VaultFormHandle>(null);
+  const formRef = React.useRef<HostFormHandle>(null);
   const [busy, setBusy] = React.useState(false);
   const pay = async () => {
     setBusy(true);

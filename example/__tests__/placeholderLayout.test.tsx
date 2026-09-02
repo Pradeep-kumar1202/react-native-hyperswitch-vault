@@ -25,7 +25,6 @@ import {
   CardExpiryField,
   CardCVCField,
   type VaultFormHandle,
-  type VaultPaymentResult,
   type VaultTokenizeResult,
   type MerchantSession,
 } from '@juspay-tech/react-native-hyperswitch-vault';

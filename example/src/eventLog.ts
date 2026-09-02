@@ -82,7 +82,6 @@ export const logFieldState = (state: AnyFieldState) => {
   if (state.field === 'cardNumber') {
     flat.brand = state.brand;
     flat.isCoBadged = state.isCoBadged;
-    flat.eligibility = state.eligibility;
   }
   const delta = changedOnly(`field:${state.field}`, flat);
   if (Object.keys(delta).length > 0) emit(`field ${state.field}`, delta);
@@ -99,7 +98,6 @@ export const logFormState = (state: VaultFormState) => {
     submitting: state.submitting,
     brand: state.brand,
     isCoBadged: state.isCoBadged,
-    eligibility: state.eligibility,
     networkError: state.networkError
       ? `${state.networkError.code}: ${state.networkError.message}`
       : undefined,
