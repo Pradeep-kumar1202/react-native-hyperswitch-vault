@@ -51,6 +51,10 @@ const CURRENT = [
   'docs/app-integration.md',
   'docs/control-surface.md',
   'docs/merchant-integration.md',
+  'docs/merchant-api-reference.md',
+  'docs/host-api-reference.md',
+  'docs/merchant-api-surface.md',
+  'docs/field-props-reference.md',
   'docs/manual-device-checklist.md',
   'docs/public-api-baseline.md',
   'docs/followup-sdk-utils-card-validation.md',
@@ -78,8 +82,31 @@ const ACCEPTED = [
   'docs/adr/0005-restore-card-safe-state-emission.md',
   'docs/adr/0006-default-ui.md',
   'docs/adr/0007-orchestration-entry-for-externally-tokenized-cards.md',
+  'docs/adr/0009-legacy-payment-credential.md',
+  'docs/adr/0010-host-entry-for-the-checkout-sdk.md',
 ];
 const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
+
+/*
+ * Decision records still under discussion. Like the other decision records they are exempt from the
+ * term scan — a proposal legitimately describes something that does not exist yet, which is the one
+ * thing the term scan is built to forbid in merchant documentation.
+ *
+ * Two restrictions keep that exemption narrow:
+ *
+ *   - the marker must be an exact `**Status:** Proposed`, so a document cannot drift into this tier
+ *     by being vague about its status;
+ *   - the file must live in `docs/adr/`. A proposal anywhere else is a merchant-facing document
+ *     describing functionality that does not exist, and belongs in CURRENT where the scan applies.
+ *
+ * A PROPOSED document is deliberately NOT treated as CURRENT: nothing in it is merchant-usable.
+ */
+const PROPOSED = [
+  'docs/adr/0008-saved-card-cvc-flow.md',
+];
+
+const PROPOSED_MARKER = /\*\*Status:\*\*\s*Proposed/;
+const ADR_DIRECTORY = 'docs/adr/';
 
 /*
  * Terms that name a removed surface or a removed contract. `/vault-session` is a merchant's own
@@ -234,16 +261,58 @@ for (const file of ACCEPTED) {
   check(!HISTORICAL_MARKER.test(head), `${file} is not also labelled historical`);
 }
 
+console.log('\nProposed decision records declare their status and stay in docs/adr/');
+
+for (const file of PROPOSED) {
+  const full = path.join(root, file);
+  if (!existsSync(full)) {
+    check(false, `${file} exists`);
+    continue;
+  }
+  const head = readFileSync(full, 'utf8').split('\n').slice(0, 12).join('\n');
+  check(PROPOSED_MARKER.test(head), `${file} declares "**Status:** Proposed" near the top`);
+  check(file.startsWith(ADR_DIRECTORY), `${file} lives in ${ADR_DIRECTORY}`);
+  check(!ACCEPTED_MARKER.test(head), `${file} is not also labelled accepted`);
+  check(!HISTORICAL_MARKER.test(head), `${file} is not also labelled historical`);
+  check(!CURRENT.includes(file), `${file} is not also listed as current merchant documentation`);
+}
+
 console.log('\nEvery document is classified');
 
 const allDocs = ['README.md', ...walk(path.join(root, 'docs')).map((f) => path.relative(root, f))]
   .filter((f) => f.endsWith('.md'))
   .sort();
-const classified = new Set([...CURRENT, ...ACCEPTED, ...HISTORICAL]);
+const classified = new Set([...CURRENT, ...ACCEPTED, ...HISTORICAL, ...PROPOSED]);
 const unclassified = allDocs.filter((f) => !classified.has(f));
 check(
   unclassified.length === 0,
   `no document escapes the scan (unclassified: ${unclassified.join(', ') || 'none'})`
+);
+
+/*
+ * Non-vacuity. Adding a fourth tier widens what the gate accepts, so the widening itself is
+ * asserted: the tier catches the document it exists for, refuses a proposal outside `docs/adr/`,
+ * and has not blunted the catch-all that made it necessary in the first place.
+ */
+check(
+  PROPOSED.includes('docs/adr/0008-saved-card-cvc-flow.md') &&
+    !CURRENT.includes('docs/adr/0008-saved-card-cvc-flow.md') &&
+    !ACCEPTED.includes('docs/adr/0008-saved-card-cvc-flow.md'),
+  'ADR-0008 is classified PROPOSED, and is neither CURRENT nor ACCEPTED'
+);
+check(
+  !'docs/a-proposal-in-the-wrong-place.md'.startsWith(ADR_DIRECTORY),
+  `a proposed document outside ${ADR_DIRECTORY} is refused by the path restriction`
+);
+check(
+  [...allDocs, 'docs/an-unclassified-document.md'].filter((f) => !classified.has(f)).length === 1,
+  'an unclassified document is still caught after the PROPOSED tier was added'
+);
+check(
+  PROPOSED_MARKER.test('**Status:** Proposed · BLOCKED') &&
+    !PROPOSED_MARKER.test('**Status:** Accepted') &&
+    !ACCEPTED_MARKER.test('**Status:** Proposed'),
+  'the Proposed and Accepted markers do not match each other'
 );
 
 function walk(dir) {

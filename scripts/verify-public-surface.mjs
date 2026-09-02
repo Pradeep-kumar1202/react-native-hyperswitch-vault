@@ -11,6 +11,9 @@
  *   src/orchestration-entry.mjs -> Rollup -> dist/{esm,cjs}/orchestration.js
  *   src/orchestration.ts        -> tsc    -> dist/types/orchestration.d.ts
  *
+ *   src/host-entry.mjs          -> Rollup -> dist/{esm,cjs}/host.js   (re-exports of index.js)
+ *   src/host.ts                 -> tsc    -> dist/types/host.d.ts
+ *
  * tsc runs with `emitDeclarationOnly`, so nothing in the .ts files ever executes. A value exported
  * from the types but not from the entry type-checks perfectly and is `undefined` at runtime; the
  * reverse ships a value no consumer can see. Neither shows up in any other check.
@@ -21,6 +24,12 @@
  * orchestration entry must never grow a component. That disjointness is what keeps
  * `confirmTokenizedCardPayment` — alias input, for payment-methods only — out of every merchant
  * integration path.
+ *
+ * The host pair (ADR-0010) is held to a DIFFERENT rule. Its runtime values are the root's own
+ * component objects, re-exported — so every host value name must also be a root value name, and
+ * host-entry.mjs must be nothing but a re-export statement. What must stay disjoint is the TYPE
+ * vocabulary: the root's type surface may not name `confirmPayment`, the confirm input, the payment
+ * result, a next action, or an eligibility verdict. Those belong to `./host` only.
  *
  * Type-only exports are deliberately not compared: they exist only in the .ts files by definition.
  */
@@ -33,6 +42,8 @@ const runtimeFile = path.join(root, 'src/standalone-entry.mjs');
 const typesFile = path.join(root, 'src/public.ts');
 const orchestrationRuntimeFile = path.join(root, 'src/orchestration-entry.mjs');
 const orchestrationTypesFile = path.join(root, 'src/orchestration.ts');
+const hostRuntimeFile = path.join(root, 'src/host-entry.mjs');
+const hostTypesFile = path.join(root, 'src/host.ts');
 
 const failures = [];
 const fail = (msg) => failures.push(msg);
@@ -133,6 +144,64 @@ if (/\breact\b/i.test(orchestrationRuntimeSource)) {
   fail('orchestration-entry.mjs mentions React — the orchestration entry is a plain function surface, no components');
 }
 
+/* ── 1c. the host pair: same objects as the root, a wider type vocabulary ──── */
+
+const hostRuntimeSource = stripComments(read(hostRuntimeFile));
+const hostTypesSource = stripComments(read(hostTypesFile));
+const hostRuntimeNames = valueExports(hostRuntimeSource);
+const hostTypeNames = valueExports(hostTypesSource);
+
+if (hostRuntimeNames.size === 0) die('parsed no value exports from host-entry.mjs');
+if (hostTypeNames.size === 0) die('parsed no value exports from host.ts');
+comparePair(hostRuntimeNames, hostTypeNames, 'host-entry.mjs', 'host.ts');
+
+/* Every host value IS a root value — the same component object under the same name. */
+for (const name of hostRuntimeNames) {
+  if (!runtimeNames.has(name)) {
+    fail(
+      `\`${name}\` is exported from ./host but not from the root — the host entry re-exports the ` +
+        `root's components and never introduces one of its own`
+    );
+  }
+}
+
+/* The host entry is a pure re-export statement over the root entry: no bindings, no bundle of its own. */
+if (!/^\s*export\s*\{[^}]*\}\s*from\s*'\.\/standalone-entry\.mjs';\s*$/.test(hostRuntimeSource.trim())) {
+  fail('host-entry.mjs must consist of exactly one `export { … } from \'./standalone-entry.mjs\'` statement');
+}
+
+/* The checkout SDK composes fields; the ready-made form, namespace and legacy spellings stay off ./host. */
+for (const name of hostRuntimeNames) {
+  if (/^HyperswitchVaultForm$|^HyperswitchVault$|Widget$/.test(name)) {
+    fail(`\`${name}\` is exported from ./host — the ready-made form, the namespace and the *Widget aliases are root-only`);
+  }
+}
+if (!/\bconfirmPayment\s*\(/.test(hostTypesSource)) {
+  fail('host.ts does not declare confirmPayment — the host handle is the reason the entry exists');
+}
+
+/*
+ * The root's TYPE vocabulary must not name the host contract. Declarations only — the root legitimately
+ * spells `'eligibility'` once, as an `Omit<>` key that REMOVES the prop.
+ */
+const HOST_ONLY_IN_ROOT = [
+  [/\bconfirmPayment\s*\(/, 'the confirmPayment operation'],
+  [/\bVaultPaymentConfirmInput\b/, 'VaultPaymentConfirmInput'],
+  [/\bVaultPaymentResult\b/, 'VaultPaymentResult'],
+  [/\bVaultPaymentCardSource\b/, 'VaultPaymentCardSource'],
+  [/\bVaultNextAction/, 'a next-action type'],
+  [/\bVaultHost[A-Z]/, 'a host-data type'],
+  [/\bVaultEligibility/, 'an eligibility type'],
+  [/\bforbidden_card_data\b|\bcard_not_eligible\b/, 'a confirm-only error code'],
+  [/'external'/, "the 'external' cardholder-name mode"],
+  [/\beligibility\??:/, 'an eligibility member'],
+];
+for (const [re, what] of HOST_ONLY_IN_ROOT) {
+  if (re.test(typesSource)) {
+    fail(`public.ts names ${what} — that belongs to ./host (src/host.ts) only`);
+  }
+}
+
 /* ── 2. the namespace object's members must match on both sides ───────────── */
 
 const runtimeNamespace = runtimeSource.match(
@@ -173,6 +242,8 @@ if (runtimeNamespace && declaredNamespace) {
   console.log(`  HyperswitchVault.*     ${runtimeMembers.join(', ')}`);
   console.log('\n' + 'orchestration entry surface');
   console.log(`  value exports          ${[...orchestrationRuntimeNames].sort().join(', ')}`);
+  console.log('\n' + 'host entry surface (ADR-0010)');
+  console.log(`  value exports          ${[...hostRuntimeNames].sort().join(', ')}  (the root's objects)`);
 }
 
 /* ── 3. no wrapper components ─────────────────────────────────────────────── */

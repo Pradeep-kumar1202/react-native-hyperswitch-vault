@@ -20,7 +20,9 @@ import type {vaultEndpointConfig as VaultEndpoint_vaultEndpointConfig} from './V
 export type paymentConfirmInput = {
   readonly cardSource: VaultCardSource_paymentCardSource; 
   readonly paymentId: string; 
-  readonly sdkAuthorization: string; 
+  readonly sdkAuthorization?: string; 
+  readonly publishableKey?: string; 
+  readonly clientSecret?: string; 
   readonly cardholderName?: string; 
   readonly paymentMethodType?: VaultConfirmBody_paymentMethodType; 
   readonly paymentMethodData?: VaultPaymentMethodData_hostPaymentMethodData; 

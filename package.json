@@ -17,6 +17,13 @@
       "require": "./dist/cjs/index.js",
       "default": "./dist/esm/index.js"
     },
+    "./host": {
+      "types": "./dist/types/host.d.ts",
+      "react-native": "./dist/esm/host.js",
+      "import": "./dist/esm/host.js",
+      "require": "./dist/cjs/host.js",
+      "default": "./dist/esm/host.js"
+    },
     "./orchestration": {
       "types": "./dist/types/orchestration.d.ts",
       "react-native": "./dist/esm/orchestration.js",

@@ -9,7 +9,7 @@
  *
  * Three things are proved here:
  *
- *   1. RUNTIME SHAPE. The ReScript record and the hand-written TypeScript union in `public.ts`
+ *   1. RUNTIME SHAPE. The ReScript record and the hand-written TypeScript union in `host.ts`
  *      describe the same objects. They are written twice on purpose (see `VaultCardSource.res` for
  *      why a `@tag` variant cannot be used), and two hand-kept declarations drift.
  *
@@ -133,7 +133,12 @@ check(
 console.log('\nThe ReScript record and the published TypeScript union describe the same shapes');
 
 const res = readFileSync(path.join(root, 'src/VaultCardSource.res'), 'utf8');
-const ts = readFileSync(path.join(root, 'src/public.ts'), 'utf8');
+/* ADR-0010: the confirm vocabulary — and with it this union — lives on ./host, not the merchant root. */
+const ts = readFileSync(path.join(root, 'src/host.ts'), 'utf8');
+check(
+  !/VaultPaymentCardSource/.test(readFileSync(path.join(root, 'src/public.ts'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '')),
+  'public.ts (the merchant root) does not declare VaultPaymentCardSource'
+);
 
 /*
  * Captured to the next BLANK LINE, not to the next `;`. The vault branch's own members end in
@@ -141,7 +146,7 @@ const ts = readFileSync(path.join(root, 'src/public.ts'), 'utf8');
  * every check below pass or fail for the wrong reason.
  */
 const union = ts.match(/export type VaultPaymentCardSource =([\s\S]*?)\n\n/)?.[1] ?? '';
-check(union.length > 0, 'public.ts declares VaultPaymentCardSource');
+check(union.length > 0, 'host.ts declares VaultPaymentCardSource');
 check(/'vault'/.test(union) && /'direct'/.test(union), 'the whole union was captured, not a prefix');
 
 /* The discriminant spelling has to match what the record actually emits. */

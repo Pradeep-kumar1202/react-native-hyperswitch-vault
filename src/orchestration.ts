@@ -19,7 +19,7 @@
 
 import type { orchestrationConfirmInput } from './VaultOrchestration.gen';
 import type { providerTokenizedCard } from './VaultConfirmBody.gen';
-import type { VaultPaymentResult } from './public';
+import type { VaultPaymentResult } from './host';
 
 /*
  * The canonical provider-tokenized card. `cardNumberAlias`/`cardCvcAlias` are the provider's
@@ -44,7 +44,11 @@ export declare const confirmTokenizedCardPayment: (
   input: OrchestrationConfirmInput
 ) => Promise<VaultPaymentResult>;
 
-/* The result and its supporting types, re-published so a caller needs no second import. */
+/*
+ * The result and its supporting types, re-published so a caller needs no second import. They are
+ * the `./host` entry's types (ADR-0010): the confirm vocabulary lives there and on this entry, never
+ * on the merchant root.
+ */
 export type {
   VaultPaymentResult,
   VaultPaymentStatus,
@@ -67,4 +71,4 @@ export type {
   VaultThreeDsData,
   VaultDdcData,
   VaultSessionTokenData,
-} from './public';
+} from './host';

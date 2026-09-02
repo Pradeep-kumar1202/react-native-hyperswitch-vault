@@ -193,6 +193,19 @@ check(tokenBody.browser_info.screen_height === 800, 'browserInfo.screenHeight ->
 check(tokenBody.return_url === 'https://return.example', 'returnUrl -> return_url');
 check(tokenBody.email === 'ada@example.com', 'email is carried');
 check(tokenBody.client_secret === undefined, 'client_secret is never sent (the intent credential is present)');
+
+/* The legacy credential is the ONLY thing that writes client_secret, and only when the caller asks. */
+const legacyBody = Body.build(
+  tokenPayload('payment_token', 'tok_abc'), undefined, undefined,
+  undefined, undefined, undefined, undefined, undefined, 'pay_123_secret'
+);
+check(legacyBody.client_secret === 'pay_123_secret', 'a legacy client secret is written as client_secret');
+check(legacyBody.payment_token === 'tok_abc', 'the rest of the body is unchanged by the legacy credential');
+const blankSecretBody = Body.build(
+  tokenPayload('payment_token', 'tok_abc'), undefined, undefined,
+  undefined, undefined, undefined, undefined, undefined, '   '
+);
+check(blankSecretBody.client_secret === undefined, 'a blank client secret is omitted, never written as ""');
 check(tokenBody.payment_method_data.billing.address.first_name === 'Ada', 'host billing reaches the final body');
 check(JSON.stringify(tokenBody).includes('nick_name') === false, 'the final body carries NO nickname');
 check(tokenBody.payment_method_data.vault_card === undefined, 'payment_token mode adds no vault_card');

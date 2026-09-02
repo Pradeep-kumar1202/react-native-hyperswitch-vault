@@ -16,7 +16,41 @@ import {
   type MerchantSession,
   type VaultPaymentResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {BareMinimumFields} from '../src/BareMinimumFields';
+import {HyperswitchVaultFormProvider} from '@juspay-tech/react-native-hyperswitch-vault';
+import type {VaultFormHandle} from '@juspay-tech/react-native-hyperswitch-vault';
+import {vaultPaymentFrom} from '../src/merchantServer';
+
+/*
+ * The screen this file used to import is gone — the example app is one screen now. The harness is
+ * inlined instead of deleting the suite: every assertion below is about the LIBRARY (the two calls,
+ * the token never surfacing, the leak walk), and none of it was ever really about the screen.
+ */
+function BareMinimumFields({
+  session: s,
+  onResult,
+}: {
+  session: MerchantSession;
+  onResult: (result: VaultPaymentResult) => void;
+}) {
+  const formRef = React.useRef<VaultFormHandle>(null);
+  const [busy, setBusy] = React.useState(false);
+  const pay = async () => {
+    setBusy(true);
+    const result = await formRef.current?.confirmPayment(vaultPaymentFrom(s));
+    setBusy(false);
+    if (result) {
+      onResult(result);
+    }
+  };
+  return (
+    <HyperswitchVaultFormProvider ref={formRef} session={s} environment="sandbox" unstyled>
+      <CardNumberField />
+      <CardExpiryField />
+      <CardCVCField />
+      <Button title="Pay" disabled={busy} onPress={pay} />
+    </HyperswitchVaultFormProvider>
+  );
+}
 
 const B = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 const b64 = (i: string) => {

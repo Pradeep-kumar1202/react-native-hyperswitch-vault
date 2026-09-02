@@ -99,6 +99,15 @@ export const inputMinimal: OrchestrationConfirmInput = {
   environment: 'production',
 };
 
+/* The legacy publishable-key credential is accepted on the orchestration entry too. */
+export const inputLegacyCredential: OrchestrationConfirmInput = {
+  tokenizedCard: minimal,
+  paymentId: 'pay_1',
+  publishableKey: 'pk_test_123',
+  clientSecret: 'pay_1_secret',
+  environment: 'production',
+};
+
 // @ts-expect-error - the environment is required: it decides endpoint validation and defaults
 export const noEnvironment: OrchestrationConfirmInput = {
   tokenizedCard: minimal,

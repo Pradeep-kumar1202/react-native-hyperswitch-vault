@@ -16,10 +16,15 @@ the library then does with them, and therefore what crosses the public boundary.
 | | Requests the library makes | What the caller receives | Operation |
 |---|---|---|---|
 | **Flow 1 — standalone merchant tokenization** | tokenize | a payment-method token | `tokenize()` |
-| **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` |
-| **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` |
+| **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` — `./host` entry |
+| **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` — `./host` entry |
 
 Most standalone integrations want **Flow 1**. Start there.
+
+The package publishes one entry per audience (ADR-0010). The root is the merchant's: Flow 1, and
+nothing that confirms a payment. Flows 2 and 3 are driven by the Hyperswitch checkout SDK through
+`@juspay-tech/react-native-hyperswitch-vault/host` — the same components, typed with the wider
+`HostFormHandle`. Merchants never import `./host`.
 
 Flows 2 and 3 are the same operation with a different `cardSource`. The source is required and has
 no default: whether a customer's card gets tokenized and saved is not something to infer from which
@@ -120,6 +125,10 @@ Used by the Hyperswitch payment sheet. The library performs the tokenization *an
 confirmation, then hands back what to do next. The intermediate token never leaves the library.
 
 ```ts
+import {HyperswitchVaultFormProvider, type HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
+
+const formRef = useRef<HostFormHandle>(null);   // the ./host handle carries confirmPayment
+
 const result = await formRef.current!.confirmPayment({
   cardSource: {type_: 'vault', session},  // tokenize first; the token stays inside
   paymentId: 'pay_123',
@@ -149,6 +158,7 @@ and still makes the payment confirmation. Nothing is tokenized: the card values 
 `payment_method_data.card`, in one request, and no token exists at any point.
 
 ```ts
+// formRef: useRef<HostFormHandle> from '@juspay-tech/react-native-hyperswitch-vault/host'
 const result = await formRef.current!.confirmPayment({
   cardSource: {type_: 'direct'},        // no session, no tokenization, one request
   paymentId: 'pay_123',
@@ -227,16 +237,21 @@ unreferenced.
 ## The handle
 
 ```ts
+/* root — merchants */
 type VaultFormHandle = {
   tokenize(): Promise<VaultTokenizeResult>;
-  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
   reset(): void;
   focus(field: 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName'): void;
 };
+
+/* ./host — the checkout SDK; the same runtime object */
+type HostFormHandle = VaultFormHandle & {
+  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
+};
 ```
 
-Two explicit operations rather than one ambiguous `submit()`: the function you call decides what can
-come back, so the exposure is visible at the call site.
+Two explicit operations rather than one ambiguous `submit()`, published on two entries: the function
+you call decides what can come back, and the entry you import from decides which functions exist.
 
 - Repeating the **same** operation while it is pending returns the same promise — double presses are
   harmless.
@@ -274,10 +289,10 @@ rather than a branch that silently never runs.
 | `error.code` | Meaning | Retry? |
 |---|---|---|
 | `invalid_card_data` | entry incomplete or invalid; nothing sent | yes, after correction |
-| `not_ready` | fields not mounted, or the other operation is in flight; nothing sent | yes |
+| `not_ready` | fields not mounted, or (on `./host`) the other operation is in flight; nothing sent | yes |
 | `invalid_session` | session unusable; nothing sent | no — fetch a new session |
-| `forbidden_card_data` | a card key was passed in the confirm input; nothing sent | no — fix the integration |
-| `unsupported_configuration` | eligibility required, or an invalid endpoint; nothing sent | no |
+| `forbidden_card_data` | `./host` only — a card key was passed in the confirm input; nothing sent | no — fix the integration |
+| `unsupported_configuration` | an invalid endpoint, or (on `./host`) contradictory confirm props; nothing sent | no |
 | `server_error` | the backend refused, or answered 2xx unreadably | not automatically |
 | `unknown_outcome` | the request threw, timed out, or was aborted | **no** — reconcile first |
 

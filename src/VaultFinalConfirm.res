@@ -13,8 +13,10 @@
  * ── THE TWO CREDENTIALS ARE NOT INTERCHANGEABLE ────────────────────────────────
  *
  * Call 1 authenticates with the VAULT credential carried inside `vault_details`. This call
- * authenticates with the PAYMENT-INTENT credential the host supplies as `sdkAuthorization`. They
- * are different secrets with different scopes; neither is ever logged, returned or re-emitted.
+ * authenticates with the PAYMENT credential the host supplies — the payment-intent
+ * `sdkAuthorization`, or the legacy publishable-key + `client_secret` pair — already resolved into
+ * a `VaultCredential.t` by the caller. They are different secrets with different scopes; neither is
+ * ever logged, returned or re-emitted.
  *
  * ── STATUS MAPPING IS A REPRODUCTION, NOT A DESIGN ─────────────────────────────
  *
@@ -74,7 +76,8 @@ type navOutcome =
 type finalConfirmRequest = {
   baseUrl: string,
   paymentId: string,
-  sdkAuthorization: string,
+  /* Resolved by the caller; see `VaultCredential` for the two shapes and their precedence. */
+  credential: VaultCredential.t,
   /* Reproduces the `x-app-id` header client-core sends on every backend call. Non-card. */
   appId?: string,
   /* Fully built by VaultConfirmBody; this module never inspects or amends it. */
@@ -233,24 +236,21 @@ let confirmPayment = async (request: finalConfirmRequest): navOutcome => {
     }
   )
 
-  let timedOut = ref(false)
   let timer = switch request.timeoutMs {
-  | Some(ms) if ms > 0 =>
-    Some(
-      VaultConfirm.setTimeout(() => {
-        timedOut := true
-        controller->VaultConfirm.abort
-      }, ms),
-    )
+  | Some(ms) if ms > 0 => Some(VaultConfirm.setTimeout(() => controller->VaultConfirm.abort, ms))
   | _ => None
   }
 
   let options: VaultConfirm.fetchOptions = {
     method: "POST",
-    /* Raw credential, no scheme — matching client-core's `Utils.getHeader`. */
+    /*
+     * Raw credential, no scheme — matching client-core's `Utils.getHeader`: `Authorization` for the
+     * payment-intent credential, `api-key` for the legacy publishable key. The legacy pair's
+     * `client_secret` is already in the body, written by `VaultConfirmBody.build`.
+     */
     headers: [
       ("Content-Type", "application/json"),
-      ("Authorization", request.sdkAuthorization),
+      request.credential->VaultCredential.authHeader,
       ("x-app-id", request.appId->VaultConfirm.appIdHeader),
       ("x-redirect-uri", ""),
     ]->Dict.fromArray,

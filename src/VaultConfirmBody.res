@@ -299,9 +299,10 @@ type cardPayload =
   | ExternalTokenPayload({card: providerTokenizedCard})
 
 /*
- * `client_secret` is deliberately absent: a payment-intent `sdkAuthorization` is always present in
- * this flow, and client-core's own `generateCardConfirmBody` omits `client_secret` exactly when
- * that credential is present.
+ * `client_secret` is written ONLY for the legacy publishable-key credential
+ * (`VaultCredential.clientSecretForBody`), and omitted — not blanked — for the payment-intent
+ * credential. That reproduces client-core's own `generateCardConfirmBody`, which emits
+ * `client_secret` exactly when `sdkAuthorization` is absent.
  */
 let build = (
   ~cardPayload: cardPayload,
@@ -312,6 +313,7 @@ let build = (
   ~returnUrl: option<string>,
   ~paymentType: option<paymentType>,
   ~email: option<string>,
+  ~clientSecret: option<string>,
 ): JSON.t => {
   let hostData = paymentMethodData->VaultPaymentMethodData.encodeHostPaymentMethodData
 
@@ -353,6 +355,8 @@ let build = (
       value->paymentTypeToWire->JSON.Encode.string,
     )),
     stringEntry("email", email),
+    /* Legacy credential only; `None` for the payment-intent credential, so the key is absent. */
+    stringEntry("client_secret", clientSecret),
   ]
 
   entries->Array.filterMap(item => item)->Dict.fromArray->JSON.Encode.object

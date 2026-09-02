@@ -108,13 +108,17 @@ type vaultField = [#cardNumber | #expiry | #cvc | #cardholderName]
  * confirms whether or not this prop was given, so omitting it costs the inline message, never the
  * enforcement.
  *
- * Every field is non-card. `sdkAuthorization` is the payment-INTENT credential, the same one the
- * final confirm uses.
+ * Every field is non-card. The credential is the same PAYMENT credential the final confirm uses,
+ * in either of the two shapes Hyperswitch accepts: the payment-intent `sdkAuthorization`
+ * (preferred), or the legacy `publishableKey` + `clientSecret` pair. `sdkAuthorization` wins when
+ * both are given; with neither shape complete the probe simply does not run.
  */
 @genType
 type eligibilityConfig = {
   paymentId: string,
-  sdkAuthorization: string,
+  sdkAuthorization?: string,
+  publishableKey?: string,
+  clientSecret?: string,
   appId?: string,
   endpoint?: VaultEndpoint.vaultEndpointConfig,
 }

@@ -1,122 +1,188 @@
-/**
- * Example app shell.
- *
- * Four sections, one tab bar:
- *   - Bare      — the smallest independent-fields integration: the three field components with no
- *                 props at all, placed by the merchant's own View layout. Read this one first if
- *                 you are laying the fields out yourself.
- *   - Start     — the shortest complete integration: session, ready-made form, and a merchant Pay
- *                 button driven by `canSubmit`.
- *   - Store     — the ready-made <HyperswitchVaultForm/> inside a normal checkout sheet.
- *   - Custom    — <HyperswitchVaultFormProvider/> with the three field widgets placed wherever the
- *                 merchant's own layout wants them.
- *   - Developer — the bare form plus the controls docs/manual-device-checklist.md drives.
- *
- * Neither screen holds an API key and there is no React Native .env: the app only ever calls the
- * merchant server in `example-server/` and receives the client-safe session response.
- */
-import React, {useEffect, useState} from 'react';
-import {Pressable, SafeAreaView, StyleSheet, Text, View} from 'react-native';
-import {BareMinimumFields} from './src/BareMinimumFields';
+import React, {useCallback, useEffect, useRef, useState} from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import {
+  HyperswitchVaultFormProvider,
+  CardNumberField,
+  CardExpiryField,
+  CardCVCField,
+  // type MerchantSession,
+  type VaultFormAppearance,
+  type VaultFormHandle,
+  type VaultFormState,
+} from '@juspay-tech/react-native-hyperswitch-vault';
 import {fetchMerchantSession} from './src/merchantServer';
-import type {MerchantSession} from '@juspay-tech/react-native-hyperswitch-vault';
-import {QuickStartCheckout} from './src/QuickStartCheckout';
-import {MerchantCheckout} from './src/MerchantCheckout';
-import {DeveloperPanel} from './src/DeveloperPanel';
-import {CustomLayoutCheckout} from './src/CustomLayoutCheckout';
 
-type Tab = 'bare' | 'start' | 'store' | 'custom' | 'dev';
+const BRAND = '#0B5FBF';
 
-const TABS: {key: Tab; icon: string; label: string}[] = [
-  {key: 'bare', icon: '▫️', label: 'Bare minimum'},
-  {key: 'start', icon: '⚡', label: 'Start'},
-  {key: 'store', icon: '🛍', label: 'Store'},
-  {key: 'custom', icon: '🧩', label: 'Custom layout'},
-  {key: 'dev', icon: '🛠', label: 'Developer'},
-];
+const appearance: VaultFormAppearance = {
+  primaryColor: BRAND,
+  textColor: '#0B1220',
+  placeholderColor: '#94A3B8',
+  borderColor: '#D7E0E5',
+  errorColor: '#DC2626',
+  borderRadius: 12,
+  inputHeight: 56,
+};
+
+type Outcome =
+  | {kind: 'idle'}
+  | {kind: 'tokenized'; token: string}
+  | {kind: 'failed'; message: string};
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>('bare');
+  const formRef = useRef<VaultFormHandle>(null);
 
-  /*
-   * The app owns session acquisition. `BareMinimumFields` takes a non-null `MerchantSession`, so
-   * this guard is what guarantees the provider is never handed a null one.
-   */
-  const [bareSession, setBareSession] = useState<MerchantSession | null>(null);
-  useEffect(() => {
-    if (tab === 'bare' && !bareSession) {
-      fetchMerchantSession().then(setBareSession).catch(() => {});
+  // const [session, setSession] = useState<MerchantSession | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [canSubmit, setCanSubmit] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<Outcome>({kind: 'idle'});
+
+  // useEffect(() => {
+  //   fetchMerchantSession()
+  //     .then(setSession)
+  //     .catch(() => setSessionError('Could not reach the merchant server. Is `yarn server` running?'));
+  // }, []);
+
+  const save = useCallback(async () => {
+    setBusy(true);
+    setOutcome({kind: 'idle'});
+    const result = await formRef.current?.tokenize();
+    setBusy(false);
+
+    if (result === undefined) {
+      setOutcome({kind: 'failed', message: 'The form was not mounted.'});
+    } else if (result.status === 'success') {
+      setOutcome({kind: 'tokenized', token: result.token});
+    } else {
+      setOutcome({kind: 'failed', message: result.error.message});
     }
-  }, [tab, bareSession]);
+  }, []);
 
-  return (
-    <View style={styles.root}>
-      <View style={styles.screen}>
-        {tab === 'bare' ? (
-          bareSession ? (
-            <BareMinimumFields
-              session={bareSession}
-              onResult={result => {
-                /*
-                 * A navigation decision, not a credential: `succeeded`, `processing`, a customer
-                 * action to drive, or a typed error. Nothing here needs to be kept secret.
-                 */
-                void result;
-              }}
-            />
-          ) : null
-        ) : tab === 'start' ? (
-          <QuickStartCheckout />
-        ) : tab === 'store' ? (
-          <MerchantCheckout />
-        ) : tab === 'custom' ? (
-          <CustomLayoutCheckout />
-        ) : (
-          <DeveloperPanel />
-        )}
-      </View>
-
-      <SafeAreaView style={styles.tabBarSafe}>
-        <View style={styles.tabBar}>
-          {TABS.map(item => {
-            const active = item.key === tab;
-            return (
-              <Pressable
-                key={item.key}
-                accessibilityRole="tab"
-                accessibilityState={{selected: active}}
-                onPress={() => setTab(item.key)}
-                style={({pressed}) => [styles.tab, pressed && styles.tabPressed]}>
-                <Text style={[styles.tabIcon, !active && styles.tabIconIdle]}>{item.icon}</Text>
-                <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>{item.label}</Text>
-                <View style={[styles.tabRule, active && styles.tabRuleActive]} />
-              </Pressable>
-            );
-          })}
+  if (sessionError) {
+    return (
+      <SafeAreaView style={styles.root}>
+        <View style={styles.centre}>
+          <Text style={styles.error}>{sessionError}</Text>
         </View>
       </SafeAreaView>
-    </View>
+    );
+  }
+
+  // if (!session) {
+  //   return (
+  //     <SafeAreaView style={styles.root}>
+  //       <View style={styles.centre}>
+  //         <ActivityIndicator color={BRAND} />
+  //       </View>
+  //     </SafeAreaView>
+  //   );
+  // }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
+        <Text style={styles.title}>Save a card</Text>
+        <Text style={styles.subtitle}>
+          Your card is sent straight to Hyperswitch. This app never sees the number.
+        </Text>
+
+        <HyperswitchVaultFormProvider
+          ref={formRef}
+          // session={session}
+          environment="sandbox"
+          appearance={appearance}
+          onFormStateChange={(state: VaultFormState) => setCanSubmit(state.canSubmit)}>
+                    
+          <View style={styles.field}>
+            <CardNumberField />
+          </View>
+
+          <View style={styles.row}>
+            <View style={styles.rowItem}>
+              <CardExpiryField />
+            </View>
+            <View style={styles.rowItem}>
+              <CardCVCField />
+            </View>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy}
+            onPress={save}
+            style={({pressed}) => [
+              styles.cta,
+              pressed && styles.ctaPressed,
+              !canSubmit && styles.ctaIdle,
+            ]}>
+            {busy ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <Text style={styles.ctaLabel}>Save card</Text>
+            )}
+          </Pressable>
+        </HyperswitchVaultFormProvider>
+
+        {outcome.kind === 'tokenized' ? (
+          <View style={styles.resultOk}>
+            <Text style={styles.resultTitle}>Card saved</Text>
+                        <Text style={styles.token} selectable>
+              {outcome.token}
+            </Text>
+          </View>
+        ) : null}
+
+        {outcome.kind === 'failed' ? (
+          <View style={styles.resultBad}>
+            <Text style={styles.resultTitle}>Not saved</Text>
+            <Text style={styles.error}>{outcome.message}</Text>
+          </View>
+        ) : null}
+
+        <Text style={styles.footnote}>🔒 tokenize() · one call · the token never touches this app's state beyond this screen</Text>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: {flex: 1, backgroundColor: '#F6F7FB'},
-  screen: {flex: 1},
+  centre: {flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24},
+  page: {padding: 20, gap: 14},
 
-  tabBarSafe: {backgroundColor: '#FFFFFF'},
-  tabBar: {
-    flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#E2E8F0',
-    paddingTop: 8,
-    paddingBottom: 6,
+  title: {fontSize: 26, fontWeight: '700', color: '#0B1220'},
+  subtitle: {fontSize: 14, color: '#64748B', marginBottom: 6},
+
+  field: {marginBottom: 2},
+  row: {flexDirection: 'row', gap: 12},
+  rowItem: {flex: 1},
+
+  cta: {
+    marginTop: 10,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: BRAND,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  tab: {flex: 1, alignItems: 'center', gap: 3, paddingHorizontal: 4},
-  tabPressed: {opacity: 0.6},
-  tabIcon: {fontSize: 18},
-  tabIconIdle: {opacity: 0.55},
-  tabLabel: {fontSize: 11, fontWeight: '600', color: '#94A3B8'},
-  tabLabelActive: {color: '#0B1220'},
-  tabRule: {height: 2, width: 22, borderRadius: 1, backgroundColor: 'transparent', marginTop: 2},
-  tabRuleActive: {backgroundColor: '#0B1220'},
+  ctaPressed: {opacity: 0.85},
+  ctaIdle: {opacity: 0.55},
+  ctaLabel: {color: '#FFFFFF', fontSize: 16, fontWeight: '600'},
+
+  resultOk: {backgroundColor: '#ECFDF5', borderRadius: 12, padding: 14, gap: 6},
+  resultBad: {backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, gap: 6},
+  resultTitle: {fontSize: 15, fontWeight: '700', color: '#0B1220'},
+  token: {fontSize: 13, color: '#065F46', fontFamily: 'Courier'},
+  error: {fontSize: 14, color: '#B91C1C'},
+
+  footnote: {fontSize: 12, color: '#94A3B8', textAlign: 'center', marginTop: 8},
 });

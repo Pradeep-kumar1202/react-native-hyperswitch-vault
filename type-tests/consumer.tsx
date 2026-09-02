@@ -8,8 +8,9 @@
  *   - a token is reachable on the tokenize result, and NOWHERE else;
  *   - the removed state-emission callbacks cannot be passed;
  *   - card values and change events cannot be controlled from outside;
- *   - card keys cannot be smuggled into the payment-confirm input;
- *   - every navigation branch narrows, and `error` is absent on success branches.
+ *   - the checkout-SDK contract (ADR-0010) is ABSENT here: no `confirmPayment`, no `eligibility`
+ *     prop, no `'external'` cardholder-name mode, no confirm-only error code. Its positive half is
+ *     type-tests/host.tsx, against `./host`.
  *
  * Every `@ts-expect-error` is load-bearing: if the surface widened, the directive itself would
  * become an unused-directive error and this file would fail. That is what makes the negatives
@@ -37,9 +38,6 @@ import type {
   VaultFieldHandle,
   VaultField,
   VaultTokenizeResult,
-  VaultPaymentResult,
-  VaultPaymentConfirmInput,
-  VaultHostPaymentMethodData,
   VaultFieldStyles,
   VaultExpiryStyles,
   VaultFormFieldStyles,
@@ -55,11 +53,12 @@ import type {
   VaultFieldArrangement,
   VaultEnvironment,
   SafeVaultError,
-  VaultNextAction,
+  SafeVaultErrorCode,
   VaultCardBrand,
   VaultFieldErrorCode,
-  VaultEligibilityStatus,
   VaultSessionStatus,
+  VaultCardholderNameMode,
+  VaultFormValidationMessages,
   VaultCardNumberState,
   VaultFormState,
   VaultFieldState,
@@ -142,239 +141,52 @@ export function tokenizeErrorNarrowing(result: VaultTokenizeResult) {
   return result.error.message;
 }
 
-/* ══ 3. FLOWS 2 AND 3 — confirmPayment: NO token, ever ════════════════════════ */
+/* ══ 3. The checkout-SDK contract is not on this entry (ADR-0010) ════════════ */
 
-/* Flow 2 — the vault source. Tokenizes first; the token stays inside. */
-const confirmInput: VaultPaymentConfirmInput = {
-  cardSource: {type_: 'vault', session, confirmTokenMode: 'payment_token'},
-  paymentId: 'pay_123',
-  sdkAuthorization: 'intent-credential',
-  paymentMethodType: 'credit',
-  paymentMethodData: {
-    billing: {
-      address: {firstName: 'Ada', lastName: 'Lovelace', line1: '1 Way', city: 'London', country: 'GB', zip: 'NW1'},
-      email: 'ada@example.com',
-      phone: {number: '5551234', countryCode: '+44'},
-    },
-    nickName: 'Travel card',
-  },
-  customerAcceptance: {acceptanceType: 'online', acceptedAt: '2026-01-01T00:00:00Z', online: {userAgent: 'UA'}},
-  browserInfo: {userAgent: 'UA', colorDepth: 32, javaEnabled: true},
-  returnUrl: 'https://return.example',
-  paymentType: 'new_mandate',
-  email: 'ada@example.com',
-  eligibilityRequired: false,
-  appId: 'com.example.app',
-  endpoint: {baseUrl: 'https://api.example.com'},
-};
+/* The six codes `tokenize()` can produce — and only those. */
+export const tokenizeCodes: SafeVaultErrorCode[] = [
+  'invalid_card_data',
+  'not_ready',
+  'invalid_session',
+  'unsupported_configuration',
+  'server_error',
+  'unknown_outcome',
+];
+// @ts-expect-error - a confirm-only code is not a tokenize code
+export const notATokenizeCode1: SafeVaultErrorCode = 'forbidden_card_data';
+// @ts-expect-error - nor is the eligibility refusal
+export const notATokenizeCode2: SafeVaultErrorCode = 'card_not_eligible';
 
-/* Flow 3 — the direct source. No session, no token, one request. */
-const directInput: VaultPaymentConfirmInput = {
-  cardSource: {type_: 'direct'},
-  paymentId: 'pay_123',
-  sdkAuthorization: 'intent-credential',
-  paymentMethodType: 'debit',
-  paymentMethodData: {billing: {email: 'ada@example.com'}},
-  eligibilityRequired: true,
-};
-
-export async function confirmFlow(): Promise<VaultPaymentResult> {
-  return formRef.current!.confirmPayment(confirmInput);
+export function noConfirmOnRoot(handle: VaultFormHandle) {
+  // @ts-expect-error - confirmPayment lives on the ./host handle, not the merchant one
+  return handle.confirmPayment;
 }
 
-export async function directFlow(): Promise<VaultPaymentResult> {
-  return formRef.current!.confirmPayment(directInput);
-}
+export const noEligibilityProp = (
+  <HyperswitchVaultFormProvider
+    session={session}
+    environment="sandbox"
+    // @ts-expect-error - live eligibility is a ./host prop
+    eligibility={{paymentId: 'pay_1', sdkAuthorization: 'intent'}}>
+    <CardNumberField />
+  </HyperswitchVaultFormProvider>
+);
 
-/*
- * NEGATIVE — the two sources cannot be blended. Both of these describe a caller who believes their
- * card is being tokenized when it is not, which is the one confusion this union exists to prevent.
- */
-export const badSource1: VaultPaymentConfirmInput = {
-  // @ts-expect-error - a direct source carries no vault session
-  cardSource: {type_: 'direct', session},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-};
-export const badSource2: VaultPaymentConfirmInput = {
-  // @ts-expect-error - nor a token mode; nothing is minted in direct mode
-  cardSource: {type_: 'direct', confirmTokenMode: 'vault_card'},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-};
-export const badSource3: VaultPaymentConfirmInput = {
-  // @ts-expect-error - a vault source without a session is unrepresentable
-  cardSource: {type_: 'vault'},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-};
-export const badSource4: VaultPaymentConfirmInput = {
-  // @ts-expect-error - the source kind is a closed union
-  cardSource: {type_: 'tokenize', session},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-};
-// @ts-expect-error - cardSource is required; there is no defensible default posture
-export const badSource5: VaultPaymentConfirmInput = {paymentId: 'p', sdkAuthorization: 'a'};
+export const twoNameModes: VaultCardholderNameMode[] = ['collect', 'omit'];
+// @ts-expect-error - 'external' only means something with a confirm input, so it is ./host only
+export const noExternalMode: VaultCardholderNameMode = 'external';
+export const noExternalProp = (
+  // @ts-expect-error - the prop takes the two merchant modes
+  <HyperswitchVaultFormProvider session={session} environment="sandbox" cardholderName="external">
+    <CardNumberField />
+  </HyperswitchVaultFormProvider>
+);
 
-/* Every navigation branch narrows. */
-export function navigationNarrowing(result: VaultPaymentResult): string {
-  switch (result.status) {
-    case 'succeeded':
-      return 'done';
-    case 'processing':
-      return 'waiting';
-    case 'requires_customer_action': {
-      const nextAction: VaultNextAction = result.nextAction;
-      const type: VaultNextAction['type_'] = nextAction.type_;
-      return type;
-    }
-    case 'failed':
-    case 'validation_error':
-    case 'not_ready':
-      return result.error.message;
-  }
-}
+export const messages: VaultFormValidationMessages = {cardNumberInvalid: 'Check the number'};
+// @ts-expect-error - the eligibility message has no reader on this entry
+export const noEligibilityMessage: VaultFormValidationMessages = {cardNotEligible: 'Not accepted'};
 
-/* Each next-action payload is optional and individually typed. */
-export function nextActionPayloads(nextAction: VaultNextAction) {
-  return [
-    nextAction.redirectUrl,
-    nextAction.threeDs?.authenticationUrl,
-    nextAction.threeDs?.pollId,
-    nextAction.ddc?.iframeUrl,
-    nextAction.ddc?.timeoutMs,
-    nextAction.sessionToken?.openBankingSessionToken,
-  ];
-}
-
-/* NEGATIVE — the payment result may never carry a token. */
-export function paymentHasNoToken(result: VaultPaymentResult) {
-  if (result.status === 'succeeded') {
-    // @ts-expect-error - a payment result never carries a token
-    return result.token;
-  }
-  // @ts-expect-error - not on the failure branches either
-  return result.token;
-}
-
-/* NEGATIVE — `error` is unavailable on the success branches. */
-export function noErrorOnSuccess(result: VaultPaymentResult) {
-  if (result.status === 'succeeded') {
-    // @ts-expect-error - a succeeded result has no error
-    return result.error;
-  }
-  if (result.status === 'processing') {
-    // @ts-expect-error - a processing result has no error
-    return result.error;
-  }
-  if (result.status === 'requires_customer_action') {
-    // @ts-expect-error - a customer-action result has no error
-    return result.error;
-  }
-  return result.error.message;
-}
-
-/* NEGATIVE — no nextAction on non-action branches. */
-export function noNextActionElsewhere(result: VaultPaymentResult) {
-  if (result.status === 'succeeded') {
-    // @ts-expect-error - only requires_customer_action carries a next action
-    return result.nextAction;
-  }
-  return null;
-}
-
-/* NEGATIVE — the two results are not interchangeable. */
-export function statusesDoNotCross(payment: VaultPaymentResult, tokenize: VaultTokenizeResult) {
-  // @ts-expect-error - 'success' is a tokenize status, not a payment status
-  const a = payment.status === 'success';
-  // @ts-expect-error - 'succeeded' is a payment status, not a tokenize status
-  const b = tokenize.status === 'succeeded';
-  return [a, b];
-}
-
-/* NEGATIVE — tokenize takes no arguments. */
-export async function tokenizeTakesNothing() {
-  // @ts-expect-error - tokenize accepts no input
-  return formRef.current!.tokenize(confirmInput);
-}
-
-/* ══ 4. Host card keys are unrepresentable in the confirm input ═══════════════ */
-
-export const hostData: VaultHostPaymentMethodData = {billing: {email: 'a@b.co'}, nickName: 'Card'};
-
-// @ts-expect-error - a raw card number is not a host field
-export const badHost1: VaultHostPaymentMethodData = {card_number: '4111111111111111'};
-// @ts-expect-error - a card object is not a host field
-export const badHost2: VaultHostPaymentMethodData = {card: {}};
-// @ts-expect-error - camelCase spelling is rejected too
-export const badHost3: VaultHostPaymentMethodData = {cardNumber: '4111111111111111'};
-// @ts-expect-error - no CVC
-export const badHost4: VaultHostPaymentMethodData = {cvc: '123'};
-// @ts-expect-error - no cardholder name from the host; the library owns that field
-export const badHost5: VaultHostPaymentMethodData = {cardHolderName: 'Ada'};
-// @ts-expect-error - no expiry
-export const badHost6: VaultHostPaymentMethodData = {expiryMonth: '12'};
-// @ts-expect-error - no token may be supplied by the host
-export const badHost7: VaultHostPaymentMethodData = {payment_token: 'tok'};
-// @ts-expect-error - nested card data is rejected by the billing shape
-export const badHost8: VaultHostPaymentMethodData = {billing: {card_number: '4111111111111111'}};
-// @ts-expect-error - a card key nested in the address is rejected
-export const badHost9: VaultHostPaymentMethodData = {billing: {address: {cvc: '123'}}};
-
-/* The same rejections through the actual confirm input, in BOTH sources. */
-const direct = {type_: 'direct'} as const;
-
-export const badInput1: VaultPaymentConfirmInput = {
-  cardSource: direct,
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-  // @ts-expect-error - card data cannot be smuggled through the confirm input
-  paymentMethodData: {card: {}},
-};
-export const badInput2: VaultPaymentConfirmInput = {
-  cardSource: direct,
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-  // @ts-expect-error - nor at the top level of the input
-  card_number: '4111111111111111',
-};
-/*
- * The direct flow is where a caller might most plausibly expect to hand over card values, since
- * nothing is tokenized. It is exactly as closed as the vault flow.
- */
-export const badInput2b: VaultPaymentConfirmInput = {
-  cardSource: {type_: 'vault', session},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-  // @ts-expect-error - and not through the vault source either
-  paymentMethodData: {cardNumber: '4111111111111111'},
-};
-
-/* Closed unions on the confirm input. */
-// @ts-expect-error - payment method type is a closed union
-export const badInput3: VaultPaymentConfirmInput = {cardSource: direct, paymentId: 'p', sdkAuthorization: 'a', paymentMethodType: 'Credit'};
-// @ts-expect-error - payment type is a closed union
-export const badInput4: VaultPaymentConfirmInput = {cardSource: direct, paymentId: 'p', sdkAuthorization: 'a', paymentType: 'newMandate'};
-export const badInput5: VaultPaymentConfirmInput = {
-  cardSource: direct,
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-  // @ts-expect-error - acceptance type is a closed union
-  customerAcceptance: {acceptanceType: 'ONLINE', acceptedAt: 'x', online: {}},
-};
-export const badInput6: VaultPaymentConfirmInput = {
-  // @ts-expect-error - confirm token mode is a closed union
-  cardSource: {type_: 'vault', session, confirmTokenMode: 'token'},
-  paymentId: 'p',
-  sdkAuthorization: 'a',
-};
-// @ts-expect-error - confirm token mode is no longer a top-level field; it belongs to the source
-export const badInput6b: VaultPaymentConfirmInput = {cardSource: direct, paymentId: 'p', sdkAuthorization: 'a', confirmTokenMode: 'payment_token'};
-// @ts-expect-error - paymentId is required
-export const badInput7: VaultPaymentConfirmInput = {cardSource: direct, sdkAuthorization: 'a'};
-// @ts-expect-error - sdkAuthorization is required
-export const badInput8: VaultPaymentConfirmInput = {cardSource: direct, paymentId: 'p'};
+/* ══ 4. (moved) The confirm input and its rejections are exercised in host.tsx ══ */
 
 /* ══ 5. State emission reports validity, and nothing card-shaped ══════════════ */
 
@@ -391,10 +203,9 @@ export const emit1 = (
       const focused: boolean = s.focused;
       const brand: VaultCardBrand = s.brand;
       const coBadged: boolean = s.isCoBadged;
-      const eligibility: VaultEligibilityStatus = s.eligibility;
       const code: VaultFieldErrorCode | undefined = s.error?.code;
       const message: string | undefined = s.error?.message;
-      return [valid, status, touched, focused, brand, coBadged, eligibility, code, message];
+      return [valid, status, touched, focused, brand, coBadged, code, message];
     }}
   />
 );
@@ -473,6 +284,10 @@ export const noLeak7 = formState.token;
 export const noLeak8 = formState.sdkAuthorization;
 // @ts-expect-error - `brand` is card-number only
 export const noLeak9 = formState.fields.expiry.brand;
+// @ts-expect-error - the eligibility verdict is a ./host member; here it is always 'unknown' and not declared
+export const noHost1 = formState.eligibility;
+// @ts-expect-error - nor on the card-number snapshot
+export const noHost2 = numberState.eligibility;
 export const noLeak10 = (
   // @ts-expect-error - the ready-made form emits form state, not per-field state
   <HyperswitchVaultForm session={session} environment="sandbox" onStateChange={(s: unknown) => s} />
@@ -601,7 +416,7 @@ export function handleSurface(handle: VaultFormHandle) {
   handle.focus('expiry');
   handle.focus('cvc');
   handle.focus('cardholderName');
-  return [handle.tokenize, handle.confirmPayment];
+  return [handle.tokenize];
 }
 
 // @ts-expect-error - focus takes a closed field union
@@ -613,7 +428,7 @@ export function noValueAccessors(handle: VaultFormHandle) {
 }
 
 export function noSubmit(handle: VaultFormHandle) {
-  // @ts-expect-error - the ambiguous submit() was replaced by tokenize()/confirmPayment()
+  // @ts-expect-error - the ambiguous submit() was replaced by tokenize()
   return handle.submit;
 }
 

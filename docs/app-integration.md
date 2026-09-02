@@ -13,8 +13,8 @@ one deliberately; they are not interchangeable.
 | | Requests the library makes | What the caller receives | Operation |
 |---|---|---|---|
 | **Flow 1 — standalone merchant tokenization** | tokenize | a payment-method token | `tokenize()` |
-| **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` |
-| **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` |
+| **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` — `./host` |
+| **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` — `./host` |
 
 Flows 2 and 3 are the SAME operation with a different `cardSource`. The source is required and has
 no default — whether a customer's card is tokenized and saved is not a thing to infer from which
@@ -169,6 +169,23 @@ without any network request.
 
 The library performs both calls and hands back what to do next. This is the flow the Hyperswitch
 payment sheet uses.
+
+Flows 2 and 3 are driven through the **`./host` entry** (ADR-0010):
+
+```ts
+import {
+  HyperswitchVaultFormProvider,
+  CardNumberField, CardExpiryField, CardCVCField, CardholderNameField,
+  type HostFormHandle,
+  type VaultPaymentConfirmInput,
+  type VaultPaymentResult,
+} from '@juspay-tech/react-native-hyperswitch-vault/host';
+
+const formRef = useRef<HostFormHandle>(null);
+```
+
+The components are the root's own objects; only the types are wider. The merchant root does not
+publish `confirmPayment`, the confirm input or the payment result.
 
 ```
 library fields → PMS confirm → internal token → final payment confirm → navigation result
@@ -469,11 +486,16 @@ the request.
 ## 7. The handle
 
 ```ts
+/* root */
 type VaultFormHandle = {
   tokenize(): Promise<VaultTokenizeResult>;
-  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
   reset(): void;
   focus(field: 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName'): void;
+};
+
+/* ./host */
+type HostFormHandle = VaultFormHandle & {
+  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
 };
 ```
 

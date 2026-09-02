@@ -9,8 +9,10 @@
  *
  * It proves three separate things, and the distinction matters:
  *
- *   1. REACHABILITY — the root is the only entry. `/embedded` and `/vault` do not resolve, and no
- *      physical file for them is shipped. Deep paths into `dist/` are refused by the export map.
+ *   1. REACHABILITY — the root is the merchant's only entry. `/embedded` and `/vault` do not
+ *      resolve, and no physical file for them is shipped. `/orchestration` and `/host` resolve —
+ *      they are the checkout SDK's entries (ADR-0007, ADR-0010) — and deep paths into `dist/` are
+ *      refused by the export map.
  *   2. DECLARATIONS — nothing a merchant can see in TypeScript describes a raw card value, a
  *      controlled field, or the transport's request/response shapes.
  *   3. RUNTIME CONTAINMENT — the confirmation transport still exists inside the merchant bundle,
@@ -60,8 +62,8 @@ console.log('\nEntry points');
 const packed = JSON.parse(readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
 const subpaths = Object.keys(packed.exports ?? {});
 check(
-  JSON.stringify(subpaths.sort()) === JSON.stringify(['.', './orchestration', './package.json']),
-  `the export map publishes the root and ./orchestration only (got: ${subpaths.join(', ')})`
+  JSON.stringify(subpaths.sort()) === JSON.stringify(['.', './host', './orchestration', './package.json']),
+  `the export map publishes the root, ./host and ./orchestration only (got: ${subpaths.join(', ')})`
 );
 
 const req = createRequire(path.join(workspace, 'probe.js'));
@@ -83,6 +85,22 @@ for (const removed of [`${PKG}/embedded`, `${PKG}/vault`]) {
   check(resolved !== null, `${PKG}/orchestration resolves`);
 }
 for (const deep of [`${PKG}/orchestration/internal`, `${PKG}/dist/esm/orchestration.js`]) {
+  let resolved = null;
+  try { resolved = req.resolve(deep); } catch { /* expected */ }
+  check(resolved === null, `deep import ${deep.replace(PKG, '…')} is refused`);
+}
+
+/*
+ * `./host` is the checkout SDK's typed view of the SAME components (ADR-0010). It must resolve, its
+ * runtime must be a re-export of the root bundle (section 4), and its type vocabulary must stay off
+ * the root (section 3).
+ */
+{
+  let resolved = null;
+  try { resolved = req.resolve(`${PKG}/host`); } catch { /* checked below */ }
+  check(resolved !== null, `${PKG}/host resolves`);
+}
+for (const deep of [`${PKG}/host/internal`, `${PKG}/dist/esm/host.js`, `${PKG}/dist/types/host.d.ts`, `${PKG}/src/host.ts`]) {
   let resolved = null;
   try { resolved = req.resolve(deep); } catch { /* expected */ }
   check(resolved === null, `deep import ${deep.replace(PKG, '…')} is refused`);
@@ -116,10 +134,10 @@ for (const gone of ['dist/esm/embedded.js', 'dist/cjs/embedded.js', 'dist/types/
   check(
     JSON.stringify(shipped) ===
       JSON.stringify([
-        'dist/cjs/index.js', 'dist/cjs/orchestration.js',
-        'dist/esm/index.js', 'dist/esm/orchestration.js',
+        'dist/cjs/host.js', 'dist/cjs/index.js', 'dist/cjs/orchestration.js',
+        'dist/esm/host.js', 'dist/esm/index.js', 'dist/esm/orchestration.js',
       ]),
-    `exactly the two entry bundles ship per format (got: ${shipped.join(', ')})`
+    `exactly the three entry files ship per format (got: ${shipped.join(', ')})`
   );
 }
 
@@ -150,7 +168,7 @@ for (const [file, text] of decls) {
 const FORBIDDEN_PROPS = [
   'value', 'defaultValue', 'onChange', 'onChangeText', 'rawValue', 'formattedValue',
   'pan', 'expiryMonth', 'expiryYear', 'cvv', 'binNumber', 'bin', 'last4', 'last4Digits',
-  'paymentMethodData', 'authorization', 'sdkAuthorization', 'sessionId',
+  'paymentMethodData', 'authorization', 'sdkAuthorization', 'clientSecret', 'sessionId',
   'paymentMethodSessionId', 'nativeEvent', 'target',
 ];
 /*
@@ -186,12 +204,18 @@ const ELIGIBILITY_DECL = 'VaultFormOptions.gen.d.ts';
  */
 const ORCHESTRATION_CARD_DECL = 'VaultConfirmBody.gen.d.ts';
 const ORCHESTRATION_INPUT_DECL = 'VaultOrchestration.gen.d.ts';
+/*
+ * `clientSecret` is the legacy half of the payment credential (publishable key + client secret),
+ * handed IN on the same three declarations and nowhere else — the same treatment as
+ * `sdkAuthorization`, and the same exact `string` type so a widening still fails.
+ */
 const INPUT_EXEMPT = {
   [INPUT_DECL]: {
     sdkAuthorization: /^string$/,
+    clientSecret: /^string$/,
     paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
   },
-  [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/ },
+  [ELIGIBILITY_DECL]: { sdkAuthorization: /^string$/, clientSecret: /^string$/ },
   [ORCHESTRATION_CARD_DECL]: {
     expiryMonth: /^string$/,
     expiryYear: /^string$/,
@@ -199,6 +223,7 @@ const INPUT_EXEMPT = {
   },
   [ORCHESTRATION_INPUT_DECL]: {
     sdkAuthorization: /^string$/,
+    clientSecret: /^string$/,
     paymentMethodData: /^(VaultPaymentMethodData_)?hostPaymentMethodData$/,
   },
 };
@@ -258,9 +283,35 @@ check(
   `a successful tokenize carries only the token (got: ${successMembers.join(', ') || 'nothing'})`
 );
 
-const paymentUnion = unionBody('VaultPaymentResult');
-check(paymentUnion.length > 0, 'the merchant surface publishes VaultPaymentResult');
+/*
+ * ── ADR-0010: the payment vocabulary lives on ./host, not on the merchant root ──
+ *
+ * The same regex runs against both declaration files: the host MUST declare the payment result (and
+ * still without a token), the root MUST NOT declare it — nor the operation, the props, the mode or the
+ * error codes that only mean something with a confirm input.
+ */
+const hostDecl = decls.get('host.d.ts') ?? '';
+const hostUnionBody = (name) =>
+  new RegExp(`export type ${name} =([\\s\\S]*?)\\n(?=export |declare |$)`).exec(hostDecl)?.[1] ?? '';
+
+const paymentUnion = hostUnionBody('VaultPaymentResult');
+check(paymentUnion.length > 0, 'the host surface (./host) publishes VaultPaymentResult');
 check(!/token/.test(paymentUnion), 'the payment result declares no token in any branch');
+check(/confirmPayment\s*\(/.test(hostDecl), 'the host handle declares confirmPayment');
+
+check(unionBody('VaultPaymentResult').length === 0, 'the merchant root does not publish VaultPaymentResult');
+check(!/confirmPayment\s*\(/.test(publicDecl), 'the merchant root handle has no confirmPayment');
+check(!/VaultPaymentConfirmInput|VaultNextAction|VaultHost[A-Z]|VaultEligibility/.test(publicDecl), 'the merchant root names no confirm-input, next-action, host-data or eligibility type');
+check(!/\beligibility\??:/.test(publicDecl), 'the merchant root declares no eligibility member');
+check(!/'external'/.test(publicDecl), "the merchant root has no 'external' cardholder-name mode");
+check(!/forbidden_card_data|card_not_eligible/.test(publicDecl), 'the merchant root has no confirm-only error code');
+{
+  const rootCodes = [...(/export type SafeVaultErrorCode =([^;]*);/.exec(publicDecl)?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+  check(
+    JSON.stringify(rootCodes) === JSON.stringify(['invalid_card_data', 'invalid_session', 'not_ready', 'server_error', 'unknown_outcome', 'unsupported_configuration']),
+    `the merchant root's SafeVaultErrorCode is exactly the six tokenize codes (got: ${rootCodes.join(', ') || 'none'})`
+  );
+}
 
 const resultDecl = decls.get('VaultResult.gen.d.ts') ?? '';
 check(
@@ -288,6 +339,20 @@ for (const [name, code] of bundles) {
   );
   check(!/VaultEmbedded|selectCardFields/.test(code), `${name} contains no /embedded code`);
   check(!/react-final-form|__card_cvc_unbound|__card_network_unbound/.test(code), `${name} contains no React Final Form integration`);
+}
+
+/*
+ * The host bundles are RE-EXPORTS of the root bundle (ADR-0010), never a second copy of the form. A
+ * second copy would mean a second React context, and a field imported from one entry would stop
+ * registering with a provider imported from the other. `verify-consumers.mjs` proves the `===`
+ * identity at runtime; this checks the shape of the shipped file.
+ */
+for (const rel of ['dist/esm/host.js', 'dist/cjs/host.js']) {
+  const code = readFileSync(path.join(pkgDir, rel), 'utf8');
+  check(/['"]\.\/index\.js['"]/.test(code), `${rel} re-exports from ./index.js`);
+  check(!/payment-method-sessions|forwardRef|createElement|useReducer/.test(code), `${rel} contains no form code of its own`);
+  check(code.length < 2000, `${rel} is a re-export stub (${code.length} bytes)`);
+  check(!/HyperswitchVaultForm\b(?!Provider)|HyperswitchVault\b(?!Form)|Widget/.test(code), `${rel} exports no ready-made form, namespace or *Widget alias`);
 }
 
 /*
@@ -340,8 +405,12 @@ import * as React from 'react';
 import {
   HyperswitchVault, HyperswitchVaultFormProvider,
   CardNumberField, CardExpiryField, CardCVCField, CardholderNameField,
-  type VaultFormHandle, type VaultTokenizeResult, type VaultPaymentResult,
+  type VaultFormHandle, type VaultTokenizeResult,
 } from '${PKG}';
+import {
+  HyperswitchVaultFormProvider as HostProvider, CardNumberField as HostCardNumberField,
+  type HostFormHandle, type VaultPaymentResult,
+} from '${PKG}/host';
 
 /* POSITIVE — the whole merchant surface still compiles. */
 export const ok = (
@@ -365,8 +434,34 @@ export const token = async (ref: React.RefObject<VaultFormHandle>) => {
   return result?.status === 'success' ? result.token : undefined;
 };
 
+/* ADR-0010 — the merchant handle has three operations; the payment one is a ./host member. */
+// @ts-expect-error - confirmPayment is not on the merchant root's handle
+export const m1 = (ref: React.RefObject<VaultFormHandle>) => ref.current!.confirmPayment;
+export const m2 = (
+  <HyperswitchVaultFormProvider session={{} as never} environment="sandbox"
+    // @ts-expect-error - live eligibility is a ./host prop
+    eligibility={{paymentId: 'pay_1', sdkAuthorization: 'intent'}}>
+    <CardNumberField />
+  </HyperswitchVaultFormProvider>
+);
+export const m3 = (
+  // @ts-expect-error - 'external' is a ./host cardholder-name mode
+  <HyperswitchVaultFormProvider session={{} as never} environment="sandbox" cardholderName="external">
+    <CardNumberField />
+  </HyperswitchVaultFormProvider>
+);
+
+/* HOST — the same components with the checkout SDK's contract: eligibility, 'external', confirmPayment. */
+export const hostForm = (
+  <HostProvider session={{} as never} environment="sandbox" cardholderName="external"
+    eligibility={{paymentId: 'pay_1', sdkAuthorization: 'intent'}}
+    onFormStateChange={(s) => s.eligibility}>
+    <HostCardNumberField onStateChange={(s) => s.eligibility} />
+  </HostProvider>
+);
+
 /* FLOW 2 — the vault source: tokenize internally, then confirm. Navigation, never a token. */
-export const pay = async (ref: React.RefObject<VaultFormHandle>) => {
+export const pay = async (ref: React.RefObject<HostFormHandle>) => {
   const result: VaultPaymentResult = await ref.current!.confirmPayment({
     cardSource: {type_: 'vault', session: {} as never},
     paymentId: 'pay_1', sdkAuthorization: 'intent',
@@ -376,7 +471,7 @@ export const pay = async (ref: React.RefObject<VaultFormHandle>) => {
 };
 
 /* FLOW 3 — the direct source: no session, no token, one request. Same result union. */
-export const payDirect = async (ref: React.RefObject<VaultFormHandle>) => {
+export const payDirect = async (ref: React.RefObject<HostFormHandle>) => {
   const result: VaultPaymentResult = await ref.current!.confirmPayment({
     cardSource: {type_: 'direct'},
     paymentId: 'pay_1', sdkAuthorization: 'intent',
@@ -405,7 +500,7 @@ export const n6ok = <CardNumberField onStateChange={(s) => s.valid} />;
 export const n6 = <CardNumberField onStateChange={(s) => s.last4} />;
 // @ts-expect-error - the ambiguous submit() was replaced by tokenize()/confirmPayment()
 export const n7 = (ref: React.RefObject<VaultFormHandle>) => ref.current!.submit;
-export const n8 = async (ref: React.RefObject<VaultFormHandle>) => {
+export const n8 = async (ref: React.RefObject<HostFormHandle>) => {
   const r = await ref.current!.confirmPayment({cardSource: {type_: 'direct'}, paymentId: 'p', sdkAuthorization: 'a'});
   // @ts-expect-error - a payment result never carries a token
   return r.status === 'succeeded' ? r.token : undefined;
@@ -460,4 +555,4 @@ if (failures.length) {
   for (const f of failures) console.error(`  - ${f}`);
   process.exit(1);
 }
-console.log('\n[verify-merchant-only] OK - two disjoint entries, no raw card data on the merchant surface');
+console.log('\n[verify-merchant-only] OK - three entries, one audience each, no raw card data on the merchant surface');

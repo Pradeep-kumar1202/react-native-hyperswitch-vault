@@ -34,8 +34,14 @@
 type orchestrationConfirmInput = {
   tokenizedCard: VaultConfirmBody.providerTokenizedCard,
   paymentId: string,
-  /* The PAYMENT-INTENT credential — never the vault credential; this flow has no call 1. */
-  sdkAuthorization: string,
+  /*
+   * The PAYMENT credential — never the vault credential; this flow has no call 1. Either shape
+   * Hyperswitch accepts: the payment-intent `sdkAuthorization` (preferred), or the legacy
+   * `publishableKey` + `clientSecret` pair. See `VaultCredential` for precedence.
+   */
+  sdkAuthorization?: string,
+  publishableKey?: string,
+  clientSecret?: string,
   /* The genType-visible spelling of the environment; unifies with VaultConfirm.vaultEnvironment. */
   environment: VaultFormOptions.vaultEnvironment,
   /* Where the confirm is posted. Absent means the environment's public-cloud host. */
@@ -67,36 +73,44 @@ let confirmTokenizedCardPayment = async (
     blank(card.expiryYear)
   ) {
     VaultResult.invalidCardData()
-  } else if blank(input.sdkAuthorization) {
-    VaultResult.invalidSession(VaultResult.unusableSessionMessage)
   } else {
-    switch input.paymentMethodData->VaultPaymentMethodData.validateHostPaymentMethodData {
-    | Error() => VaultResult.forbiddenCardData()
-    | Ok() =>
-      switch input.endpoint->VaultEndpoint.resolveBaseUrl(~environment=input.environment) {
-      | Error() => VaultResult.unsupportedConfiguration()
-      | Ok(baseUrl) =>
-        let body = VaultConfirmBody.build(
-          ~cardPayload=ExternalTokenPayload({card: card}),
-          ~paymentMethodType=input.paymentMethodType,
-          ~paymentMethodData=input.paymentMethodData,
-          ~customerAcceptance=input.customerAcceptance,
-          ~browserInfo=input.browserInfo,
-          ~returnUrl=input.returnUrl,
-          ~paymentType=input.paymentType,
-          ~email=input.email,
-        )
+    switch VaultCredential.resolve(
+      ~sdkAuthorization=input.sdkAuthorization,
+      ~publishableKey=input.publishableKey,
+      ~clientSecret=input.clientSecret,
+    ) {
+    /* Neither credential shape is complete: nothing can authenticate the request. */
+    | None => VaultResult.invalidSession(VaultResult.unusableSessionMessage)
+    | Some(credential) =>
+      switch input.paymentMethodData->VaultPaymentMethodData.validateHostPaymentMethodData {
+      | Error() => VaultResult.forbiddenCardData()
+      | Ok() =>
+        switch input.endpoint->VaultEndpoint.resolveBaseUrl(~environment=input.environment) {
+        | Error() => VaultResult.unsupportedConfiguration()
+        | Ok(baseUrl) =>
+          let body = VaultConfirmBody.build(
+            ~cardPayload=ExternalTokenPayload({card: card}),
+            ~paymentMethodType=input.paymentMethodType,
+            ~paymentMethodData=input.paymentMethodData,
+            ~customerAcceptance=input.customerAcceptance,
+            ~browserInfo=input.browserInfo,
+            ~returnUrl=input.returnUrl,
+            ~paymentType=input.paymentType,
+            ~email=input.email,
+            ~clientSecret=credential->VaultCredential.clientSecretForBody,
+          )
 
-        let navOutcome = await VaultFinalConfirm.confirmPayment({
-          baseUrl,
-          paymentId: input.paymentId,
-          sdkAuthorization: input.sdkAuthorization,
-          appId: ?input.appId,
-          body,
-          timeoutMs: ?input.timeoutMs,
-        })
+          let navOutcome = await VaultFinalConfirm.confirmPayment({
+            baseUrl,
+            paymentId: input.paymentId,
+            credential,
+            appId: ?input.appId,
+            body,
+            timeoutMs: ?input.timeoutMs,
+          })
 
-        navOutcome->VaultResult.fromNavOutcome
+          navOutcome->VaultResult.fromNavOutcome
+        }
       }
     }
   }

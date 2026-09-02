@@ -20,8 +20,8 @@ supported way to do it?
 | Focus one | yes | `focus(field)` on the handle |
 | Clear them | yes | `reset()` on the handle |
 | Get a payment-method token | yes | `tokenize()` — Flow 1 |
-| Confirm a payment with a tokenized card | yes | `confirmPayment({cardSource: {type_: 'vault', session}})` — Flow 2 |
-| Confirm a payment WITHOUT tokenizing | yes | `confirmPayment({cardSource: {type_: 'direct'}})` — Flow 3 |
+| Confirm a payment with a tokenized card | checkout SDK only | `confirmPayment({cardSource: {type_: 'vault', session}})` on the `./host` entry — Flow 2 |
+| Confirm a payment WITHOUT tokenizing | checkout SDK only | `confirmPayment({cardSource: {type_: 'direct'}})` on the `./host` entry — Flow 3 |
 | Choose whether the card is tokenized | yes | `cardSource` — required, no default |
 | Know whether an operation is running | yes | track your own promise |
 | Read the PAN, expiry, CVC or cardholder name | **no** | there is no accessor, in any form |
@@ -67,11 +67,13 @@ out of the library at all — there is no callback for one to travel through.
 ```ts
 type VaultFormHandle = {
   tokenize(): Promise<VaultTokenizeResult>;
-  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
   reset(): void;
   focus(field: 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName'): void;
 };
 ```
+
+That is the root handle. The checkout SDK's entry, `./host`, types the same object as
+`HostFormHandle`, which adds `confirmPayment(input)` (ADR-0010). Merchants never see that member.
 
 Field widgets take their own ref with a smaller handle:
 
@@ -144,8 +146,8 @@ A library-owned field like the other three.
 | | Into the library | Out of the library |
 |---|---|---|
 | **Flow 1** (`tokenize`) | session, presentation | `{status: 'success', token}` or a safe error |
-| **Flow 2** (`confirmPayment`, vault source) | session, presentation, non-card confirmation input | a navigation decision or a safe error — no token |
-| **Flow 3** (`confirmPayment`, direct source) | presentation, non-card confirmation input | a navigation decision or a safe error — no token |
+| **Flow 2** (`confirmPayment`, vault source — `./host`) | session, presentation, non-card confirmation input | a navigation decision or a safe error — no token |
+| **Flow 3** (`confirmPayment`, direct source — `./host`) | presentation, non-card confirmation input | a navigation decision or a safe error — no token |
 
 Non-card confirmation input is narrow by construction: `billing` and `nickName` and nothing else. A
 card key at any depth fails the call with `forbidden_card_data` before any request is made.

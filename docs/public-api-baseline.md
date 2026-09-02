@@ -10,12 +10,18 @@ with it; [app-integration.md](app-integration.md) shows the three flows in use.
 ## 1. Entry points
 
 ```
-.                 → dist/esm/index.js | dist/cjs/index.js | dist/types/public.d.ts
+.                 → dist/esm/index.js | dist/cjs/index.js | dist/types/public.d.ts       merchants
+./host            → dist/esm/host.js  | dist/cjs/host.js  | dist/types/host.d.ts         checkout SDK (ADR-0010)
+./orchestration   → dist/esm/orchestration.js | … | dist/types/orchestration.d.ts       checkout SDK (ADR-0007)
 ./package.json    → package.json
 ```
 
-Those two subpaths are the entire export map. There is no `/vault`, no `/embedded`, and no deep
+Those four subpaths are the entire export map. There is no `/vault`, no `/embedded`, and no deep
 import — `verify-package-contents.mjs` and `verify-publishable.mjs` fail the build if one appears.
+
+`./host` publishes the SAME five component objects as the root (`dist/esm/host.js` is a re-export
+line over `index.js`; `verify-consumers.mjs` asserts `===`) under the checkout SDK's wider types.
+Sections 1–4 and 6 below describe the root; section 5 describes what `./host` adds.
 
 ---
 
@@ -40,11 +46,16 @@ against the packed tarball.
 ## 3. Operations
 
 ```ts
+/* root */
 type VaultFormHandle = {
   tokenize(): Promise<VaultTokenizeResult>;
-  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
   reset(): void;
   focus(field: VaultField): void;
+};
+
+/* ./host — the same runtime object */
+type HostFormHandle = VaultFormHandle & {
+  confirmPayment(input: VaultPaymentConfirmInput): Promise<VaultPaymentResult>;
 };
 
 type VaultFieldHandle = {focus(): void; blur(): void};
@@ -52,8 +63,9 @@ type VaultFieldHandle = {focus(): void; blur(): void};
 type VaultField = 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName';
 ```
 
-Two operations, deliberately separate. `tokenize()` yields a token; `confirmPayment()` performs the
-payment and yields navigation. Neither throws for a documented outcome.
+Two operations, deliberately separate — and published on two entries. `tokenize()` yields a token
+and is the root's only operation; `confirmPayment()` performs the payment, yields navigation, and is
+a member of the `./host` handle only. Neither throws for a documented outcome.
 
 `confirmPayment()` serves BOTH client-core flows; `cardSource` chooses which. That is why there are
 two operations and not three: tokenizing before a payment is a property of the request, while
@@ -117,7 +129,10 @@ into these records.
 
 ---
 
-## 5. Confirm input (Flows 2 and 3)
+## 5. Confirm input (Flows 2 and 3) — `./host` only
+
+Everything in this section is imported from `@juspay-tech/react-native-hyperswitch-vault/host`. The
+root declares none of it (ADR-0010).
 
 ```ts
 /* Which card credential the confirm carries. Required; there is no default. */
@@ -131,7 +146,9 @@ type VaultCardholderNameMode = 'collect' | 'external' | 'omit';
 type VaultPaymentConfirmInput = {
   cardSource: VaultPaymentCardSource;
   paymentId: string;
-  sdkAuthorization: string;            // the PAYMENT-INTENT credential
+  sdkAuthorization?: string;           // the PAYMENT-INTENT credential — wins when non-blank
+  publishableKey?: string;             // legacy credential: `api-key` header (with clientSecret)
+  clientSecret?: string;               // legacy credential: `client_secret` in the body
   cardholderName?: string;             // 'external' mode ONLY — the one card value a host may pass
   paymentMethodType?: 'credit' | 'debit';
   paymentMethodData?: VaultHostPaymentMethodData;
@@ -148,7 +165,9 @@ type VaultPaymentConfirmInput = {
 /* Optional, non-card. Lets the library run the eligibility check AS THE CUSTOMER TYPES. */
 type VaultEligibilityConfig = {
   paymentId: string;
-  sdkAuthorization: string;
+  sdkAuthorization?: string;           // either this…
+  publishableKey?: string;             // …or this pair (same precedence as the confirm input)
+  clientSecret?: string;
   appId?: string;
   endpoint?: VaultEndpointConfig;
 };

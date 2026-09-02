@@ -26,7 +26,9 @@ import type {vaultPaymentResult as VaultResult_vaultPaymentResult} from './Vault
 export type orchestrationConfirmInput = {
   readonly tokenizedCard: VaultConfirmBody_providerTokenizedCard; 
   readonly paymentId: string; 
-  readonly sdkAuthorization: string; 
+  readonly sdkAuthorization?: string; 
+  readonly publishableKey?: string; 
+  readonly clientSecret?: string; 
   readonly environment: VaultFormOptions_vaultEnvironment; 
   readonly endpoint?: VaultEndpoint_vaultEndpointConfig; 
   readonly appId?: string; 

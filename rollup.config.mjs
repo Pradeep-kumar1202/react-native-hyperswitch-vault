@@ -119,4 +119,23 @@ export default [
     treeshake,
     output: outputs('orch'),
   },
+  /*
+   * THE HOST ENTRY: the checkout SDK's typed view of the SAME components (ADR-0010). This is not a
+   * third bundle of the form. `src/host-entry.mjs` re-exports from `standalone-entry.mjs`, and that
+   * import is kept EXTERNAL and rewritten to `./index.js`, so dist/{esm,cjs}/host.js is a handful of
+   * re-export lines over the root bundle. Bundling it separately would duplicate every component and
+   * every React context into a second module graph — a field imported from `/host` would then never
+   * find a provider imported from the root — and `scripts/verify-consumers.mjs` proves the identity
+   * against the packed tarball precisely to rule that out.
+   */
+  {
+    input: {host: 'src/host-entry.mjs'},
+    external: (id) => hostRuntime.includes(id) || isImageAsset(id) || /standalone-entry\.mjs$/.test(id),
+    plugins,
+    treeshake,
+    output: outputs('host').map((o) => ({
+      ...o,
+      paths: (id) => (/standalone-entry\.mjs$/.test(id) ? './index.js' : id),
+    })),
+  },
 ];

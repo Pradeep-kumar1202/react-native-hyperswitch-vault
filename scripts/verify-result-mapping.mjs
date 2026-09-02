@@ -152,11 +152,12 @@ for (const [label, outcome, status, publicCode] of navCases) {
 }
 
 /*
- * ── public.ts must describe the runtime shape exactly ────────────────────────
+ * ── host.ts must describe the runtime shape exactly ──────────────────────────
  *
- * `public.ts` republishes the result as a hand-written TypeScript discriminated union so merchants
- * get narrowing. Hand-written means it can drift, so the exact member set produced for each status
- * is asserted here against what that union declares.
+ * `host.ts` (ADR-0010: the payment vocabulary lives on ./host) republishes the result as a
+ * hand-written TypeScript discriminated union so the checkout SDK gets narrowing. Hand-written means
+ * it can drift, so the exact member set produced for each status is asserted here against what that
+ * union declares.
  */
 const EXPECTED_MEMBERS = {
   succeeded: ['status'],
@@ -183,22 +184,24 @@ for (const sample of samples) {
   if (expectedMembers) {
     check(
       members.join(',') === expectedMembers.join(','),
-      `status "${sample.status}" carries members [${members.join(',')}], public.ts declares [${expectedMembers.join(',')}]`
+      `status "${sample.status}" carries members [${members.join(',')}], host.ts declares [${expectedMembers.join(',')}]`
     );
   }
 }
 
 const publicSource = readFileSync(path.join(root, 'src/public.ts'), 'utf8');
-const unionDecl = publicSource.match(/export type VaultPaymentResult =([\s\S]*?);\n/);
-check(unionDecl !== null, 'public.ts declares a VaultPaymentResult union');
+const hostSource = readFileSync(path.join(root, 'src/host.ts'), 'utf8');
+const unionDecl = hostSource.match(/export type VaultPaymentResult =([\s\S]*?);\n/);
+check(unionDecl !== null, 'host.ts declares a VaultPaymentResult union');
+check(!/export type VaultPaymentResult =/.test(publicSource), 'public.ts (the merchant root) declares no VaultPaymentResult union');
 if (unionDecl) {
   for (const status of Object.keys(EXPECTED_MEMBERS)) {
     check(
       unionDecl[1].includes(`'${status}'`),
-      `public.ts's VaultPaymentResult union is missing the "${status}" branch`
+      `host.ts's VaultPaymentResult union is missing the "${status}" branch`
     );
   }
-  check(!/token/.test(unionDecl[1]), 'public.ts\'s VaultPaymentResult union mentions a token');
+  check(!/token/.test(unionDecl[1]), 'host.ts\'s VaultPaymentResult union mentions a token');
 }
 
 /* ── Flow 1: the tokenize result is the ONE place a token may appear ───────── */
@@ -232,6 +235,18 @@ for (const sample of tokenizeSamples) {
 }
 
 check(VaultResult.tokenizeSuccess('tok_abc').token === 'tok_abc', 'a tokenize success carries the token through');
+
+/*
+ * ADR-0010: the merchant root narrows `SafeVaultErrorCode` to the codes `tokenize()` can emit. That
+ * narrowing is a hand-written union in public.ts, so it is pinned here against the mapping: every
+ * code the tokenize mapping produces must be declared, and nothing else may be.
+ */
+const rootCodesDecl = publicSource.match(/export type SafeVaultErrorCode =([\s\S]*?);\n/);
+check(rootCodesDecl !== null, 'public.ts declares the merchant SafeVaultErrorCode union');
+const rootCodes = new Set([...(rootCodesDecl?.[1] ?? '').matchAll(/'([a-z_]+)'/g)].map((m) => m[1]));
+const tokenizeCodesEmitted = new Set(['invalid_card_data', 'not_ready', 'invalid_session', 'unsupported_configuration', 'server_error', 'unknown_outcome']);
+for (const code of tokenizeCodesEmitted) check(rootCodes.has(code), `the merchant SafeVaultErrorCode declares "${code}"`);
+for (const code of rootCodes) check(tokenizeCodesEmitted.has(code), `the merchant SafeVaultErrorCode declares no code tokenize() cannot emit ("${code}")`);
 
 /*
  * The SAME transport codes must be mapped by BOTH flows, so a new one cannot be handled in one and

@@ -40,6 +40,16 @@ await bundle.write({ file: path.join(stage, 'final.js'), format: 'es' });
 await bundle.close();
 const VaultFinalConfirm = await import(pathToFileURL(path.join(stage, 'final.js')).href);
 
+/* The credential constructors, so the request can be built the way the coordinator builds it. */
+const credentialBundle = await rollup({
+  input: path.join(root, 'src/VaultCredential.bs.js'),
+  plugins: [nodeResolve({ rootDir: root })],
+  onwarn: () => {},
+});
+await credentialBundle.write({ file: path.join(stage, 'credential.js'), format: 'es' });
+await credentialBundle.close();
+const Credential = await import(pathToFileURL(path.join(stage, 'credential.js')).href);
+
 /* ── fetch stub ───────────────────────────────────────────────────────────── */
 
 let calls = [];
@@ -58,7 +68,7 @@ const respondWith = ({ ok = true, status = 200, body = {}, throws = false, json 
 const baseRequest = {
   baseUrl: 'https://api.example.com',
   paymentId: 'pay_123',
-  sdkAuthorization: 'intent-credential',
+  credential: Credential.intent('intent-credential'),
   body: { payment_token: 'tok_1' },
 };
 
@@ -199,8 +209,23 @@ check(
   'the payment id is percent-encoded into the path'
 );
 check(calls[0].options.headers.Authorization === 'intent-credential', 'the payment-intent credential is sent raw, with no scheme');
+check(!('api-key' in calls[0].options.headers), 'the payment-intent credential sends no api-key header');
 check(calls[0].options.method === 'POST', 'the call is a POST');
 check(JSON.parse(calls[0].options.body).payment_token === 'tok_1', 'the prebuilt body is sent unmodified');
+
+/*
+ * The legacy credential: publishable key as `api-key`, exactly as client-core's `Utils.getHeader`
+ * sends it when `sdkAuthorization` is absent. The `client_secret` half travels in the body, which
+ * `VaultConfirmBody.build` writes — this transport never inspects or amends the body.
+ */
+respondWith({ body: { status: 'succeeded' } });
+await run({ credential: Credential.legacy('pk_test_123', 'pay_123_secret_abc') });
+check(calls[0].options.headers['api-key'] === 'pk_test_123', 'the legacy credential sends the publishable key as api-key, raw');
+check(!('Authorization' in calls[0].options.headers), 'the legacy credential sends no Authorization header');
+check(
+  !JSON.stringify(calls[0].options.headers).includes('pay_123_secret_abc'),
+  'the client secret is never a header (it belongs to the body, written by the body builder)'
+);
 
 /* ── Non-vacuity ──────────────────────────────────────────────────────────── */
 

@@ -141,8 +141,10 @@ console.log('\nMust ship');
 
 for (const required of [
   'package.json', 'LICENSE', 'README.md', 'THIRD-PARTY-NOTICES.md',
-  'dist/types/public.d.ts',
+  'dist/types/public.d.ts', 'dist/types/host.d.ts', 'dist/types/orchestration.d.ts',
   'dist/esm/index.js', 'dist/cjs/index.js',
+  'dist/esm/host.js', 'dist/cjs/host.js',
+  'dist/esm/orchestration.js', 'dist/cjs/orchestration.js',
 ]) {
   check(files.includes(required), `ships ${required}`);
 }

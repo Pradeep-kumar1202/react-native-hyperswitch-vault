@@ -54,6 +54,7 @@ const load = async (name) => {
 };
 
 const Eligibility = await load('VaultEligibility');
+const Credential = await load('VaultCredential');
 
 /* ── 1. The request reproduces client-core's ──────────────────────────────── */
 
@@ -142,7 +143,7 @@ const withFetch = async (impl, run) => {
 const request = {
   baseUrl: 'https://api.example.com',
   paymentId: 'pay_123',
-  sdkAuthorization: 'intent',
+  credential: Credential.intent('intent'),
   appId: undefined,
   cardNumber: '4111111111111111',
 };
@@ -182,7 +183,21 @@ check(denied === 'Denied', 'an explicit denial DENIES — the fail-open policy i
 check(seen.url === 'https://api.example.com/payments/pay_123/eligibility', 'the request went where expected');
 check(seen.options.method === 'POST', 'it is a POST');
 check(seen.options.headers.Authorization === 'intent', 'it authenticates with the payment-intent credential');
+check(!('api-key' in seen.options.headers), 'the payment-intent credential sends no api-key header');
 check(seen.options.headers['x-app-id'] === 'com.example.app', 'it sends the x-app-id header');
+
+/* The legacy credential reproduces client-core's `api-key` header on the same probe. */
+let seenLegacy = null;
+await withFetch(
+  (url, options) => {
+    seenLegacy = { url, options };
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({ sdk_next_action: { next_action: 'confirm' } }) });
+  },
+  () => Eligibility.check({ ...request, credential: Credential.legacy('pk_test_123', 'pay_123_secret') })
+);
+check(seenLegacy.options.headers['api-key'] === 'pk_test_123', 'the legacy credential authenticates the probe with api-key');
+check(!('Authorization' in seenLegacy.options.headers), 'the legacy credential sends no Authorization header on the probe');
+check(!JSON.stringify(seenLegacy.options).includes('pay_123_secret'), 'the client secret is not sent on the eligibility probe at all');
 check(
   JSON.parse(seen.options.body).payment_method_data.card.card_number === '4111111111111111',
   'it carries the PAN the library owns'

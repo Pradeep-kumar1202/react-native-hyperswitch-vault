@@ -111,8 +111,10 @@ let environmentKey = (environment: VaultConfirm.vaultEnvironment) =>
 /* ── Public confirm-payment input (Flows 2 and 3) ──────────────────────────── */
 
 /*
- * All NON-CARD. `sdkAuthorization` here is the PAYMENT-INTENT credential used by the final confirm;
- * the vault credential lives inside `cardSource.session` and is never named separately.
+ * All NON-CARD. The PAYMENT credential used by the eligibility probe and the final confirm arrives
+ * in one of the two shapes Hyperswitch accepts — `sdkAuthorization`, or the legacy `publishableKey`
+ * + `clientSecret` pair (see `VaultCredential`). The vault credential lives inside
+ * `cardSource.session` and is never named separately.
  *
  * `tokenize()` takes NO input at all: Flow 1 stops after the vault call, so none of these payment
  * fields have anything to act on. Keeping them off that signature is what stops a merchant
@@ -127,7 +129,19 @@ type paymentConfirmInput = {
    */
   cardSource: VaultCardSource.paymentCardSource,
   paymentId: string,
-  sdkAuthorization: string,
+  /*
+   * ── THE PAYMENT CREDENTIAL, IN EITHER SHAPE ──────────────────────────────
+   *
+   * `sdkAuthorization` is the payment-intent credential and wins whenever it is non-blank. The
+   * legacy pair — the merchant's `publishableKey` as the `api-key` header plus the intent's
+   * `clientSecret` in the body — is what every integration used before `sdkAuthorization` existed,
+   * and hyperswitch-client-core still emits it for wallets, saved cards and retrieve when the
+   * intent credential is absent. A confirm with neither shape complete is refused before any
+   * request opens.
+   */
+  sdkAuthorization?: string,
+  publishableKey?: string,
+  clientSecret?: string,
   /*
    * ── THE ONE CARD VALUE A HOST MAY SUPPLY ──────────────────────────────────
    *
@@ -448,7 +462,7 @@ let useMachinery = (
    * on the wire for one answer, so a cached verdict for the CURRENT card is reused. The reducer
    * clears that cache whenever the number changes, so "current" is a fact rather than a hope.
    */
-  let eligibilityGate = async (~args: paymentConfirmInput, ~baseUrl, ~signal) =>
+  let eligibilityGate = async (~args: paymentConfirmInput, ~credential, ~baseUrl, ~signal) =>
     if !(args.eligibilityRequired->Option.getOr(false)) {
       Ok()
     } else {
@@ -458,7 +472,7 @@ let useMachinery = (
         let fresh = await VaultEligibility.check({
           baseUrl,
           paymentId: args.paymentId,
-          sdkAuthorization: args.sdkAuthorization,
+          credential,
           appId: args.appId,
           cardNumber: cardDetails().cardNumber,
           signal,
@@ -500,9 +514,19 @@ let useMachinery = (
           VaultResult.forbiddenCardData()
         } else if args.paymentId->String.trim->String.length === 0 {
           VaultResult.invalidSession(VaultResult.unusableSessionMessage)
-        } else if args.sdkAuthorization->String.trim->String.length === 0 {
-          VaultResult.invalidSession(VaultResult.unusableSessionMessage)
         } else {
+          /*
+           * The payment credential is resolved first, from whichever of the two shapes the host
+           * supplied. Neither shape complete means nothing can authenticate the request, and the
+           * refusal costs zero requests.
+           */
+          switch VaultCredential.resolve(
+            ~sdkAuthorization=args.sdkAuthorization,
+            ~publishableKey=args.publishableKey,
+            ~clientSecret=args.clientSecret,
+          ) {
+          | None => VaultResult.invalidSession(VaultResult.unusableSessionMessage)
+          | Some(credential) =>
           /*
            * The source is resolved BEFORE anything is opened or sent. A contradictory or incomplete
            * source is a configuration error, and answering it here means it costs zero requests.
@@ -588,7 +612,7 @@ let useMachinery = (
                   ~environment,
                 )
 
-                let outcome = switch await eligibilityGate(~args, ~baseUrl, ~signal) {
+                let outcome = switch await eligibilityGate(~args, ~credential, ~baseUrl, ~signal) {
                 | Error() => VaultResult.cardNotEligible()
                 | Ok() =>
                   switch tokenMode {
@@ -608,12 +632,13 @@ let useMachinery = (
                       ~returnUrl=args.returnUrl,
                       ~paymentType=args.paymentType,
                       ~email=args.email,
+                      ~clientSecret=credential->VaultCredential.clientSecretForBody,
                     )
 
                     let navOutcome = await VaultFinalConfirm.confirmPayment({
                       baseUrl,
                       paymentId: args.paymentId,
-                      sdkAuthorization: args.sdkAuthorization,
+                      credential,
                       appId: ?args.appId,
                       body,
                       signal,
@@ -648,12 +673,13 @@ let useMachinery = (
                         ~returnUrl=args.returnUrl,
                         ~paymentType=args.paymentType,
                         ~email=args.email,
+                        ~clientSecret=credential->VaultCredential.clientSecretForBody,
                       )
 
                       let navOutcome = await VaultFinalConfirm.confirmPayment({
                         baseUrl,
                         paymentId: args.paymentId,
-                        sdkAuthorization: args.sdkAuthorization,
+                        credential,
                         appId: ?args.appId,
                         body,
                         signal,
@@ -668,6 +694,7 @@ let useMachinery = (
                 }
               }
             }
+          }
           }
           }
         }

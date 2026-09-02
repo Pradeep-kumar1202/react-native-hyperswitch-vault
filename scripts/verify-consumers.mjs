@@ -308,6 +308,30 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     check(loaded?.[next] === loaded?.[legacy], `${next} === ${legacy} (same object, not a wrapper)`);
   }
 
+  /*
+   * ── ADR-0010: ./host is the same objects under a wider type surface ────────
+   *
+   * Loaded from the PACKED tarball and compared by `===`. A second bundle of the form would pass
+   * every shape check and still break the app: two React contexts, a field from one entry never
+   * registering with a provider from the other. Identity is the only test that rules that out.
+   */
+  let hostLoaded = null;
+  let hostError = null;
+  try {
+    hostLoaded = requireFromApp(`${PKG}/host`);
+  } catch (error) {
+    hostError = error;
+  }
+  check(hostError === null, `./host loads with only react + react-native present${hostError ? `: ${hostError.message}` : ''}`);
+  for (const name of ['HyperswitchVaultFormProvider', 'CardNumberField', 'CardExpiryField', 'CardCVCField', 'CardholderNameField']) {
+    check(hostLoaded?.[name] === loaded?.[name], `host.${name} === root.${name} (one object, two type surfaces)`);
+  }
+  check(
+    hostLoaded !== null && ['HyperswitchVaultForm', 'HyperswitchVault', 'CardNumberWidget', 'CardExpiryWidget', 'CardCVCWidget', 'CardholderNameWidget']
+      .every((name) => !(name in hostLoaded)),
+    './host exports no ready-made form, namespace or *Widget alias'
+  );
+
   const NAMESPACE_MEMBERS = [
     ['CardForm', 'HyperswitchVaultForm'],
     ['Form', 'HyperswitchVaultFormProvider'],

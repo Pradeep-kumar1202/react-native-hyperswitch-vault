@@ -50,15 +50,15 @@ console.log('Export map');
 const subpaths = Object.keys(pkg.exports ?? {});
 const executable = subpaths.filter((s) => s !== './package.json');
 check(
-  JSON.stringify([...executable].sort()) === JSON.stringify(['.', './orchestration']),
-  `the executable exports are the root and ./orchestration (got: ${executable.join(', ') || 'none'})`
+  JSON.stringify([...executable].sort()) === JSON.stringify(['.', './host', './orchestration']),
+  `the executable exports are the root, ./host and ./orchestration (got: ${executable.join(', ') || 'none'})`
 );
 check(
   subpaths.includes('./package.json'),
   '`./package.json` is present as the one metadata export'
 );
 check(
-  JSON.stringify([...subpaths].sort()) === JSON.stringify(['.', './orchestration', './package.json']),
+  JSON.stringify([...subpaths].sort()) === JSON.stringify(['.', './host', './orchestration', './package.json']),
   `no other subpath is published (got: ${subpaths.join(', ')})`
 );
 for (const gone of ['./embedded', './vault']) {
@@ -105,14 +105,14 @@ if (packedFiles.length > 0) {
   check(
     JSON.stringify(bundles.sort()) ===
       JSON.stringify([
-        'dist/cjs/index.js', 'dist/cjs/orchestration.js',
-        'dist/esm/index.js', 'dist/esm/orchestration.js',
+        'dist/cjs/host.js', 'dist/cjs/index.js', 'dist/cjs/orchestration.js',
+        'dist/esm/host.js', 'dist/esm/index.js', 'dist/esm/orchestration.js',
       ]),
-    `exactly the two entry bundles per format would be packed (got: ${bundles.join(', ')})`
+    `exactly the three entry files per format would be packed (got: ${bundles.join(', ')})`
   );
 
   const ALLOWED = [
-    /^dist\/(esm|cjs)\/(index|orchestration)\.js$/,
+    /^dist\/(esm|cjs)\/(index|orchestration|host)\.js$/,
     /^dist\/(esm|cjs)\/package\.json$/,
     /^dist\/types\/[A-Za-z0-9_.-]+\.d\.ts$/,
     /^dist\/assets\/[A-Za-z0-9@._-]+\.png$/,
@@ -230,11 +230,20 @@ if (!existsSync(declDir)) {
     `no forbidden raw-data property ships (${rawData.slice(0, 3).map((d) => `${d.file}:${d.name}`).join(', ') || 'none'})`
   );
 
-  /* The exemption must not be vacuous: those two inputs really are declared, with those types. */
+  /*
+   * The exemption must not be vacuous: those inputs really are declared, with those types. The
+   * credential arrives in either of two shapes (ADR-0009): the payment-intent `sdkAuthorization`,
+   * or the legacy `publishableKey` + `clientSecret` pair — each an optional plain string, and
+   * nothing wider.
+   */
   const inputDecl = decls.get(INPUT_DECL) ?? '';
   check(
-    /sdkAuthorization:\s*string/.test(inputDecl),
-    'the confirm input declares sdkAuthorization as a plain string'
+    /sdkAuthorization\?:\s*string/.test(inputDecl),
+    'the confirm input declares sdkAuthorization as an optional plain string'
+  );
+  check(
+    /publishableKey\?:\s*string/.test(inputDecl) && /clientSecret\?:\s*string/.test(inputDecl),
+    'the confirm input declares the legacy publishableKey + clientSecret pair as optional plain strings'
   );
   check(
     /paymentMethodData\?:\s*(VaultPaymentMethodData_)?hostPaymentMethodData/.test(inputDecl),
@@ -248,8 +257,12 @@ if (!existsSync(declDir)) {
   /* The eligibility exemption is likewise not vacuous. */
   const eligibilityDecl = decls.get(ELIGIBILITY_DECL) ?? '';
   check(
-    /eligibilityConfig[\s\S]{0,300}?sdkAuthorization:\s*string/.test(eligibilityDecl),
-    'the eligibility config declares sdkAuthorization as a plain string'
+    /eligibilityConfig[\s\S]{0,400}?sdkAuthorization\?:\s*string/.test(eligibilityDecl),
+    'the eligibility config declares sdkAuthorization as an optional plain string'
+  );
+  check(
+    /eligibilityConfig[\s\S]{0,400}?clientSecret\?:\s*string/.test(eligibilityDecl),
+    'the eligibility config declares the legacy clientSecret as an optional plain string'
   );
   /*
    * The whole reason eligibility could move inside the library is that its request body is built
@@ -293,8 +306,13 @@ if (!existsSync(declDir)) {
     `a successful tokenize result carries only the token (got: ${tokenizeMembers.join(', ') || 'nothing'})`
   );
 
-  const paymentUnion = unionBody('VaultPaymentResult');
-  check(paymentUnion.length > 0, 'the published surface declares VaultPaymentResult');
+  /* ADR-0010: the payment result is declared on ./host, and NOT on the merchant root. */
+  const hostDecl = decls.get('host.d.ts') ?? '';
+  const paymentUnion =
+    new RegExp(`export type VaultPaymentResult =([\\s\\S]*?)\\n(?=export |declare |$)`).exec(hostDecl)?.[1] ?? '';
+  check(paymentUnion.length > 0, 'the published ./host surface declares VaultPaymentResult');
+  check(unionBody('VaultPaymentResult').length === 0, 'the merchant root does not declare VaultPaymentResult');
+  check(!/confirmPayment\s*\(/.test(publicDecl), 'the merchant root declares no confirmPayment');
   check(!/token/.test(paymentUnion), 'the payment result declares no token in any branch');
   for (const status of ['succeeded', 'processing', 'requires_customer_action', 'failed', 'validation_error', 'not_ready']) {
     check(paymentUnion.includes(`'${status}'`), `the payment result declares the "${status}" branch`);

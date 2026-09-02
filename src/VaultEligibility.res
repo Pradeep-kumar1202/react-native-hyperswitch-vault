@@ -56,11 +56,14 @@ type verdict =
   | Allowed
   | Denied
 
-/* Non-card, host-supplied. `appId` only reproduces the `x-app-id` header client-core sends. */
+/*
+ * Non-card, host-supplied. `credential` is the payment credential already resolved by the caller
+ * (see `VaultCredential`); `appId` only reproduces the `x-app-id` header client-core sends.
+ */
 type eligibilityRequest = {
   baseUrl: string,
   paymentId: string,
-  sdkAuthorization: string,
+  credential: VaultCredential.t,
   appId: option<string>,
   cardNumber: string,
   signal?: VaultConfirm.abortSignal,
@@ -128,7 +131,7 @@ let check = async (request: eligibilityRequest): verdict => {
     method: "POST",
     headers: [
       ("Content-Type", "application/json"),
-      ("Authorization", request.sdkAuthorization),
+      request.credential->VaultCredential.authHeader,
       ("x-app-id", request.appId->appIdHeader),
       ("x-redirect-uri", ""),
     ]->Dict.fromArray,

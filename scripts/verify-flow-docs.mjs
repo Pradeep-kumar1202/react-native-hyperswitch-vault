@@ -38,6 +38,7 @@ const DOCS = [
   'docs/merchant-integration.md',
   'docs/control-surface.md',
   'docs/public-api-baseline.md',
+  'docs/host-api-reference.md',
 ];
 
 /* ── 3. Removed state callbacks, anywhere, in any document ─────────────────── */

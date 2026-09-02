@@ -108,7 +108,8 @@ let body = sentBody();
 check(body.payment_method === 'card', 'payment_method is card');
 check(body.payment_method_type === 'credit', 'payment_method_type defaults to credit');
 check(body.payment_token === undefined, 'no top-level payment_token exists in this flow');
-check(body.client_secret === undefined, 'client_secret is never sent');
+check(body.client_secret === undefined, 'client_secret is not sent with the payment-intent credential');
+check(!('api-key' in calls[0].options.headers), 'no api-key header is sent with the payment-intent credential');
 
 let vaultCard = body.payment_method_data?.vault_card;
 check(vaultCard !== undefined, 'the card subtree is payment_method_data.vault_card');
@@ -216,6 +217,36 @@ await refusal({ tokenizedCard: { ...card, cardCvcAlias: '' } }, 'validation_erro
 await refusal({ tokenizedCard: { ...card, expiryMonth: '' } }, 'validation_error', 'invalid_card_data', 'a blank expiry month refuses with zero calls');
 await refusal({ tokenizedCard: { ...card, expiryYear: ' ' } }, 'validation_error', 'invalid_card_data', 'a blank expiry year refuses with zero calls');
 await refusal({ sdkAuthorization: '  ' }, 'failed', 'invalid_session', 'a blank credential refuses with zero calls');
+await refusal({ sdkAuthorization: undefined }, 'failed', 'invalid_session', 'no credential at all refuses with zero calls');
+await refusal(
+  { sdkAuthorization: undefined, publishableKey: 'pk_test_123', clientSecret: '   ' },
+  'failed', 'invalid_session',
+  'a legacy pair missing its client secret refuses with zero calls'
+);
+await refusal(
+  { sdkAuthorization: undefined, publishableKey: '', clientSecret: 'pay_123_secret' },
+  'failed', 'invalid_session',
+  'a legacy pair missing its publishable key refuses with zero calls'
+);
+
+/* ── 2b. The legacy credential ────────────────────────────────────────────── */
+
+console.log('\nThe legacy publishable-key credential reproduces client-core exactly');
+
+respondWith({ body: { status: 'succeeded' } });
+result = await run({ sdkAuthorization: undefined, publishableKey: 'pk_test_123', clientSecret: 'pay_123_secret' });
+check(result.status === 'succeeded', 'a legacy-credential confirm succeeds');
+check(calls.length === 1, 'exactly one request is sent for the legacy credential');
+check(calls[0].options.headers['api-key'] === 'pk_test_123', 'the publishable key is the api-key header, raw');
+check(!('Authorization' in calls[0].options.headers), 'no Authorization header accompanies the legacy credential');
+check(sentBody().client_secret === 'pay_123_secret', 'the client secret travels in the body as client_secret');
+check(sentBody().payment_method_data?.vault_card?.card_number === 'tok_sandbox_4242424242424242', 'the vault_card subtree is unchanged under the legacy credential');
+
+respondWith({ body: { status: 'succeeded' } });
+result = await run({ sdkAuthorization: 'intent-credential', publishableKey: 'pk_test_123', clientSecret: 'pay_123_secret' });
+check(calls[0].options.headers.Authorization === 'intent-credential', 'when both shapes are supplied the payment-intent credential wins');
+check(!('api-key' in calls[0].options.headers), '…and no api-key header is sent');
+check(sentBody().client_secret === undefined, '…and no client_secret is written');
 await refusal({ endpoint: { baseUrl: 'http://evil.example' } }, 'failed', 'unsupported_configuration', 'a cleartext endpoint in production refuses with zero calls');
 await refusal(
   { paymentMethodData: { billing: { card_number: '4242424242424242' } } },

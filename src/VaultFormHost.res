@@ -131,17 +131,24 @@ let useHost = (
       /* Not enough of a number to ask about: clear any denial left from a previous one. */
       | #reset => controller.recordEligibility(VaultEligibility.Allowed)
       | #check(digits) =>
-        switch config.endpoint->VaultEndpoint.resolveBaseUrl(~environment) {
+        let credential = VaultCredential.resolve(
+          ~sdkAuthorization=config.sdkAuthorization,
+          ~publishableKey=config.publishableKey,
+          ~clientSecret=config.clientSecret,
+        )
+        switch (config.endpoint->VaultEndpoint.resolveBaseUrl(~environment), credential) {
         /* A base URL we would refuse to send a credential to is not probed either. */
-        | Error() => ()
-        | Ok(baseUrl) =>
+        | (Error(), _) => ()
+        /* No usable credential: nothing to authenticate the probe with, so it does not run. */
+        | (_, None) => ()
+        | (Ok(baseUrl), Some(credential)) =>
           probeGenerationRef.current = probeGenerationRef.current + 1
           let generation = probeGenerationRef.current
           controller.markEligibilityPending()
           VaultEligibility.check({
             baseUrl,
             paymentId: config.paymentId,
-            sdkAuthorization: config.sdkAuthorization,
+            credential,
             appId: config.appId,
             cardNumber: digits,
           })

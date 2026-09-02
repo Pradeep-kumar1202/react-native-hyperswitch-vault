@@ -91,7 +91,9 @@ export type vaultField =
 
 export type eligibilityConfig = {
   readonly paymentId: string; 
-  readonly sdkAuthorization: string; 
+  readonly sdkAuthorization?: string; 
+  readonly publishableKey?: string; 
+  readonly clientSecret?: string; 
   readonly appId?: string; 
   readonly endpoint?: VaultEndpoint_vaultEndpointConfig
 };

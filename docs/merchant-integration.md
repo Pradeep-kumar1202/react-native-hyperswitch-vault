@@ -315,7 +315,6 @@ Per field, for a tick or a border colour:
 | `error` | every field | `{code, message}` for what is on screen now, or absent |
 | `brand` | card number | the detected scheme, or `unknown` |
 | `isCoBadged` | card number | the customer is being offered a genuine choice of network |
-| `eligibility` | card number | `unknown`, `pending`, `allowed` or `denied` |
 | `canSubmit` | form | fields mounted, all values valid, an accepted network, the session not *unusable*, nothing in flight. An **absent** session passes — see the note in §3.2 if you call `tokenize()` |
 | `fieldsReady` | form | exactly one of each required field is mounted |
 | `sessionStatus` | form | `valid`, `invalid`, or `absent` when the form was mounted without a session |
@@ -324,10 +323,8 @@ Per field, for a tick or a border colour:
 | `networkError` | form | present when the network in force is not one you accept — the reason `valid` and `canSubmit` are false |
 | `fields` | form | the four field states, `cardholderName` present only when this form owns that field |
 
-`canSubmit` deliberately does **not** consult `eligibility`. A denial is the backend's verdict on a
-correctly-typed card, not something the customer can fix by retyping; folding it in would leave you
-unable to tell "still typing" from "this card was refused". Read `eligibility` yourself if you want
-to react to it — `confirmPayment()` answers `card_not_eligible` when it matters.
+`canSubmit` does not depend on anything the backend decides about the card; it is a statement about
+what was typed and what is mounted.
 
 The cardholder name is optional, so its `valid` is always `true`; use its `status` to tell whether
 anything was typed.
@@ -363,15 +360,13 @@ set against the published declarations, so the payload cannot grow without faili
 ### 3.7 The ref handle
 
 ```ts
-tokenize(): Promise<VaultTokenizeResult>            // Flow 1 — this guide
-confirmPayment(input): Promise<VaultPaymentResult>  // Flows 2 and 3 — not used here
+tokenize(): Promise<VaultTokenizeResult>   // Flow 1 — this guide; the only route to a token
 reset(): void                              // clears values, expiry text, validation state and errors
 focus(field: 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName'): void
 ```
 
-Use `tokenize()`. `confirmPayment()` completes a payment — either by tokenizing first
-(`cardSource: {type_: 'vault', session}`) or by sending the card directly
-(`cardSource: {type_: 'direct'}`). Neither hands back a token, so neither is what you want here.
+Three members. The payment operation used by the Hyperswitch checkout SDK (Flows 2 and 3) lives on
+a separate entry, `./host`, and is not part of this handle — see ADR-0010.
 
 ---
 
