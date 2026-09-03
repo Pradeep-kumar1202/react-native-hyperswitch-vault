@@ -27,6 +27,12 @@ Two layout styles are available to all three flows:
 
 Both share the same session, the same operations, the same result types and the same guarantees.
 
+A fourth, much smaller operation sits beside them for a card the customer has **already** saved and
+must re-verify: `HyperswitchVaultSavedCardForm` renders one CVC field, and
+`updateSavedPaymentMethod()` resolves to the same token union as Flow 1. It is merchant-facing, on
+the package root, and documented in `docs/merchant-integration.md` §5.1 and
+`docs/merchant-api-reference.md` §19 ([ADR-0008](adr/0008-saved-card-cvc-flow.md)).
+
 ## Read this first
 
 - **This release collects a new card.** Listing, selecting, updating or deleting a previously saved

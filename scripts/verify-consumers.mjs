@@ -308,6 +308,9 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     check(loaded?.[next] === loaded?.[legacy], `${next} === ${legacy} (same object, not a wrapper)`);
   }
 
+  /* ADR-0008: the saved-card CVC component is a real component of its own, and it is root-only. */
+  check(isForwardRef(loaded?.HyperswitchVaultSavedCardForm), 'HyperswitchVaultSavedCardForm is a real forwardRef component');
+
   /*
    * ── ADR-0010: ./host is the same objects under a wider type surface ────────
    *
@@ -330,6 +333,10 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     hostLoaded !== null && ['HyperswitchVaultForm', 'HyperswitchVault', 'CardNumberWidget', 'CardExpiryWidget', 'CardCVCWidget', 'CardholderNameWidget']
       .every((name) => !(name in hostLoaded)),
     './host exports no ready-made form, namespace or *Widget alias'
+  );
+  check(
+    hostLoaded !== null && !('HyperswitchVaultSavedCardForm' in hostLoaded),
+    './host exports no saved-card component (ADR-0008 is merchant-facing; client-core has its own saved-card path)'
   );
 
   const NAMESPACE_MEMBERS = [
@@ -386,6 +393,7 @@ console.log('\nA. standalone consumer (no form library installed anywhere)');
     'HyperswitchVault',
     'HyperswitchVaultForm',
     'HyperswitchVaultFormProvider',
+    'HyperswitchVaultSavedCardForm',
   ];
   const actualRootValues = Object.keys(loaded ?? {}).sort();
   check(

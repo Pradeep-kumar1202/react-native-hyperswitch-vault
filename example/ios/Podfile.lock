@@ -47,7 +47,6 @@ PODS:
     - React-RCTText (= 0.79.7)
     - React-RCTVibration (= 0.79.7)
   - React-callinvoker (0.79.7)
-  - React-Codegen (0.1.0)
   - React-Core (0.79.7):
     - glog
     - hermes-engine
@@ -1333,13 +1332,6 @@ PODS:
     - React-jsiexecutor
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
-  - react-native-hyperswitch-scancard (0.2.3):
-    - RCT-Folly
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Codegen
-    - React-Core
-    - ReactCommon/turbomodule/core
   - react-native-webview (14.0.1):
     - DoubleConversion
     - glog
@@ -1730,7 +1722,6 @@ DEPENDENCIES:
   - React-logger (from `../node_modules/react-native/ReactCommon/logger`)
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
-  - "react-native-hyperswitch-scancard (from `../node_modules/@juspay-tech/react-native-hyperswitch-scancard`)"
   - react-native-webview (from `../node_modules/react-native-webview`)
   - React-NativeModulesApple (from `../node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios`)
   - React-oscompat (from `../node_modules/react-native/ReactCommon/oscompat`)
@@ -1767,7 +1758,6 @@ DEPENDENCIES:
 
 SPEC REPOS:
   trunk:
-    - React-Codegen
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -1848,8 +1838,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   React-microtasksnativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
-  react-native-hyperswitch-scancard:
-    :path: "../node_modules/@juspay-tech/react-native-hyperswitch-scancard"
   react-native-webview:
     :path: "../node_modules/react-native-webview"
   React-NativeModulesApple:
@@ -1931,7 +1919,6 @@ SPEC CHECKSUMS:
   RCTTypeSafety: 45120b9028ec6819266f3ef7a6b8e8a9f0a083d4
   React: 49e89943d7b1bc95c5895a05c6cf106ba112d037
   React-callinvoker: 9baafac613e363728c47ceaf65b9597bd1b96df0
-  React-Codegen: 4b8b4817cea7a54b83851d4c1f91f79aa73de30a
   React-Core: 2f642fff28911adf30dd5169a7d9d2b95dc59bc9
   React-CoreModules: a499af0e4a8dfa78cbc04c131b59fa3286210148
   React-cxxreact: 1a485bb66f4bdde62f89eb0e5db1262182fc40e0
@@ -1957,7 +1944,6 @@ SPEC CHECKSUMS:
   React-logger: fbdc0814b62fefa412a90af7cacc666387f1bc9a
   React-Mapbuffer: cfe4726ba1929b9dab4645c78376a9165375d62f
   React-microtasksnativemodule: c99b8f1240609566de105b73f2569c0f22880ee1
-  react-native-hyperswitch-scancard: 765ba9f96007b01779cfe201ae04343ab3de15a6
   react-native-webview: 5ef17d19a475396d3780050ef146096ca1697d11
   React-NativeModulesApple: 74051ff264ce0b89ac799b56314f8f440a95ee4d
   React-oscompat: 0047f0ce53a328ce225777a6c617970556602c7c

@@ -18,6 +18,7 @@ the library then does with them, and therefore what crosses the public boundary.
 | **Flow 1 — standalone merchant tokenization** | tokenize | a payment-method token | `tokenize()` |
 | **Flow 2 — client-core payment confirmation** | tokenize, then confirm | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'vault', session}})` — `./host` entry |
 | **Flow 3 — vault disabled** | confirm only | a navigation decision, no token | `confirmPayment({cardSource: {type_: 'direct'}})` — `./host` entry |
+| **Saved card — CVC only** | update a card you already saved | `{status: 'success', token}` — the same union as Flow 1 | `HyperswitchVaultSavedCardForm` + `updateSavedPaymentMethod()` — root entry ([ADR-0008](docs/adr/0008-saved-card-cvc-flow.md)) |
 
 Most standalone integrations want **Flow 1**. Start there.
 
@@ -462,3 +463,5 @@ only the client-safe session response.
 | [docs/adr/0003-…md](docs/adr/0003-remove-state-emission-and-own-final-confirmation.md) | why the library owns the confirmation (its emission removal is superseded) |
 | [docs/adr/0005-…md](docs/adr/0005-restore-card-safe-state-emission.md) | why state emission is back, and how the payload is pinned |
 | [docs/adr/0006-…md](docs/adr/0006-default-ui.md) | why the library ships a UI by default, and what `unstyled` removes |
+| [docs/adr/0008-…md](docs/adr/0008-saved-card-cvc-flow.md) | the saved-card CVC component, and the backend authorization contract it was verified against |
+| [docs/followup-saved-card-final-confirm.md](docs/followup-saved-card-final-confirm.md) | P0: the checkout SDK cannot yet consume the saved-card CVC token on its final confirm |

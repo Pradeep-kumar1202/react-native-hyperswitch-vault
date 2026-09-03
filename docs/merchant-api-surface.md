@@ -513,7 +513,7 @@ Everything importable from the package root. The `./host` entry adds `HostFormHa
 the non-card host-data types, `VaultEligibilityConfig` and `VaultEligibilityStatus`; see
 `docs/host-api-reference.md`.
 
-### Components — 11 runtime values
+### Components — 12 runtime values
 
 ```
 HyperswitchVaultForm            HyperswitchVaultFormProvider
@@ -522,6 +522,7 @@ CardNumberField / CardNumberWidget
 CardExpiryField / CardExpiryWidget
 CardCVCField    / CardCVCWidget
 CardholderNameField / CardholderNameWidget
+HyperswitchVaultSavedCardForm   (ADR-0008 — saved-card CVC)
 ```
 
 ### Handles and results
@@ -529,6 +530,7 @@ CardholderNameField / CardholderNameWidget
 ```
 VaultFormHandle          HyperswitchVaultFormHandle
 VaultFieldHandle         WidgetHandle              VaultField
+VaultSavedCardHandle
 VaultTokenizeResult      VaultTokenizeStatus
 SafeVaultError           SafeVaultErrorCode
 ```
@@ -539,6 +541,7 @@ SafeVaultError           SafeVaultErrorCode
 MerchantSession            VaultEnvironment          VaultEndpointConfig
 VaultCardholderNameMode
 HyperswitchVaultFormProps  HyperswitchVaultFormProviderProps
+HyperswitchVaultSavedCardFormProps
 ```
 
 ### Presentation

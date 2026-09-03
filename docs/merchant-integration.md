@@ -403,6 +403,90 @@ To charge it later, your backend passes it as `payment_token` in the payments co
 `payment_method_data` entirely. Confirm the exact shape for your API version before you build on it —
 that part is outside this library.
 
+### 5.1 A saved card that needs its CVC again
+
+Some saved cards must be re-verified with their CVC before they can be charged. The library ships a
+second, much smaller component for exactly that: one CVC field, one operation, the same token type.
+Nothing else is collected, and nothing is confirmed — your backend still performs the payment.
+
+```
+  your app                     your server                    Hyperswitch
+     |  GET /vault-session          |                              |
+     |----------------------------->|   (the same two calls as §2) |
+     |<-----------------------------|                              |
+     |   the session response, verbatim                            |
+     |                                                             |
+     |  GET /v1/payment-method-sessions/{id}/list-payment-methods  |
+     |  Authorization: <vault_details.vault_data.sdk_authorization>|
+     |------------------------------------------------------------>|
+     |<------------------------------------------------------------|
+     |   customer_payment_methods[]: token, card_network, requires_cvv
+     |                                                             |
+     |  for a card with requires_cvv: true, mount the component    |
+     |  updateSavedPaymentMethod(): PUT …/{id}/update-saved-payment-method
+     |------------------------------------------------------------>|
+     |<------------------------------------------------------------|
+     |   the token to charge with (use THIS one)                   |
+     |                              |                              |
+     |  send that token to YOUR server; it confirms within 15 min  |
+     |----------------------------->|                              |
+```
+
+**The requirements, in order.** Each one is enforced by the backend, not merely recommended.
+
+1. **List with the same session you will mount with.** Listing is what associates the customer's
+   saved cards with that payment-method session. A token from an earlier session, or from your own
+   database, is refused by the vault.
+2. **Read `requires_cvv` yourself.** `false`: use the listed token directly and do not mount the
+   component. `true`: mount it with that entry's token. The component does not take `requires_cvv`;
+   you have already decided.
+3. **Never mount it with an empty token.** The operation refuses one (`not_ready`) because, on the
+   wire, omitting the token mints a *new* token instead of updating the card you meant.
+4. **Pass `cardNetwork`** from the entry's `card_network`. It selects the CVC length rule; without it
+   three digits are accepted on every card, so `state.valid` would enable your button one digit early
+   on an American Express card and the vault would reject the submit.
+5. **Use the token the operation returns**, not the one you passed in. They are usually the same
+   value; the contract is "use what came back".
+6. **Confirm within 15 minutes.** The vault keeps the CVC under the token for that long. A repeat
+   `updateSavedPaymentMethod()` restarts the window.
+
+```tsx
+import {HyperswitchVaultSavedCardForm, type VaultSavedCardHandle} from '@juspay-tech/react-native-hyperswitch-vault';
+
+const savedCardRef = useRef<VaultSavedCardHandle>(null);
+const [payEnabled, setPayEnabled] = useState(false);
+
+// `entry` is one item of customer_payment_methods[] with requires_cvv: true
+<HyperswitchVaultSavedCardForm
+  ref={savedCardRef}
+  session={session}                        // the session list-payment-methods was called with
+  environment="sandbox"
+  paymentMethodToken={entry.payment_method_token}
+  cardNetwork={entry.card?.card_network}   // "Visa", "AmericanExpress", …
+  onStateChange={state => setPayEnabled(state.valid)}
+/>
+
+const onPay = async () => {
+  const result = await savedCardRef.current?.updateSavedPaymentMethod();
+  if (result?.status === 'success') {
+    await fetch(`${MERCHANT_BACKEND}/pay-with-saved-card`, {
+      method: 'POST',
+      body: JSON.stringify({token: result.token}),   // the RETURNED token
+    });
+  }
+};
+```
+
+**What your backend then sends.** The returned token is a CVC-bearing reference to the saved card.
+Your server uses it on the payments confirm as `payment_method_data.vault_card_token.card_cvc`
+together with the saved card's `payment_token`, with your secret key, within the 15-minute window.
+Confirm the exact body for your API version in the Hyperswitch API reference; that request is made
+from your server and the app is not involved.
+
+The result union is the same `VaultTokenizeResult` as `tokenize()` (§4), so one `switch` serves both.
+`onStateChange` carries the same `VaultCVCState` a `CardCVCField` emits: validity, completeness,
+focus, touched and the message on screen — never the value, its length, or the network hint.
+
 ---
 
 ## 6. Security requirements

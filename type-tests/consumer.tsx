@@ -31,6 +31,7 @@ import {
   CardExpiryWidget,
   CardCVCWidget,
   CardholderNameWidget,
+  HyperswitchVaultSavedCardForm,
 } from '../dist/types/public';
 import type {
   MerchantSession,
@@ -38,6 +39,9 @@ import type {
   VaultFieldHandle,
   VaultField,
   VaultTokenizeResult,
+  VaultSavedCardHandle,
+  HyperswitchVaultSavedCardFormProps,
+  VaultCVCState,
   VaultFieldStyles,
   VaultExpiryStyles,
   VaultFormFieldStyles,
@@ -438,6 +442,115 @@ export function fieldHandleSurface(handle: VaultFieldHandle) {
   // @ts-expect-error - a field handle exposes no value
   return handle.value;
 }
+
+/* ══ 10. The saved-card CVC component (ADR-0008) ═════════════════════════════ */
+
+const savedCardRef = React.createRef<VaultSavedCardHandle>();
+
+/* Bare minimum: the four required props. */
+export const savedCardMinimal = (
+  <HyperswitchVaultSavedCardForm
+    ref={savedCardRef}
+    session={session}
+    environment="sandbox"
+    paymentMethodToken="token_from_list_payment_methods"
+  />
+);
+
+/* Everything optional, and the emitted state is the existing CVC state. */
+export const savedCardFull = (
+  <HyperswitchVaultSavedCardForm
+    session={session}
+    environment="production"
+    paymentMethodToken="token_from_list_payment_methods"
+    cardNetwork="AmericanExpress"
+    vaultEndpoint={{baseUrl: 'https://vault.example.com/api'}}
+    appearance={{primaryColor: '#0570DE', borderRadius: 8}}
+    cvcOptions={{placeholder: 'CVC', cvcIcon: 'default', errorDisplay: 'inline', testID: 'cvc'}}
+    cvcStyles={{input: textStyle, error: textStyle}}
+    containerStyle={rootStyle}
+    onStateChange={(s: VaultCVCState) => {
+      const valid: boolean = s.valid;
+      const status: 'empty' | 'incomplete' | 'complete' = s.status;
+      const touched: boolean = s.touched;
+      const code: VaultFieldErrorCode | undefined = s.error?.code;
+      return [valid, status, touched, code];
+    }}
+  />
+);
+
+export const savedCardProps: HyperswitchVaultSavedCardFormProps = {
+  session,
+  environment: 'sandbox',
+  paymentMethodToken: 'token_from_list_payment_methods',
+};
+
+/* The operation resolves to the SAME tokenize result: `token` on success and nowhere else. */
+export async function savedCardFlow(): Promise<string | null> {
+  const result: VaultTokenizeResult = await savedCardRef.current!.updateSavedPaymentMethod();
+  switch (result.status) {
+    case 'success':
+      return result.token;
+    case 'validation_error':
+    case 'not_ready':
+    case 'error':
+      return result.error.code === 'not_ready' ? null : result.error.message;
+  }
+}
+
+/* Four members, no accessor, and focus/blur take no argument. */
+export function savedCardHandleSurface(handle: VaultSavedCardHandle) {
+  handle.reset();
+  handle.focus();
+  handle.blur();
+  return [handle.updateSavedPaymentMethod];
+}
+
+/* NEGATIVE — the contract's edges are compile errors. */
+// @ts-expect-error - the token is required: there is no saved card to collect a CVC for without one
+export const savedCardNoToken = <HyperswitchVaultSavedCardForm session={session} environment="sandbox" />;
+// @ts-expect-error - the environment cannot be inferred from the session
+export const savedCardNoEnvironment = <HyperswitchVaultSavedCardForm session={session} paymentMethodToken="t" />;
+// @ts-expect-error - the session is required
+export const savedCardNoSession = <HyperswitchVaultSavedCardForm environment="sandbox" paymentMethodToken="t" />;
+export const savedCardNoChildren = (
+  // @ts-expect-error - it renders its own CVC field and takes no children: never zero fields, never two
+  <HyperswitchVaultSavedCardForm session={session} environment="sandbox" paymentMethodToken="t">
+    <CardCVCField />
+  </HyperswitchVaultSavedCardForm>
+);
+export const savedCardNoRequiresCvv = (
+  // @ts-expect-error - the merchant has already read requires_cvv; the library does not take a copy
+  <HyperswitchVaultSavedCardForm session={session} environment="sandbox" paymentMethodToken="t" requiresCvv />
+);
+export const savedCardNotControlled = (
+  // @ts-expect-error - the CVC is library-owned; there is no value prop
+  <HyperswitchVaultSavedCardForm session={session} environment="sandbox" paymentMethodToken="t" value="123" />
+);
+export const savedCardNoChangeHandler = (
+  // @ts-expect-error - and no change handler
+  <HyperswitchVaultSavedCardForm session={session} environment="sandbox" paymentMethodToken="t" onChangeText={(v: string) => v} />
+);
+export const savedCardNoFocusArgument = (handle: VaultSavedCardHandle) =>
+  // @ts-expect-error - one field, so focus() takes no argument
+  handle.focus('cvc');
+export const savedCardNoTokenize = (handle: VaultSavedCardHandle) =>
+  // @ts-expect-error - the saved-card handle has no tokenize(): it updates a card that is already saved
+  handle.tokenize;
+export const savedCardNoConfirm = (handle: VaultSavedCardHandle) =>
+  // @ts-expect-error - and it confirms no payment
+  handle.confirmPayment;
+declare const savedCardState: VaultCVCState;
+// @ts-expect-error - the CVC value is unreachable
+export const savedCardNoLeak1 = savedCardState.value;
+// @ts-expect-error - so is its length
+export const savedCardNoLeak2 = savedCardState.length;
+// @ts-expect-error - the network hint is never reflected back: VaultCVCState has no brand member
+export const savedCardNoLeak3 = savedCardState.brand;
+// @ts-expect-error - there is no canSubmit on a field snapshot; `valid` answers that question
+export const savedCardNoCanSubmit = savedCardState.canSubmit;
+// @ts-expect-error - no new emitted type was minted for this flow
+export type {SavedCardFormState} from '../dist/types/public';
 
 /* Keeps `View` used so the import is not reported as unused. */
 export const wrapper = <View>{form}</View>;

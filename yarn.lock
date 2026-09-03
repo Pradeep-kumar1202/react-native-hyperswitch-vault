@@ -1880,17 +1880,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@juspay-tech/react-native-hyperswitch-scancard@npm:^0.2.3":
-  version: 0.2.3
-  resolution: "@juspay-tech/react-native-hyperswitch-scancard@npm:0.2.3"
-  peerDependencies:
-    react: "*"
-    react-native: "*"
-    react-native-webview: "*"
-  checksum: d8833cdabbf564bc219f2c06a34cf16d2d23ce21e6be541f6feac8b2f38ce5253dfa2c1279c7016cc781759e50c307d9ad136b5ba1a60c43986d71b32658da74
-  languageName: node
-  linkType: hard
-
 "@juspay-tech/react-native-hyperswitch-vault@link:..::locator=HyperswitchVaultExample%40workspace%3Aexample":
   version: 0.0.0-use.local
   resolution: "@juspay-tech/react-native-hyperswitch-vault@link:..::locator=HyperswitchVaultExample%40workspace%3Aexample"
@@ -3036,7 +3025,6 @@ __metadata:
     "@babel/core": ^7.25.2
     "@babel/preset-env": ^7.25.3
     "@babel/runtime": ^7.25.0
-    "@juspay-tech/react-native-hyperswitch-scancard": ^0.2.3
     "@juspay-tech/react-native-hyperswitch-vault": "link:.."
     "@react-native-community/cli": 18.0.0
     "@react-native-community/cli-platform-android": 18.0.0

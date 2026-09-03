@@ -1,5 +1,16 @@
 # Saved-card CVC flow — implementation plan
 
+> **Status (2026-09-02):** Phase 0 closed — the authorization contract was read off the backend's
+> route handler (`sdk_or_client_auth`, SDK envelope first) and cross-checked against upstream `main`
+> and hyperswitch-web; ADR-0008 is **Accepted** and records the evidence. Phases 1–6 are implemented:
+> `src/VaultSavedCard.res`, `src/SavedCardController.res`, `src/SavedCardCoordinator.res`,
+> `src/HyperswitchVaultSavedCardForm.res`, `scripts/verify-saved-card.mjs` (in `yarn verify`),
+> `scripts/smoke-saved-card.mjs` (`yarn smoke:saved-card`, manual), and
+> `example/__tests__/savedCardCvc.test.tsx`. One deviation from the text below: the transport refuses
+> a blank token with `not_ready` itself (defence in depth), and there is no cached result, because
+> the update is idempotent. The consumer of the returned token is a separate P0 follow-up:
+> `docs/followup-saved-card-final-confirm.md`.
+
 Companion to [ADR-0008](../docs/adr/0008-saved-card-cvc-flow.md), which holds the decisions. This
 holds the work.
 

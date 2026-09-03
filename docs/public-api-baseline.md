@@ -36,8 +36,9 @@ Sections 1–4 and 6 below describe the root; section 5 describes what `./host` 
 | `CardCVCField` / `CardCVCWidget` | field component (same object) |
 | `CardholderNameField` / `CardholderNameWidget` | field component (same object) |
 | `HyperswitchVault` | namespace: `CardForm`, `Form`, `CardNumber`, `Expiry`, `CVC`, `CardholderName` |
+| `HyperswitchVaultSavedCardForm` | saved-card CVC component (ADR-0008) — not a namespace member |
 
-Eleven value exports. The `*Field` and `*Widget` spellings are the same component objects, and every
+Twelve value exports. The `*Field` and `*Widget` spellings are the same component objects, and every
 namespace member is identity-equal to its canonical export — `verify-consumers.mjs` asserts both
 against the packed tarball.
 
@@ -61,6 +62,14 @@ type HostFormHandle = VaultFormHandle & {
 type VaultFieldHandle = {focus(): void; blur(): void};
 
 type VaultField = 'cardNumber' | 'expiry' | 'cvc' | 'cardholderName';
+
+/* root — the saved-card component (ADR-0008) */
+type VaultSavedCardHandle = {
+  updateSavedPaymentMethod(): Promise<VaultTokenizeResult>;
+  reset(): void;
+  focus(): void;
+  blur(): void;
+};
 ```
 
 Two operations, deliberately separate — and published on two entries. `tokenize()` yields a token
@@ -236,6 +245,8 @@ Named explicitly so their absence is checkable rather than assumed:
   `confirmRequest`, `confirmOutcome`, `vaultConfirmResult`, `vaultCardMetadata`.
 - **The intermediate token in Flow 2.** `VaultPaymentResult` has no `token` member.
 - **A `submit()` operation.** Replaced by the two explicit operations above.
+- **A `requires_cvv` prop, a `SavedCardFormState` type, or a `canSubmit` member on the CVC snapshot.**
+  The saved-card component reuses `VaultCVCState` and `VaultTokenizeResult` and adds no vocabulary.
 - **A top-level `confirmTokenMode`.** It moved inside the vault card source, where it means
   something; at the top level it was settable on a confirm that mints nothing.
 - **Host-owned card entry when vaulting is off.** There is no configuration in which the library

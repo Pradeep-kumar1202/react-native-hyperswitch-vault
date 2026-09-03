@@ -615,3 +615,30 @@ Record the device model and OS version beside the ticks — keyboard and text-me
 varies more between OS versions than between devices. File a failure with the platform, the OS
 version and which field was focused: nearly every layout issue in this form is focus-state
 dependent.
+
+## 12. Saved-card CVC smoke check (Layer 2 — `yarn smoke:saved-card`)
+
+Requires 0.5 (`mode: live`) and a customer who already has a saved card. Run it from the repository
+root, not the example. It is **not** part of `yarn verify` and never a CI gate: credentials, sandbox
+availability and session expiry would fail a build for reasons unrelated to the change under review.
+
+**Owner:** whoever cuts the release. Record who ran it, and when, in the release notes.
+
+1. If the customer has no saved card yet, vault one with the example app (§5) first.
+2. `yarn smoke:saved-card`. It reads `example-server/.env`, mints a real session, lists the
+   customer's cards with it, and performs **one** real
+   `PUT …/v1/payment-method-sessions/{id}/update-saved-payment-method` through the library's own
+   compiled transport. `SAVED_CARD_CVC` (default `123`) and `SAVED_CARD_TOKEN` are optional overrides.
+
+**Expect**
+
+- exit code 0 and a final line beginning `[smoke-saved-card] OK`, naming whether the returned token
+  equalled the input;
+- exactly one `PUT` on that route in the proxy, answering 2xx, with `Authorization` set to the raw
+  `sdk_authorization` and **no** `X-Profile-Id`;
+- **nothing** printed shows the api key, the session authorization, the CVC, a token, or a PAN. The
+  script prints the environment, the hosts, counts, and the chosen card's network only.
+
+Exit code 2 means a precondition is missing (credentials, no saved card, no vault details on the
+session) — not a regression. Exit code 1 means the server refused what the library sent: that is
+the finding this check exists to produce, and it blocks the release until understood.

@@ -58,6 +58,7 @@ const CURRENT = [
   'docs/manual-device-checklist.md',
   'docs/public-api-baseline.md',
   'docs/followup-sdk-utils-card-validation.md',
+  'docs/followup-saved-card-final-confirm.md',
   /*
    * The parity inventory NAMES the surfaces it replaced — that is its whole job — so it lives in
    * the CURRENT tier and relies on the removal-marker rule: each row says what happened to the
@@ -82,6 +83,8 @@ const ACCEPTED = [
   'docs/adr/0005-restore-card-safe-state-emission.md',
   'docs/adr/0006-default-ui.md',
   'docs/adr/0007-orchestration-entry-for-externally-tokenized-cards.md',
+  /* Accepted 2026-09-02, once the authorization contract was read off the backend source. */
+  'docs/adr/0008-saved-card-cvc-flow.md',
   'docs/adr/0009-legacy-payment-credential.md',
   'docs/adr/0010-host-entry-for-the-checkout-sdk.md',
 ];
@@ -100,10 +103,12 @@ const ACCEPTED_MARKER = /\*\*Status:\*\*\s*Accepted/;
  *     describing functionality that does not exist, and belongs in CURRENT where the scan applies.
  *
  * A PROPOSED document is deliberately NOT treated as CURRENT: nothing in it is merchant-usable.
+ *
+ * The tier is EMPTY at the moment: ADR-0008, the record it was added for, moved to ACCEPTED once
+ * its blocker closed. The tier stays, with its restrictions, so the next proposal has somewhere to
+ * live that is neither "current" nor "historical".
  */
-const PROPOSED = [
-  'docs/adr/0008-saved-card-cvc-flow.md',
-];
+const PROPOSED = [];
 
 const PROPOSED_MARKER = /\*\*Status:\*\*\s*Proposed/;
 const ADR_DIRECTORY = 'docs/adr/';
@@ -295,10 +300,14 @@ check(
  * and has not blunted the catch-all that made it necessary in the first place.
  */
 check(
-  PROPOSED.includes('docs/adr/0008-saved-card-cvc-flow.md') &&
+  ACCEPTED.includes('docs/adr/0008-saved-card-cvc-flow.md') &&
     !CURRENT.includes('docs/adr/0008-saved-card-cvc-flow.md') &&
-    !ACCEPTED.includes('docs/adr/0008-saved-card-cvc-flow.md'),
-  'ADR-0008 is classified PROPOSED, and is neither CURRENT nor ACCEPTED'
+    !PROPOSED.includes('docs/adr/0008-saved-card-cvc-flow.md'),
+  'ADR-0008 is classified ACCEPTED, and is neither CURRENT nor PROPOSED'
+);
+check(
+  !PROPOSED.some((file) => ACCEPTED.includes(file) || CURRENT.includes(file) || HISTORICAL.includes(file)),
+  'no document sits in the PROPOSED tier and another tier at once'
 );
 check(
   !'docs/a-proposal-in-the-wrong-place.md'.startsWith(ADR_DIRECTORY),

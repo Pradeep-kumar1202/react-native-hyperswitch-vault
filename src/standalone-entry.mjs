@@ -21,6 +21,7 @@ import { make as CardNumberWidgetImpl } from './CardNumberWidget.bs.js';
 import { make as CardExpiryWidgetImpl } from './CardExpiryWidget.bs.js';
 import { make as CardCVCWidgetImpl } from './CardCVCWidget.bs.js';
 import { make as CardholderNameWidgetImpl } from './CardholderNameWidget.bs.js';
+import { make as HyperswitchVaultSavedCardFormImpl } from './HyperswitchVaultSavedCardForm.bs.js';
 
 /* Existing published names — unchanged, not deprecated. */
 export const HyperswitchVaultForm = HyperswitchVaultFormImpl;
@@ -35,6 +36,12 @@ export const CardNumberField = CardNumberWidgetImpl;
 export const CardExpiryField = CardExpiryWidgetImpl;
 export const CardCVCField = CardCVCWidgetImpl;
 export const CardholderNameField = CardholderNameWidgetImpl;
+
+/*
+ * The saved-card CVC component (ADR-0008). A component of its own, not a namespace member: it
+ * takes no children and renders its own field, so there is nothing to compose it with.
+ */
+export const HyperswitchVaultSavedCardForm = HyperswitchVaultSavedCardFormImpl;
 
 /* Convenience namespace (ADR-0002 §2). */
 export const HyperswitchVault = {

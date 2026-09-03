@@ -381,9 +381,9 @@ Six codes; an exhaustive `switch` on `error.code` needs exactly those six.
 | `success` | — | A token was minted | yes | Send `token` to your backend |
 | `validation_error` | `invalid_card_data` | A field is empty, malformed, or of a network you do not accept — locally, or as judged by the vault | local: no · vault: yes | Nothing — the fields already show the reason |
 | `not_ready` | `not_ready` | A required field is missing or duplicated | no | Fix the layout |
-| `error` | `invalid_session` | No `session`, an unreadable one, another vault's session, or the vault rejected the credential | local: no · vault: yes | Fetch a fresh session from your backend |
+| `error` | `invalid_session` | No `session`, an unreadable one, another vault's session, or a credential that cannot be decoded | no | Fetch a fresh session from your backend |
 | `error` | `unsupported_configuration` | `vaultEndpoint.baseUrl` failed validation | no | Fix the URL |
-| `error` | `server_error` | The vault answered with a failure or an unreadable body | yes | Let the customer retry |
+| `error` | `server_error` | The vault refused the request (any HTTP error, including an expired or already-used session) or answered with an unreadable body | yes | Let the customer retry; if it persists, fetch a fresh session |
 | `error` | `unknown_outcome` | The request did not complete (network failure, abort, unmount) | unknown | Safe to retry `tokenize()` — nothing is charged by this call |
 
 ### The messages
@@ -791,6 +791,106 @@ malicious code executing inside your own application process.
 
 ---
 
+## 19. Saved cards — `HyperswitchVaultSavedCardForm`
+
+A second, smaller component for a card the customer has **already** saved and must re-verify with
+its CVC. One field, one operation, the same result type as `tokenize()`. It is on the package root
+only. Decision record: [ADR-0008](adr/0008-saved-card-cvc-flow.md).
+
+### When to use it
+
+Your app calls `GET /v1/payment-method-sessions/{id}/list-payment-methods` with the session's
+`vault_details.vault_data.sdk_authorization` and reads `requires_cvv` off each
+`customer_payment_methods[]` entry. `false`: charge the listed token directly, no component.
+`true`: mount this component with that entry's token. The component does not take `requires_cvv`.
+
+### Props
+
+| Prop | Type | Required | Effect |
+| --- | --- | --- | --- |
+| `session` | `MerchantSession` | yes | The **same** session `list-payment-methods` was called with. Listing is what associates the saved cards with it |
+| `environment` | `VaultEnvironment` | yes | Selects the vault host. Not inferable from the session |
+| `paymentMethodToken` | `string` | yes | One entry's token from that listing. Never empty — see §19 behaviour |
+| `cardNetwork` | `string` | no | A hint selecting the CVC length rule. Pass the entry's `card_network` (`"Visa"`, `"AmericanExpress"`, …; `"American Express"` and `"amex"` are understood). Absent or unrecognised: three **or** four digits are accepted |
+| `vaultEndpoint` | `VaultEndpointConfig` | no | A self-hosted vault host, validated as in §15 |
+| `appearance` | `VaultFormAppearance` | no | As §8 |
+| `cvcOptions` | `VaultCVCOptions` | no | As §9, for this one field: placeholder, label, `labelBehavior`, `errorDisplay`, `cvcIcon`, `unstyled`, accessibility text, `testID` |
+| `cvcStyles` | `VaultCVCStyles` | no | As §10, for this one field |
+| `containerStyle` | `StyleProp<ViewStyle>` | no | The outer box only |
+| `onStateChange` | `(state: VaultCVCState) => void` | no | The same snapshot a `CardCVCField` emits (§7). One on mount, then on every real change |
+
+No `children`, no `localisation`, no `disabled`. It renders its own field, uses the library's own
+messages, and is non-editable only while its own request is in flight.
+
+### The handle
+
+```ts
+type VaultSavedCardHandle = {
+  updateSavedPaymentMethod(): Promise<VaultTokenizeResult>;
+  reset(): void;
+  focus(): void;   // one field, so no argument
+  blur(): void;
+};
+```
+
+### `updateSavedPaymentMethod()`
+
+Takes no argument. In order — each gate answers **before** any request is sent:
+
+1. CVC well-formed for the network in force → else `validation_error`, and the field shows why.
+2. `paymentMethodToken` non-blank → else `not_ready`. On the wire an absent token mints a **new**
+   token, a different operation, so a blank one is never sent.
+3. Session usable (§2) → else `error / invalid_session`.
+4. `vaultEndpoint` (if given) valid → else `error / unsupported_configuration`.
+5. One request: `PUT {vault}/v1/payment-method-sessions/{id}/update-saved-payment-method` with
+   `{payment_method_token, payment_method_data: {card: {card_cvc}}}` and nothing else, authenticated
+   with the session's own credential.
+
+The response becomes `success` with **the token the response carries** — use that one, not the one
+you passed — or an `error`. It does not confirm a payment and it does not charge anything.
+
+| Status | `error.code` | When | Request sent? | What to do |
+| --- | --- | --- | --- | --- |
+| `success` | — | The CVC is now held under the token, for **15 minutes** | yes | Send `token` to your backend; it confirms within the window |
+| `validation_error` | `invalid_card_data` | The CVC is empty or the wrong length for the network | no | Nothing — the field shows the reason |
+| `not_ready` | `not_ready` | `paymentMethodToken` is empty or blank | no | Mount with a token from `list-payment-methods` |
+| `error` | `invalid_session` | No usable `session` | no | Fetch a fresh session and list again |
+| `error` | `unsupported_configuration` | `vaultEndpoint.baseUrl` failed validation | no | Fix the URL |
+| `error` | `server_error` | The vault refused the request — including a token that this session did not list — or answered without the token | yes | List again with a fresh session and retry |
+| `error` | `unknown_outcome` | The request did not complete, was aborted, or the component unmounted | unknown | Safe to retry: the update is idempotent and nothing is charged |
+
+Messages are the library's own, as in §6. The one message specific to this operation:
+`not_ready` → *No saved payment-method token was supplied.*
+
+### Behaviour
+
+| Situation | Behaviour |
+| --- | --- |
+| Called again while a call is in flight | The **same** promise; no second request |
+| Called again after a settled call | A fresh request. The update is idempotent and restarts the 15-minute window |
+| `paymentMethodToken` or `session` changes | The CVC is cleared and an in-flight request aborted (it resolves `unknown_outcome`) |
+| `environment` or `vaultEndpoint` changes | An in-flight request is aborted; the CVC is **kept** — it describes the card, not the host |
+| `cardNetwork` changes | Re-validated and re-emitted without a keystroke; `state.valid` can flip either way |
+| `reset()` | Clears the CVC **and** aborts an in-flight request (unlike the card form's `reset()`) |
+| Unmount | Aborts an in-flight request; the promise resolves `unknown_outcome` |
+| No `onStateChange` | No snapshot is built at all |
+
+### What your backend does with the token
+
+The returned token is a CVC-bearing reference to the saved card. Your server places it on the
+payments confirm as `payment_method_data.vault_card_token.card_cvc`, together with the saved card's
+`payment_token`, using your secret key, within 15 minutes of the update. Confirm the exact body for
+your API version in the Hyperswitch API reference.
+
+### Enforcement
+
+`scripts/verify-saved-card.mjs` (in `yarn verify`) pins the method, the URL, the header set, the
+body, the one token path and every refusal against the compiled transport.
+`example/__tests__/savedCardCvc.test.tsx` covers the component: one input, the emitted state walked
+for leaks, and every row of the behaviour table.
+
+---
+
 ## Appendix — `HyperswitchVaultForm`
 
 A ready-made form that renders the four fields in a fixed layout, for integrations that do not want
@@ -819,3 +919,4 @@ names (`CardNumberWidget` …) are legacy aliases of the `*Field` components —
 | `docs/merchant-integration.md` | Backend setup and the end-to-end walkthrough |
 | `docs/control-surface.md` | What the library does and does not let you control, and why |
 | `docs/host-api-reference.md` | The `./host` entry the Hyperswitch checkout SDK uses — not needed for this integration |
+| `docs/adr/0008-saved-card-cvc-flow.md` | Why the saved-card CVC component looks the way it does, and the backend contract it was built against |

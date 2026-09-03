@@ -18,10 +18,10 @@ export const MERCHANT_SERVER_PORT = 3001;
  * (`ipconfig getifaddr en0` on macOS.) Both devices must be on the same network. Leave it null
  * otherwise; it exists so a device run needs no secret-bearing React Native .env.
  */
-export const LAN_OVERRIDE: string | null = null;
+// export const LAN_OVERRIDE: string | null = '';
 
 export const MERCHANT_BACKEND =
-  LAN_OVERRIDE ??
+  // LAN_OVERRIDE ??
   (Platform.OS === 'android'
     ? `http://10.0.2.2:${MERCHANT_SERVER_PORT}`
     : `http://localhost:${MERCHANT_SERVER_PORT}`);
@@ -33,8 +33,29 @@ export const MERCHANT_BACKEND =
  * comes back is the client-safe session response, which is handed to the provider untouched. The
  * app then calls `tokenize()` — nothing else on the merchant surface needs a credential.
  */
+/*
+ * React Native's Android networking sets NO connect or read timeout, so a host that silently drops
+ * packets — a phone pointed at the emulator-only 10.0.2.2, a LAN address behind a firewall — hangs
+ * the promise forever and the app shows a spinner with nothing to act on. Fifteen seconds is far
+ * longer than a healthy round trip and short enough to be read as "not reachable".
+ */
+export const SESSION_TIMEOUT_MS = 15_000;
+
 export async function fetchMerchantSession(): Promise<MerchantSession> {
-  const response = await fetch(`${MERCHANT_BACKEND}/vault-session`);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SESSION_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch(`${MERCHANT_BACKEND}/vault-session`, {signal: controller.signal});
+  } catch (error) {
+    const reason = controller.signal.aborted ? 'did not answer within 15 s' : 'could not be reached';
+    throw new Error(
+      `The merchant server at ${MERCHANT_BACKEND} ${reason}. ` +
+        'Is `yarn server` running? On a physical device set LAN_OVERRIDE in src/merchantServer.ts.',
+    );
+  } finally {
+    clearTimeout(timer);
+  }
   if (!response.ok) {
     /*
      * The server reached Hyperswitch and was refused. Its body carries no detail on purpose — the

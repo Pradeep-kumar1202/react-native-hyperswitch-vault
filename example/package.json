@@ -13,7 +13,6 @@
     "link": "node scripts/link-library.mjs"
   },
   "dependencies": {
-    "@juspay-tech/react-native-hyperswitch-scancard": "^0.2.3",
     "@juspay-tech/react-native-hyperswitch-vault": "link:..",
     "react": "19.0.0",
     "react-native": "0.79.7"

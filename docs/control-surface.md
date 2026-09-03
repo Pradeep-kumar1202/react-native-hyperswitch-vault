@@ -20,11 +20,13 @@ supported way to do it?
 | Focus one | yes | `focus(field)` on the handle |
 | Clear them | yes | `reset()` on the handle |
 | Get a payment-method token | yes | `tokenize()` — Flow 1 |
+| Collect the CVC for a card you already saved, and get a token to charge it with | yes | `HyperswitchVaultSavedCardForm` + `updateSavedPaymentMethod()` ([ADR-0008](adr/0008-saved-card-cvc-flow.md)) |
 | Confirm a payment with a tokenized card | checkout SDK only | `confirmPayment({cardSource: {type_: 'vault', session}})` on the `./host` entry — Flow 2 |
 | Confirm a payment WITHOUT tokenizing | checkout SDK only | `confirmPayment({cardSource: {type_: 'direct'}})` on the `./host` entry — Flow 3 |
 | Choose whether the card is tokenized | yes | `cardSource` — required, no default |
 | Know whether an operation is running | yes | track your own promise |
 | Read the PAN, expiry, CVC or cardholder name | **no** | there is no accessor, in any form |
+| Tell the saved-card component whether the card needs a CVC | **no** | you read `requires_cvv` off `list-payment-methods` and decide whether to mount it |
 | Set a card value | **no** | the fields are not controlled inputs |
 | Subscribe to typing, focus, validity or brand | **yes** | `onStateChange` per field, `onFormStateChange` for the form ([ADR-0005](adr/0005-restore-card-safe-state-emission.md)) |
 | Pre-disable a button from library state | **no** | call the operation; it answers without a request |
@@ -81,7 +83,19 @@ Field widgets take their own ref with a smaller handle:
 type VaultFieldHandle = {focus(): void; blur(): void};
 ```
 
-Neither exposes a value, in either direction.
+The saved-card component takes a handle of its own — one operation, and the same result type as
+`tokenize()`:
+
+```ts
+type VaultSavedCardHandle = {
+  updateSavedPaymentMethod(): Promise<VaultTokenizeResult>;
+  reset(): void;
+  focus(): void;
+  blur(): void;
+};
+```
+
+None of the three exposes a value, in either direction.
 
 ### Concurrency
 
@@ -92,6 +106,9 @@ Neither exposes a value, in either direction.
   the customer may still be editing.
 - `reset()` is ignored while an operation is in flight.
 - Replacing the `session` prop or unmounting aborts in-flight work and discards any cached token.
+- On the saved-card component, `reset()` and a `paymentMethodToken` or `session` change abort in-flight
+  work AND clear the CVC; an `environment` or `vaultEndpoint` change aborts but keeps it. There is no
+  cached result to discard: the update is idempotent.
 
 ---
 
@@ -148,6 +165,7 @@ A library-owned field like the other three.
 | **Flow 1** (`tokenize`) | session, presentation | `{status: 'success', token}` or a safe error |
 | **Flow 2** (`confirmPayment`, vault source — `./host`) | session, presentation, non-card confirmation input | a navigation decision or a safe error — no token |
 | **Flow 3** (`confirmPayment`, direct source — `./host`) | presentation, non-card confirmation input | a navigation decision or a safe error — no token |
+| **Saved card** (`updateSavedPaymentMethod`) | session, a listed token, a network hint, presentation | `{status: 'success', token}` or a safe error — the same union as Flow 1 |
 
 Non-card confirmation input is narrow by construction: `billing` and `nickName` and nothing else. A
 card key at any depth fails the call with `forbidden_card_data` before any request is made.
@@ -166,4 +184,5 @@ Every claim on this page is gated, not asserted:
 | Every outcome maps to a safe result with a fixed message | `verify-result-mapping.mjs`, `verify-final-confirm.mjs` |
 | Only `.` and `./package.json` are published | `verify-package-contents.mjs`, `verify-publishable.mjs` |
 | The three flows are documented with their own contracts | `verify-flow-docs.mjs` |
+| The saved-card request is exactly ADR-0008's: `PUT`, the route, the raw credential, the two-member body, the one token path | `verify-saved-card.mjs` |
 | Controlled values and removed callbacks are compile errors | `type-tests/consumer.tsx` |

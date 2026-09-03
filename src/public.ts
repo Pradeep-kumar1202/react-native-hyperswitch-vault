@@ -61,6 +61,10 @@ import type {
 import { make as RawCardExpiryWidget } from './CardExpiryWidget.gen';
 import { make as RawCardCVCWidget } from './CardCVCWidget.gen';
 import { make as RawCardholderNameWidget } from './CardholderNameWidget.gen';
+import {
+  make as RawHyperswitchVaultSavedCardForm,
+  type Props as SavedCardPropsInternal,
+} from './HyperswitchVaultSavedCardForm.gen';
 import type {
   localisation as LocalisationInternal,
   localisationMessages as LocalisationMessagesInternal,
@@ -289,6 +293,50 @@ export const CardholderNameWidget = RawCardholderNameWidget as unknown as VaultS
   cardholderNameOptions,
   cardholderNameState
 >;
+
+/*
+ * ── The saved-card CVC component (ADR-0008) ──────────────────────────────────
+ *
+ * A customer paying with a card the merchant has ALREADY saved is often asked for the CVC again.
+ * The merchant lists their saved methods (`GET …/list-payment-methods`, with the same session),
+ * reads `requires_cvv` off each entry, and for a card that needs one mounts this component with
+ * that entry's token. It renders the library's own CVC field — the same implementation the
+ * new-card form renders — and `updateSavedPaymentMethod()` sends the CVC to the vault and resolves
+ * to the token the RESPONSE carries. The merchant's backend uses that returned token for the final
+ * confirmation, within the vault's 15-minute CVC window; nothing here confirms a payment.
+ *
+ * The result is the SAME `VaultTokenizeResult` as `tokenize()`: `token` only on success, the same
+ * six codes. The emitted state is the SAME `VaultCVCState` the CVC field emits: no new type, no
+ * `canSubmit`, no `brand` — `state.valid` already answers "may I enable Pay?", and the network hint
+ * cannot be reflected back because the type structurally has no member for it.
+ *
+ * No `children`: the component owns its one field, so a merchant cannot mount zero or two. No
+ * `requires_cvv`: by the time this is on screen the merchant has read that flag and decided.
+ */
+export type VaultSavedCardHandle = {
+  /**
+   * Validate the CVC, send it to the vault, and resolve to the token the response carries. Never
+   * confirms a payment; never charges anything.
+   */
+  updateSavedPaymentMethod(): Promise<VaultTokenizeResult>;
+  /** Clear the CVC and abandon any request in flight. */
+  reset(): void;
+  /** One field, so no argument. */
+  focus(): void;
+  blur(): void;
+};
+
+/*
+ * The generated props, unmodified: `session`, `environment` and `paymentMethodToken` are required,
+ * the rest optional. `cardNetwork` is a hint selecting the CVC length rule — pass `card_network`
+ * from `list-payment-methods`, or `state.valid` turns true at three digits on an Amex card.
+ */
+export type HyperswitchVaultSavedCardFormProps = SavedCardPropsInternal;
+
+export const HyperswitchVaultSavedCardForm =
+  RawHyperswitchVaultSavedCardForm as unknown as React.ForwardRefExoticComponent<
+    HyperswitchVaultSavedCardFormProps & React.RefAttributes<VaultSavedCardHandle>
+  >;
 
 /*
  * ── Canonical field names (ADR-0002 §1) ──────────────────────────────────────
