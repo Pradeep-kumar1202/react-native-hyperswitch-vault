@@ -16,7 +16,7 @@
  */
 
 import { make as HyperswitchVaultFormImpl } from './HyperswitchVaultForm.bs.js';
-import { make as HyperswitchVaultFormProviderImpl } from './HyperswitchVaultFormProvider.bs.js';
+import { make as CardFormImpl } from './CardForm.bs.js';
 import { make as CardNumberWidgetImpl } from './CardNumberWidget.bs.js';
 import { make as CardExpiryWidgetImpl } from './CardExpiryWidget.bs.js';
 import { make as CardCVCWidgetImpl } from './CardCVCWidget.bs.js';
@@ -25,7 +25,7 @@ import { make as HyperswitchVaultSavedCardFormImpl } from './HyperswitchVaultSav
 
 /* Existing published names — unchanged, not deprecated. */
 export const HyperswitchVaultForm = HyperswitchVaultFormImpl;
-export const HyperswitchVaultFormProvider = HyperswitchVaultFormProviderImpl;
+export const CardForm = CardFormImpl;
 export const CardNumberWidget = CardNumberWidgetImpl;
 export const CardExpiryWidget = CardExpiryWidgetImpl;
 export const CardCVCWidget = CardCVCWidgetImpl;
@@ -46,7 +46,7 @@ export const HyperswitchVaultSavedCardForm = HyperswitchVaultSavedCardFormImpl;
 /* Convenience namespace (ADR-0002 §2). */
 export const HyperswitchVault = {
   CardForm: HyperswitchVaultFormImpl,
-  Form: HyperswitchVaultFormProviderImpl,
+  Form: CardFormImpl,
   CardNumber: CardNumberWidgetImpl,
   Expiry: CardExpiryWidgetImpl,
   CVC: CardCVCWidgetImpl,

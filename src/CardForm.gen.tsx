@@ -1,11 +1,11 @@
-/* TypeScript file generated from HyperswitchVaultFormProvider.res by genType. */
+/* TypeScript file generated from CardForm.res by genType. */
 
 /* eslint-disable */
 /* tslint:disable */
 
 import * as React from 'react';
 
-import * as HyperswitchVaultFormProviderJS from './HyperswitchVaultFormProvider.bs.js';
+import * as CardFormJS from './CardForm.bs.js';
 
 import type {appearance as VaultFormOptions_appearance} from './VaultFormOptions.gen';
 
@@ -55,4 +55,4 @@ export const make: React.ComponentType<{
   readonly session?: VaultFormOptions_vaultSession; 
   readonly unstyled?: boolean; 
   readonly vaultEndpoint?: VaultEndpoint_vaultEndpointConfig
-}> = HyperswitchVaultFormProviderJS.make as any;
+}> = CardFormJS.make as any;

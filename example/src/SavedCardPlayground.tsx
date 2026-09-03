@@ -17,6 +17,7 @@
  */
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
+import {listSavedCards, type SavedCard} from './savedCards';
 import {
   HyperswitchVaultSavedCardForm,
   type MerchantSession,
@@ -33,12 +34,6 @@ const BRAND = '#0B5FBF';
 const LOG_LIMIT = 12;
 
 /* The library's own vault hosts, per environment — only used for the merchant's listing call. */
-const VAULT_HOSTS: Record<VaultEnvironment, string> = {
-  sandbox: 'https://beta.hyperswitch.io/api',
-  integration: 'https://dev.hyperswitch.io/api',
-  production: 'https://checkout.hyperswitch.io/api',
-};
-
 /* ── Fixtures a chip can switch on ──────────────────────────────────────── */
 
 const playgroundAppearance: VaultFormAppearance = {
@@ -77,67 +72,6 @@ const brokenSession: MerchantSession = {
 /* ── The merchant's listing call ────────────────────────────────────────── */
 
 /* base64 → text, without Buffer or atob so it runs on every React Native version. */
-/* eslint-disable no-bitwise */
-const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-const fromBase64 = (input: string): string => {
-  const clean = input.replace(/[\s=]/g, '').replace(/-/g, '+').replace(/_/g, '/');
-  let out = '';
-  let buffer = 0;
-  let bits = 0;
-  for (const symbol of clean) {
-    const value = B64.indexOf(symbol);
-    if (value < 0) {return '';}
-    buffer = (buffer << 6) | value;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      out += String.fromCharCode((buffer >> bits) & 0xff);
-    }
-  }
-  return out;
-};
-/* eslint-enable no-bitwise */
-
-const sessionIdOf = (session: MerchantSession): string | null => {
-  const authorization = session.vault_details?.vault_data?.sdk_authorization;
-  if (typeof authorization !== 'string') {return null;}
-  const pair = fromBase64(authorization)
-    .split(',')
-    .map(part => part.trim())
-    .find(part => part.startsWith('payment_method_session_id='));
-  return pair ? pair.slice('payment_method_session_id='.length) : null;
-};
-
-type SavedCard = {
-  token: string;
-  network: string;
-  last4: string;
-  requiresCvc: boolean;
-};
-
-const listSavedCards = async (session: MerchantSession, environment: VaultEnvironment): Promise<SavedCard[]> => {
-  const authorization = session.vault_details?.vault_data?.sdk_authorization;
-  const sessionId = sessionIdOf(session);
-  if (typeof authorization !== 'string' || !sessionId) {
-    throw new Error('the session carries no payment_method_session_id');
-  }
-  const response = await fetch(
-    `${VAULT_HOSTS[environment]}/v1/payment-method-sessions/${encodeURIComponent(sessionId)}/list-payment-methods`,
-    {headers: {Authorization: authorization}},
-  );
-  if (!response.ok) {throw new Error(`list-payment-methods answered HTTP ${response.status}`);}
-  const body = (await response.json()) as {customer_payment_methods?: Array<Record<string, any>>};
-  return (body.customer_payment_methods ?? [])
-    .filter(entry => (entry.payment_method ?? entry.payment_method_type) === 'card')
-    .map(entry => ({
-      token: String(entry.payment_method_token ?? entry.payment_token ?? ''),
-      network: String(entry.card?.card_network ?? ''),
-      last4: String(entry.card?.last4_digits ?? entry.card?.last4 ?? '????'),
-      requiresCvc: entry.requires_cvv === true,
-    }))
-    .filter(card => card.token.length > 0);
-};
-
 /* ── Tri-state choices: "unset" leaves the prop undefined ───────────────── */
 
 type Tri<T extends string> = T | 'unset';

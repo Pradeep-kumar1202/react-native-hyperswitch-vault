@@ -1,12 +1,12 @@
 /**
- * The props shared by `HyperswitchVaultFormProvider` and the ready-made `HyperswitchVaultForm`,
+ * The props shared by `CardForm` and the ready-made `HyperswitchVaultForm`,
  * every one unset by default. Example code only.
  *
  * @format
  */
 import React from 'react';
 import type {
-  HyperswitchVaultFormProviderProps,
+  CardFormProps,
   MerchantSession,
   VaultCardholderNameMode,
   VaultEnvironment,
@@ -56,7 +56,7 @@ export const emptyProviderDraft = (): ProviderDraft => ({
   listen: true,
 });
 
-export type ProviderProps = Omit<HyperswitchVaultFormProviderProps, 'children'>;
+export type ProviderProps = Omit<CardFormProps, 'children'>;
 
 export const providerPropsOf = (
   d: ProviderDraft,

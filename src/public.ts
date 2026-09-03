@@ -34,10 +34,10 @@ import './jsx-global';
 import type * as React from 'react';
 import { make as RawHyperswitchVaultForm, type Props as FormPropsInternal } from './HyperswitchVaultForm.gen';
 import {
-  make as RawHyperswitchVaultFormProvider,
+  make as RawCardForm,
   type Props as ProviderPropsInternal,
   type widgetHandle,
-} from './HyperswitchVaultFormProvider.gen';
+} from './CardForm.gen';
 import { make as RawCardNumberWidget } from './CardNumberWidget.gen';
 import type {
   fieldStyles,
@@ -189,7 +189,7 @@ type MerchantProps<P> = Omit<P, 'eligibility' | 'cardholderName' | 'localisation
   readonly onFormStateChange?: (state: VaultFormState) => void;
 };
 
-export type HyperswitchVaultFormProviderProps = MerchantProps<ProviderPropsInternal>;
+export type CardFormProps = MerchantProps<ProviderPropsInternal>;
 export type HyperswitchVaultFormProps = MerchantProps<FormPropsInternal>;
 
 /* ── Component types ──────────────────────────────────────────────────────── */
@@ -261,8 +261,8 @@ export const HyperswitchVaultForm =
 
 export type WidgetHandle = widgetHandle;
 
-export const HyperswitchVaultFormProvider =
-  RawHyperswitchVaultFormProvider as unknown as VaultFormComponent<HyperswitchVaultFormProviderProps>;
+export const CardForm =
+  RawCardForm as unknown as VaultFormComponent<CardFormProps>;
 
 export const CardNumberWidget = RawCardNumberWidget as unknown as VaultStyledFieldComponent<
   fieldStyles,
@@ -412,7 +412,7 @@ export type VaultFieldArrangement = fieldArrangement;
 
 export declare const HyperswitchVault: {
   readonly CardForm: typeof HyperswitchVaultForm;
-  readonly Form: typeof HyperswitchVaultFormProvider;
+  readonly Form: typeof CardForm;
   readonly CardNumber: typeof CardNumberField;
   readonly Expiry: typeof CardExpiryField;
   readonly CVC: typeof CardCVCField;

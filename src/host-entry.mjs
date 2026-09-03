@@ -22,7 +22,7 @@
  */
 
 export {
-  HyperswitchVaultFormProvider,
+  CardForm,
   CardNumberField,
   CardExpiryField,
   CardCVCField,

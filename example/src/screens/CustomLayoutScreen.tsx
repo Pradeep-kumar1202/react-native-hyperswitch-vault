@@ -12,7 +12,7 @@ import {
   CardExpiryField,
   CardNumberField,
   CardholderNameField,
-  HyperswitchVaultFormProvider,
+  CardForm,
   type MerchantSession,
   type VaultFieldState,
   type VaultFormHandle,
@@ -99,10 +99,10 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
   return (
     <View style={s.screen}>
       <Text style={ui.title}>Custom layout</Text>
-      <Text style={ui.subtitle}>HyperswitchVaultFormProvider + the field widgets. Nothing is passed until you set it below.</Text>
+      <Text style={ui.subtitle}>CardForm + the field widgets. Nothing is passed until you set it below.</Text>
 
       {/* ── THE FORM ─────────────────────────────────────────────────────── */}
-      <HyperswitchVaultFormProvider ref={formRef} {...providerPropsOf(provider, session, onFormStateChange)}>
+      <CardForm ref={formRef} {...providerPropsOf(provider, session, onFormStateChange)}>
         {block('cardholderName')}
         {block('cardNumber')}
         {inlineRow ? (
@@ -116,7 +116,7 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
             {block('cvc')}
           </>
         )}
-      </HyperswitchVaultFormProvider>
+      </CardForm>
 
       {/* ── THE HANDLE ───────────────────────────────────────────────────── */}
       <Button label="tokenize()" primary onPress={actions.tokenize} busy={actions.busy} dim={!canSubmit} />

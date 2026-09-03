@@ -126,7 +126,7 @@ Used by the Hyperswitch payment sheet. The library performs the tokenization *an
 confirmation, then hands back what to do next. The intermediate token never leaves the library.
 
 ```ts
-import {HyperswitchVaultFormProvider, type HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
+import {CardForm, type HostFormHandle} from '@juspay-tech/react-native-hyperswitch-vault/host';
 
 const formRef = useRef<HostFormHandle>(null);   // the ./host handle carries confirmPayment
 
@@ -190,21 +190,21 @@ Place the fields yourself; everything else is identical.
 
 ```tsx
 import {
-  HyperswitchVaultFormProvider,
+  CardForm,
   CardholderNameField,
   CardNumberField,
   CardExpiryField,
   CardCVCField,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
-<HyperswitchVaultFormProvider ref={formRef} session={session} environment="sandbox">
+<CardForm ref={formRef} session={session} environment="sandbox">
   <CardholderNameField label="Name on card" />
   <CardNumberField placeholder="Card number" brandIconMode="standard" />
   <View style={{flexDirection: 'row', gap: 12}}>
     <CardExpiryField placeholder="MM / YY" />
     <CardCVCField placeholder="CVC" cvcIcon="default" />
   </View>
-</HyperswitchVaultFormProvider>;
+</CardForm>;
 ```
 
 Exactly one card-number, one expiry and one CVC field per provider. `CardholderNameField` is

@@ -43,7 +43,7 @@ let useRequired = (widgetName: string): contextValue =>
   switch React.useContext(context) {
   | Some(value) => value
   | None =>
-    Js.Exn.raiseError(widgetName ++ " must be rendered inside a <HyperswitchVaultFormProvider>.")
+    Js.Exn.raiseError(widgetName ++ " must be rendered inside a <CardForm>.")
   }
 
 module ErrorText = {

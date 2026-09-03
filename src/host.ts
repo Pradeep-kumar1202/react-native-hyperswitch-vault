@@ -30,10 +30,10 @@
 import './jsx-global';
 import type * as React from 'react';
 import {
-  make as RawHyperswitchVaultFormProvider,
+  make as RawCardForm,
   type Props as ProviderProps,
   type widgetHandle,
-} from './HyperswitchVaultFormProvider.gen';
+} from './CardForm.gen';
 import { make as RawCardNumberWidget } from './CardNumberWidget.gen';
 import { make as RawCardExpiryWidget } from './CardExpiryWidget.gen';
 import { make as RawCardCVCWidget } from './CardCVCWidget.gen';
@@ -154,10 +154,10 @@ export type VaultPaymentResult =
 
 /* ── Components: the root's objects, with the host's types ────────────────── */
 
-export type HyperswitchVaultFormProviderProps = ProviderProps;
+export type CardFormProps = ProviderProps;
 
-export const HyperswitchVaultFormProvider =
-  RawHyperswitchVaultFormProvider as unknown as React.ForwardRefExoticComponent<
+export const CardForm =
+  RawCardForm as unknown as React.ForwardRefExoticComponent<
     ProviderProps & React.RefAttributes<HostFormHandle>
   >;
 

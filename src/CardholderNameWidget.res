@@ -38,7 +38,7 @@ let make = React.forwardRef((
   let controller = ctx.controller
 
   React.useImperativeHandle0(ref, () => {
-    HyperswitchVaultFormProvider.focus: () =>
+    CardForm.focus: () =>
       VaultCardController.focusRef(controller.cardholderRef),
     blur: () => VaultCardController.blurRef(controller.cardholderRef),
   })

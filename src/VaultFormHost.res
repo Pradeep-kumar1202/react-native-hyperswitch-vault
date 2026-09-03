@@ -1,12 +1,12 @@
 
 let missingMessage = missing => {
   let names = missing->Array.map(VaultCardController.kindLabel)->Array.join(", ")
-  `${names} must be mounted inside <HyperswitchVaultFormProvider> before submit().`
+  `${names} must be mounted inside <CardForm> before submit().`
 }
 let duplicateMessage = (kind, count) =>
   `Only one ${VaultCardController.kindLabel(
       kind,
-    )} may be mounted per <HyperswitchVaultFormProvider>; found ${count->Int.toString}.`
+    )} may be mounted per <CardForm>; found ${count->Int.toString}.`
 
 let requiredKinds = [
   VaultCardController.CardNumberKind,
