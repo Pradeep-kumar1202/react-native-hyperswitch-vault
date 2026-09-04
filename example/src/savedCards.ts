@@ -6,12 +6,13 @@
  * decision:
  *
  *   requires_cvv: false  use the listed token directly; mount nothing
- *   requires_cvv: true   mount <HyperswitchVaultSavedCardForm /> with the token, collect the CVC,
- *                        and use the token `updateSavedPaymentMethod()` hands back
+ *   requires_cvv: true   mount <CardCVCField savedCard={{paymentToken, paymentMethodData:
+ *                        {card: {cardNetwork}}}} /> inside <CardForm>, collect the CVC, and use the
+ *                        token `tokenize()` hands back
  *
  * The library deliberately does not make this call or accept `requires_cvv` as a prop: by the time
  * the component is on screen the decision has been made, and a second copy of it would be a second
- * place for the two to disagree (ADR-0008).
+ * place for the two to disagree.
  *
  * It is done here, in the app, only because this example has no backend of its own beyond the
  * session server. A real integration makes this call server-side.
@@ -26,7 +27,7 @@ import {
 const VAULT_HOSTS: Record<VaultEnvironment, string> = {
   production: 'https://checkout.hyperswitch.io/api',
   sandbox: 'https://beta.hyperswitch.io/api',
-  integration: 'https://dev.hyperswitch.io/api',
+  integ: 'https://dev.hyperswitch.io/api',
 };
 
 export type SavedCard = {

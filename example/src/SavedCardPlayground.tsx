@@ -1,14 +1,15 @@
 /**
- * A playground for `<HyperswitchVaultSavedCardForm />` (ADR-0008).
+ * A playground for the saved-card CVC flow — the web SDK's shape: ONE `CardCVCField` mounted with
+ * `savedCard`, inside the same `CardForm` a new card uses, settled by the same `tokenize()`.
  *
- * Every prop the component takes is editable from this screen, and every one starts EMPTY or
- * unset, so what you see first is the bare component: no token, no network hint, no options,
- * default appearance. Fill a field or flip a chip and the component re-resolves live.
+ * Every prop is editable from this screen, and every one starts EMPTY or unset, so what you see
+ * first is the bare field: no token, no network hint, no options, default appearance. Fill a field
+ * or flip a chip and the component re-resolves live.
  *
  * "List saved cards" performs the merchant's own listing call — `GET …/list-payment-methods`
  * with the session's `sdk_authorization` — and lets you pick a card, which fills
- * `paymentMethodToken` and `cardNetwork` the way a real checkout would. That is the only network
- * call this screen makes besides the component's own update.
+ * `savedCard.paymentToken` and `savedCard.paymentMethodData.card.cardNetwork` the way a real
+ * checkout would. That is the only network call this screen makes besides the form's own update.
  *
  * This is example code: the returned token is rendered on screen for inspection, which a real app
  * must never do. Nothing here prints a CVC, a session authorization, or a PAN.
@@ -19,34 +20,42 @@ import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import {listSavedCards, type SavedCard} from './savedCards';
 import {
-  HyperswitchVaultSavedCardForm,
+  CardCVCField,
+  CardForm,
   type MerchantSession,
-  type VaultCVCOptions,
-  type VaultCVCState,
-  type VaultCVCStyles,
+  type VaultCardBrandIcon,
+  type VaultCardCVCOptions,
+  type VaultCardCVCStyles,
+  type VaultCardFormChange,
+  type VaultCVCIconDisplay,
   type VaultEnvironment,
+  type VaultErrorDisplay,
+  type VaultFieldChange,
+  type VaultFieldEvent,
   type VaultFormAppearance,
-  type VaultSavedCardHandle,
+  type VaultFormHandle,
+  type VaultLabelBehavior,
   type VaultTokenizeResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
 const BRAND = '#0B5FBF';
 const LOG_LIMIT = 12;
 
-/* The library's own vault hosts, per environment — only used for the merchant's listing call. */
 /* ── Fixtures a chip can switch on ──────────────────────────────────────── */
 
 const playgroundAppearance: VaultFormAppearance = {
-  primaryColor: BRAND,
-  textColor: '#0B1220',
-  placeholderColor: '#94A3B8',
-  borderColor: '#D7E0E5',
-  errorColor: '#DC2626',
-  borderRadius: 12,
-  inputHeight: 56,
+  variables: {
+    colorPrimary: BRAND,
+    colorText: '#0B1220',
+    colorTextPlaceholder: '#94A3B8',
+    borderColor: '#D7E0E5',
+    colorDanger: '#DC2626',
+    borderRadius: 12,
+    inputFieldHeight: 56,
+  },
 };
 
-const playgroundCvcStyles: VaultCVCStyles = {
+const playgroundCvcStyles: VaultCardCVCStyles = {
   container: {borderWidth: 2, borderColor: '#0F766E', borderRadius: 16, backgroundColor: '#F0FBF9'},
   input: {fontSize: 17, fontWeight: '600'},
   label: {color: '#0F766E', fontWeight: '700'},
@@ -54,61 +63,49 @@ const playgroundCvcStyles: VaultCVCStyles = {
   accessory: {opacity: 0.85},
 };
 
-const playgroundContainerStyle = {
-  padding: 10,
-  borderRadius: 14,
-  borderWidth: 1,
-  borderStyle: 'dashed' as const,
-  borderColor: '#7C3AED',
-  backgroundColor: '#FAF5FF',
-};
-
-/* A session this component must refuse (`invalid_session`): another vault's. */
+/* A session this form must refuse (`invalid_session`): another vault's. */
 const brokenSession: MerchantSession = {
   session_token: [],
   vault_details: {vault_type: 'vgs', vault_data: {sdk_authorization: 'not-a-hyperswitch-session'}},
 };
 
-/* ── The merchant's listing call ────────────────────────────────────────── */
-
-/* base64 → text, without Buffer or atob so it runs on every React Native version. */
 /* ── Tri-state choices: "unset" leaves the prop undefined ───────────────── */
 
 type Tri<T extends string> = T | 'unset';
-const ENVIRONMENTS: VaultEnvironment[] = ['sandbox', 'production', 'integration'];
-const LABEL_BEHAVIORS: Array<Tri<'none' | 'static' | 'floating'>> = ['unset', 'none', 'static', 'floating'];
-const ERROR_DISPLAYS: Array<Tri<'none' | 'inline'>> = ['unset', 'none', 'inline'];
-const CVC_ICONS: Array<Tri<'none' | 'default'>> = ['unset', 'none', 'default'];
+const ENVIRONMENTS: VaultEnvironment[] = ['sandbox', 'production', 'integ'];
+const LABEL_BEHAVIORS: Array<Tri<VaultLabelBehavior>> = ['unset', 'above', 'floating', 'never'];
+const ERROR_DISPLAYS: Array<Tri<VaultErrorDisplay>> = ['unset', 'none', 'colorOnly', 'inline'];
+const CVC_ICONS: Array<Tri<VaultCVCIconDisplay>> = ['unset', 'hidden', 'default'];
 const UNSTYLED: Array<Tri<'true' | 'false'>> = ['unset', 'true', 'false'];
 const NETWORK_HINTS = ['Visa', 'Mastercard', 'American Express', 'amex', 'RuPay', 'NotARealNetwork'];
+void (0 as unknown as VaultCardBrandIcon);
 
 const orUndefined = (text: string) => (text.trim().length > 0 ? text : undefined);
 
 type Outcome = {kind: 'idle'} | {kind: 'success'; token: string} | {kind: 'failed'; line: string};
 
 export function SavedCardPlayground({session}: {session: MerchantSession}) {
-  const ref = useRef<VaultSavedCardHandle>(null);
+  const ref = useRef<VaultFormHandle>(null);
 
   /* ── the props, every one empty or unset to begin with ─────────────────── */
   const [environment, setEnvironment] = useState<VaultEnvironment>('production');
   const [useBrokenSession, setUseBrokenSession] = useState(false);
-  const [paymentMethodToken, setPaymentMethodToken] = useState('');
+  const [paymentToken, setPaymentToken] = useState('');
   const [cardNetwork, setCardNetwork] = useState('');
   const [vaultBaseUrl, setVaultBaseUrl] = useState('');
   const [withAppearance, setWithAppearance] = useState(false);
   const [withCvcStyles, setWithCvcStyles] = useState(false);
-  const [withContainerStyle, setWithContainerStyle] = useState(false);
   const [listening, setListening] = useState(true);
 
-  /* cvcOptions, member by member */
+  /* the field's options, member by member */
   const [placeholder, setPlaceholder] = useState('');
   const [label, setLabel] = useState('');
   const [accessibilityLabel, setAccessibilityLabel] = useState('');
   const [accessibilityHint, setAccessibilityHint] = useState('');
   const [testID, setTestID] = useState('');
-  const [labelBehavior, setLabelBehavior] = useState<Tri<'none' | 'static' | 'floating'>>('unset');
-  const [errorDisplay, setErrorDisplay] = useState<Tri<'none' | 'inline'>>('unset');
-  const [cvcIcon, setCvcIcon] = useState<Tri<'none' | 'default'>>('unset');
+  const [labelBehavior, setLabelBehavior] = useState<Tri<VaultLabelBehavior>>('unset');
+  const [errorDisplay, setErrorDisplay] = useState<Tri<VaultErrorDisplay>>('unset');
+  const [cvcIcon, setCvcIcon] = useState<Tri<VaultCVCIconDisplay>>('unset');
   const [unstyled, setUnstyled] = useState<Tri<'true' | 'false'>>('unset');
 
   /* ── observation ───────────────────────────────────────────────────────── */
@@ -118,51 +115,57 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
   }, []);
   const [outcome, setOutcome] = useState<Outcome>({kind: 'idle'});
   const [busy, setBusy] = useState(false);
-  const [valid, setValid] = useState(false);
+  const [canSubmit, setCanSubmit] = useState(false);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [listing, setListing] = useState<string | null>(null);
 
-  const onStateChange = useCallback(
-    (state: VaultCVCState) => {
-      setValid(state.valid);
+  const onFieldChange = useCallback(
+    (e: VaultFieldChange) => {
       append(
-        `${state.field} · ${state.status} valid=${state.valid} touched=${state.touched}` +
-          ` focused=${state.focused}` +
-          (state.error ? ` error=${state.error.code}: ${state.error.message}` : ''),
+        `change ${e.elementType} · empty=${e.empty} complete=${e.complete} valid=${e.valid} touched=${e.touched}` +
+          (e.brand ? ` brand=${e.brand}` : '') +
+          (e.error ? ` error=${e.errorCode}: ${e.error}` : ''),
       );
     },
     [append],
   );
+  const onFieldEvent = useCallback(
+    (name: string) => (e: VaultFieldEvent) => append(`${name} ${e.elementType}`),
+    [append],
+  );
+  const onFormChange = useCallback(
+    (e: VaultCardFormChange) => {
+      setCanSubmit(e.canSubmit);
+      append(`${e.eventName} · session=${e.sessionStatus} fieldsReady=${e.fieldsReady} canSubmit=${e.canSubmit}`);
+    },
+    [append],
+  );
 
-  const cvcOptions = useMemo<VaultCVCOptions | undefined>(() => {
-    const options: VaultCVCOptions = {
-      placeholder: orUndefined(placeholder),
-      label: orUndefined(label),
-      accessibilityLabel: orUndefined(accessibilityLabel),
-      accessibilityHint: orUndefined(accessibilityHint),
-      testID: orUndefined(testID),
-      labelBehavior: labelBehavior === 'unset' ? undefined : labelBehavior,
-      errorDisplay: errorDisplay === 'unset' ? undefined : errorDisplay,
-      cvcIcon: cvcIcon === 'unset' ? undefined : cvcIcon,
-      unstyled: unstyled === 'unset' ? undefined : unstyled === 'true',
-    };
-    /* All unset ⇒ pass no `cvcOptions` at all, so the default path is what gets exercised. */
-    return Object.values(options).some(v => v !== undefined) ? options : undefined;
-  }, [placeholder, label, accessibilityLabel, accessibilityHint, testID, labelBehavior, errorDisplay, cvcIcon, unstyled]);
+  const cvcOptions = useMemo<VaultCardCVCOptions>(() => ({
+    placeholder: orUndefined(placeholder),
+    label: orUndefined(label),
+    accessibilityLabel: orUndefined(accessibilityLabel),
+    accessibilityHint: orUndefined(accessibilityHint),
+    testID: orUndefined(testID),
+    labelBehavior: labelBehavior === 'unset' ? undefined : labelBehavior,
+    errorDisplay: errorDisplay === 'unset' ? undefined : errorDisplay,
+    cvcIcon: cvcIcon === 'unset' ? undefined : cvcIcon,
+    unstyled: unstyled === 'unset' ? undefined : unstyled === 'true',
+  }), [placeholder, label, accessibilityLabel, accessibilityHint, testID, labelBehavior, errorDisplay, cvcIcon, unstyled]);
 
   const describe = (result: VaultTokenizeResult | undefined) =>
     result === undefined
       ? 'not mounted'
       : result.status === 'success'
         ? 'success'
-        : `${result.status} / ${result.error.code} — ${result.error.message}`;
+        : `${result.status} / ${result.error.code} (${result.error.type}) — ${result.error.message}`;
 
   const update = useCallback(async () => {
     setBusy(true);
     setOutcome({kind: 'idle'});
-    const result = await ref.current?.updateSavedPaymentMethod();
+    const result = await ref.current?.tokenize();
     setBusy(false);
-    append(`updateSavedPaymentMethod() · ${describe(result)}`);
+    append(`tokenize() · ${describe(result)}`);
     if (result?.status === 'success') {setOutcome({kind: 'success', token: result.token});}
     else {setOutcome({kind: 'failed', line: describe(result)});}
   }, [append]);
@@ -172,12 +175,12 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
     const handle = ref.current;
     if (!handle) {return;}
     setBusy(true);
-    const first = handle.updateSavedPaymentMethod();
-    const second = handle.updateSavedPaymentMethod();
-    append(`updateSavedPaymentMethod() ×2 · ${first === second ? 'same promise' : 'DIFFERENT promises (bug)'}`);
+    const first = handle.tokenize();
+    const second = handle.tokenize();
+    append(`tokenize() ×2 · ${first === second ? 'same promise' : 'DIFFERENT promises (bug)'}`);
     const result = await first;
     setBusy(false);
-    append(`updateSavedPaymentMethod() ×2 · ${describe(result)}`);
+    append(`tokenize() ×2 · ${describe(result)}`);
     if (result.status === 'success') {setOutcome({kind: 'success', token: result.token});}
     else {setOutcome({kind: 'failed', line: describe(result)});}
   }, [append]);
@@ -185,7 +188,7 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
   const reset = useCallback(() => {
     ref.current?.reset();
     setOutcome({kind: 'idle'});
-    append('reset() · CVC cleared, any in-flight request aborted');
+    append('reset() · CVC cleared (no-op while a request is in flight)');
   }, [append]);
 
   const list = useCallback(async () => {
@@ -203,7 +206,7 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
   }, [session, environment, append]);
 
   const pick = (card: SavedCard) => {
-    setPaymentMethodToken(card.token);
+    setPaymentToken(card.token);
     setCardNetwork(card.network);
     append(`picked the ${card.network || 'unknown'} card ending ${card.last4} (requires_cvv=${card.requiresCvc})`);
   };
@@ -212,24 +215,31 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
     <View style={s.panel}>
       <Text style={s.heading}>Saved card — CVC only</Text>
       <Text style={s.hint}>
-        Every prop below starts empty. The component is mounted the whole time, so each change re-resolves live.
+        One CardCVCField with savedCard, inside CardForm, settled by tokenize(). Every prop below starts empty.
       </Text>
 
-      {/* ── THE COMPONENT ─────────────────────────────────────────────────── */}
+      {/* ── THE FORM ──────────────────────────────────────────────────────── */}
       <View style={s.stage}>
-        <HyperswitchVaultSavedCardForm
+        <CardForm
           ref={ref}
           session={useBrokenSession ? brokenSession : session}
           environment={environment}
-          paymentMethodToken={paymentMethodToken}
-          cardNetwork={orUndefined(cardNetwork)}
           vaultEndpoint={orUndefined(vaultBaseUrl) ? {baseUrl: vaultBaseUrl} : undefined}
           appearance={withAppearance ? playgroundAppearance : undefined}
-          cvcOptions={cvcOptions}
-          cvcStyles={withCvcStyles ? playgroundCvcStyles : undefined}
-          containerStyle={withContainerStyle ? playgroundContainerStyle : undefined}
-          onStateChange={listening ? onStateChange : undefined}
-        />
+          onChange={listening ? onFormChange : undefined}>
+          <CardCVCField
+            {...cvcOptions}
+            styles={withCvcStyles ? playgroundCvcStyles : undefined}
+            savedCard={{
+              paymentToken: orUndefined(paymentToken),
+              paymentMethodData: {card: {cardNetwork: orUndefined(cardNetwork)}},
+            }}
+            onReady={listening ? onFieldEvent('ready') : undefined}
+            onFocus={listening ? onFieldEvent('focus') : undefined}
+            onBlur={listening ? onFieldEvent('blur') : undefined}
+            onChange={listening ? onFieldChange : undefined}
+          />
+        </CardForm>
       </View>
 
       {/* ── THE HANDLE ────────────────────────────────────────────────────── */}
@@ -237,14 +247,13 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
         accessibilityRole="button"
         disabled={busy}
         onPress={update}
-        style={({pressed}) => [s.cta, pressed && s.ctaPressed, !valid && s.ctaIdle]}>
-        {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.ctaLabel}>updateSavedPaymentMethod()</Text>}
+        style={({pressed}) => [s.cta, pressed && s.ctaPressed, !canSubmit && s.ctaIdle]}>
+        {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={s.ctaLabel}>tokenize()</Text>}
       </Pressable>
       <View style={s.row}>
         <Secondary label="×2 (same promise?)" onPress={updateTwice} />
         <Secondary label="reset()" onPress={reset} />
-        <Secondary label="focus()" onPress={() => { ref.current?.focus(); append('focus()'); }} />
-        <Secondary label="blur()" onPress={() => { ref.current?.blur(); append('blur()'); }} />
+        <Secondary label="focus(cardCvc)" onPress={() => { ref.current?.focus('cardCvc'); append('focus(cardCvc)'); }} />
       </View>
 
       {outcome.kind === 'success' ? (
@@ -252,7 +261,7 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
           <Text style={s.resultTitle}>Token returned (demo only — never render this in a real app)</Text>
           <Text style={s.token} selectable>{outcome.token}</Text>
           <Text style={s.hint}>
-            {outcome.token === paymentMethodToken ? 'Same value as the input token.' : 'Differs from the input token.'} Use this one. The CVC is held for 15 minutes.
+            {outcome.token === paymentToken ? 'Same value as the input token.' : 'Differs from the input token.'} Use this one. The CVC is held for 15 minutes.
           </Text>
         </View>
       ) : null}
@@ -275,14 +284,14 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
 
       <Section title="environment (required)">
         <Chips options={ENVIRONMENTS} value={environment} onChange={setEnvironment} />
-        <Text style={s.hint}>Changing it mid-request aborts the request and KEEPS the CVC.</Text>
+        <Text style={s.hint}>Must match the merchant server's HYPERSWITCH_ENVIRONMENT.</Text>
       </Section>
 
-      <Section title="paymentMethodToken (required)">
-        <Field value={paymentMethodToken} onChange={setPaymentMethodToken} placeholder="empty → not_ready on submit" />
+      <Section title="savedCard.paymentToken (required for the update)">
+        <Field value={paymentToken} onChange={setPaymentToken} placeholder="empty → validation_error naming the fix" />
         <View style={s.row}>
           <Secondary label="List saved cards" onPress={list} />
-          <Secondary label="Clear" onPress={() => setPaymentMethodToken('')} />
+          <Secondary label="Clear" onPress={() => setPaymentToken('')} />
         </View>
         {listing ? <Text style={s.hint}>{listing}</Text> : null}
         {cards?.map(card => (
@@ -293,32 +302,31 @@ export function SavedCardPlayground({session}: {session: MerchantSession}) {
             <Text style={s.cardRowToken}>…{card.token.slice(-6)}</Text>
           </Pressable>
         ))}
-        <Text style={s.hint}>Changing the token mid-request aborts it and CLEARS the CVC.</Text>
+        <Text style={s.hint}>Changing the token clears the CVC: it was typed for a different card.</Text>
       </Section>
 
       {/* ── OPTIONAL PROPS ────────────────────────────────────────────────── */}
-      <Section title="cardNetwork (hint — selects the CVC length rule)">
+      <Section title="savedCard.paymentMethodData.card.cardNetwork (selects the CVC length rule)">
         <Field value={cardNetwork} onChange={setCardNetwork} placeholder="empty → 3 or 4 digits accepted" />
         <Chips options={NETWORK_HINTS} value={cardNetwork} onChange={v => setCardNetwork(v === cardNetwork ? '' : v)} />
-        <Text style={s.hint}>Amex needs 4. With no hint, valid turns true at 3 digits even on an Amex.</Text>
+        <Text style={s.hint}>Amex needs 4. With no hint, valid turns true at 3 digits even on an Amex. Case and aliases are canonicalised.</Text>
       </Section>
 
       <Section title="vaultEndpoint.baseUrl">
         <Field value={vaultBaseUrl} onChange={setVaultBaseUrl} placeholder="empty → the environment's host" autoCapitalize="none" />
-        <Text style={s.hint}>Try ftp://nope → unsupported_configuration. Changing it aborts and KEEPS the CVC.</Text>
+        <Text style={s.hint}>Try ftp://nope → unsupported_configuration.</Text>
       </Section>
 
-      <Section title="appearance / cvcStyles / containerStyle / onStateChange">
+      <Section title="appearance / styles / events">
         <View style={s.chips}>
           <Chip on={withAppearance} label={`appearance: ${withAppearance ? 'custom' : 'unset'}`} onPress={() => setWithAppearance(v => !v)} />
-          <Chip on={withCvcStyles} label={`cvcStyles: ${withCvcStyles ? 'custom' : 'unset'}`} onPress={() => setWithCvcStyles(v => !v)} />
-          <Chip on={withContainerStyle} label={`containerStyle: ${withContainerStyle ? 'dashed box' : 'unset'}`} onPress={() => setWithContainerStyle(v => !v)} />
-          <Chip on={listening} label={`onStateChange: ${listening ? 'attached' : 'none'}`} onPress={() => setListening(v => !v)} />
+          <Chip on={withCvcStyles} label={`styles: ${withCvcStyles ? 'custom' : 'unset'}`} onPress={() => setWithCvcStyles(v => !v)} />
+          <Chip on={listening} label={`events: ${listening ? 'attached' : 'none'}`} onPress={() => setListening(v => !v)} />
         </View>
-        <Text style={s.hint}>Re-attaching the listener yields exactly one snapshot of the current state.</Text>
+        <Text style={s.hint}>Re-attaching onChange yields exactly one snapshot of the current state.</Text>
       </Section>
 
-      <Section title="cvcOptions">
+      <Section title="field options">
         <Field value={placeholder} onChange={setPlaceholder} placeholder="placeholder (empty → library's; type a space for none)" />
         <Field value={label} onChange={setLabel} placeholder="label" />
         <Field value={accessibilityLabel} onChange={setAccessibilityLabel} placeholder="accessibilityLabel" />

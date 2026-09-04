@@ -13,11 +13,12 @@ import {
   type VaultFieldArrangement,
   type VaultFormFieldOptions,
   type VaultFormFieldStyles,
+  type VaultCardFormChange,
+  type VaultCardFormEvent,
   type VaultFormHandle,
   type VaultFormLayout,
-  type VaultFormState,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {logFormState} from '../eventLog';
+import {logFormChange, logFormReady} from '../eventLog';
 import {Button, Chips, Hint, Label, LogBox, ResultBox, Row, Section, compact, formLine, triValue, ui, useEventLog, type Tri} from '../harness/controls';
 import {FIELD_STYLE_PRESETS} from '../harness/fixtures';
 import {
@@ -39,8 +40,8 @@ const ARRANGEMENTS: Tri<VaultFieldArrangement>[] = ['unset', 'separate', 'fused'
 const TITLES: Record<FieldKind, string> = {
   cardholderName: 'fieldOptions.cardholderName / fieldStyles.cardholderName',
   cardNumber: 'fieldOptions.cardNumber / fieldStyles.cardNumber',
-  expiry: 'fieldOptions.expiry / fieldStyles.expiry',
-  cvc: 'fieldOptions.cvc / fieldStyles.cvc',
+  cardExpiry: 'fieldOptions.cardExpiry / fieldStyles.cardExpiry',
+  cardCvc: 'fieldOptions.cardCvc / fieldStyles.cardCvc',
 };
 
 export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
@@ -53,16 +54,23 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
   const [fields, setFields] = useState<Record<FieldKind, FieldDraft>>({
     cardholderName: emptyFieldDraft('cardholderName'),
     cardNumber: emptyFieldDraft('cardNumber'),
-    expiry: emptyFieldDraft('expiry'),
-    cvc: emptyFieldDraft('cvc'),
+    cardExpiry: emptyFieldDraft('cardExpiry'),
+    cardCvc: emptyFieldDraft('cardCvc'),
   });
-  const [formState, setFormState] = useState<VaultFormState | null>(null);
+  const [formState, setFormState] = useState<VaultCardFormChange | null>(null);
 
-  const onFormStateChange = useCallback(
-    (state: VaultFormState) => {
-      setFormState(state);
-      logFormState(state);
-      append(formLine(state));
+  const onFormChange = useCallback(
+    (e: VaultCardFormChange) => {
+      setFormState(e);
+      logFormChange(e);
+      append(formLine(e));
+    },
+    [append],
+  );
+  const onFormReady = useCallback(
+    (e: VaultCardFormEvent) => {
+      logFormReady(e);
+      append(`ready ${e.elementType}`);
     },
     [append],
   );
@@ -71,14 +79,14 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
 
   const fieldOptions: VaultFormFieldOptions | undefined = compact({
     cardNumber: cardNumberOptionsOf(fields.cardNumber),
-    expiry: plainOptionsOf(fields.expiry),
-    cvc: cvcOptionsOf(fields.cvc),
+    cardExpiry: plainOptionsOf(fields.cardExpiry),
+    cardCvc: cvcOptionsOf(fields.cardCvc),
     cardholderName: plainOptionsOf(fields.cardholderName),
   });
   const fieldStyles: VaultFormFieldStyles | undefined = compact({
     cardNumber: fields.cardNumber.styled ? FIELD_STYLE_PRESETS.cardNumber : undefined,
-    expiry: fields.expiry.styled ? FIELD_STYLE_PRESETS.expiry : undefined,
-    cvc: fields.cvc.styled ? FIELD_STYLE_PRESETS.cvc : undefined,
+    cardExpiry: fields.cardExpiry.styled ? FIELD_STYLE_PRESETS.cardExpiry : undefined,
+    cardCvc: fields.cardCvc.styled ? FIELD_STYLE_PRESETS.cardCvc : undefined,
     cardholderName: fields.cardholderName.styled ? FIELD_STYLE_PRESETS.cardholderName : undefined,
   });
 
@@ -91,7 +99,7 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
 
       <HyperswitchVaultForm
         ref={formRef}
-        {...providerPropsOf(provider, session, onFormStateChange)}
+        {...providerPropsOf(provider, session, onFormChange, onFormReady)}
         layout={triValue(layout)}
         fieldArrangement={triValue(arrangement)}
         fieldOptions={fieldOptions}
@@ -105,8 +113,8 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
       </Row>
       <Row>
         <Button label="focus(number)" onPress={() => actions.focus('cardNumber')} />
-        <Button label="focus(expiry)" onPress={() => actions.focus('expiry')} />
-        <Button label="focus(cvc)" onPress={() => actions.focus('cvc')} />
+        <Button label="focus(cardExpiry)" onPress={() => actions.focus('cardExpiry')} />
+        <Button label="focus(cardCvc)" onPress={() => actions.focus('cardCvc')} />
         <Button label="focus(name)" onPress={() => actions.focus('cardholderName')} />
       </Row>
 
@@ -121,7 +129,7 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
               ['complete', formState.complete],
               ['valid', formState.valid],
               ['canSubmit', formState.canSubmit],
-              ['brand', formState.brand],
+              ['brand', formState.payload.brand ?? '-'],
               ['name field', formState.fields.cardholderName !== undefined],
             ] as Array<[string, string | boolean]>
           ).map(([name, value]) => (
@@ -133,7 +141,7 @@ export function ReadyMadeFormScreen({session}: {session: MerchantSession}) {
           ))}
         </View>
       ) : (
-        <Hint text="onFormStateChange is detached: no form state is reported." />
+        <Hint text="onChange is detached: no form state is reported." />
       )}
 
       <Section title="Layout" badge={`${[layout, arrangement].filter(v => v !== 'unset').length} set`}>

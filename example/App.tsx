@@ -17,17 +17,15 @@ import {
   CardNumberField,
   // CardholderNameField,
   CardForm,
-  HyperswitchVaultSavedCardForm,
   type MerchantSession,
+  type VaultCardFormChange,
   type VaultFormHandle,
-  type VaultFormState,
-  type VaultSavedCardHandle,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {fetchMerchantSession} from './src/merchantServer';
 import {listSavedCards, type SavedCard} from './src/savedCards';
 
 
-// import {DevHarness} from './src/DevHarness';
+import {DevHarness} from './src/DevHarness';
 
 const ENVIRONMENT = 'sandbox' as const;
 
@@ -72,7 +70,7 @@ export default function App() {
 
   const activeSession: MerchantSession = session;
 
-  // return <DevHarness session={activeSession} />;
+  return <DevHarness session={activeSession} />;
 
   return (
     <SafeAreaView style={styles.root}>
@@ -123,8 +121,8 @@ function NewCardFlow({session}: {session: MerchantSession}) {
         ref={formRef}
         session={session}
         environment={ENVIRONMENT}
-        onFormStateChange={(state: VaultFormState) =>
-          setCanSave(state.canSubmit && state.sessionStatus === 'valid')
+        onChange={(e: VaultCardFormChange) =>
+          setCanSave(e.canSubmit && e.sessionStatus === 'valid')
         }>
         {/* <CardholderNameField /> */}
         <CardNumberField />
@@ -145,14 +143,15 @@ function NewCardFlow({session}: {session: MerchantSession}) {
 }
 
 /**
- * ONLY THE CVC, for a card the customer has already saved.
+ * ONLY THE CVC, for a card the customer has already saved — the web SDK's shape: one `CardCVCField`
+ * mounted with `savedCard`, inside the same `CardForm`, settled by the same `tokenize()`.
  *
  * The list comes from `list-payment-methods` — see src/savedCards.ts. Each entry carries
- * `requires_cvv`, and that flag alone decides whether this component is mounted at all: a card that
- * does not need one is paid with its listed token and no field is rendered.
+ * `requires_cvv`, and that flag alone decides whether the field is mounted at all: a card that does
+ * not need one is paid with its listed token and no field is rendered.
  */
 function SavedCardFlow({session}: {session: MerchantSession}) {
-  const savedRef = useRef<VaultSavedCardHandle>(null);
+  const savedRef = useRef<VaultFormHandle>(null);
   const [cards, setCards] = useState<SavedCard[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SavedCard | null>(null);
@@ -181,7 +180,7 @@ function SavedCardFlow({session}: {session: MerchantSession}) {
   const confirm = useCallback(async () => {
     setBusy(true);
     setOutcome({kind: 'idle'});
-    const result = await savedRef.current?.updateSavedPaymentMethod();
+    const result = await savedRef.current?.tokenize();
     setBusy(false);
 
     if (result === undefined) {
@@ -233,15 +232,19 @@ function SavedCardFlow({session}: {session: MerchantSession}) {
       {selected !== null && selected.requiresCvc ? (
         <>
           {/* Keyed by token so picking another card starts from an empty field. */}
-          <HyperswitchVaultSavedCardForm
+          <CardForm
             key={selected.token}
             ref={savedRef}
             session={session}
             environment={ENVIRONMENT}
-            paymentMethodToken={selected.token}
-            cardNetwork={selected.network || undefined}
-            onStateChange={state => setValid(state.valid)}
-          />
+            onChange={e => setValid(e.canSubmit)}>
+            <CardCVCField
+              savedCard={{
+                paymentToken: selected.token,
+                paymentMethodData: {card: {cardNetwork: selected.network || undefined}},
+              }}
+            />
+          </CardForm>
           <Cta label="Confirm" disabled={!valid} busy={busy} onPress={confirm} />
         </>
       ) : null}

@@ -1,34 +1,23 @@
 /**
- * A merchant-side logger for the library's state events.
+ * A merchant-side logger for the library's events.
  *
  * This is example code, not library code. It logs to the console on purpose — that is what a
- * merchant would do to watch the events arrive in Metro — and it is safe to do so precisely
- * because of what the snapshots are: `VaultFormState` and the four field states carry no PAN, no
- * BIN, no last four, no length, no expiry parts, no CVC and no token. Logging one cannot leak a
- * card value, which is the property `scripts/verify-event-surface.mjs` holds in place.
- *
- * `assertCardFree` is a belt-and-braces demonstration of that claim rather than a necessary check:
- * it walks whatever it is handed and refuses to print anything that looks card-shaped. If it ever
- * fires, the library has regressed and the gate missed it.
+ * merchant would do to watch the events arrive in Metro. Field events carry no card value. The
+ * form's `change` carries the web SDK's `cardDetailsChange` payload, which DOES include the BIN and
+ * the last four once typed, exactly as it does on the web; those two are the only card-derived
+ * strings, and `assertCardFree` lets them through by name while refusing anything PAN-shaped.
  *
  * @format
  */
 import type {
-  VaultFormState,
-  VaultCardNumberState,
-  VaultExpiryState,
-  VaultCVCState,
-  VaultCardholderNameState,
+  VaultCardFormChange,
+  VaultCardFormEvent,
+  VaultFieldChange,
+  VaultFieldEvent,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
-type AnyFieldState =
-  | VaultCardNumberState
-  | VaultExpiryState
-  | VaultCVCState
-  | VaultCardholderNameState;
-
 const CARD_SHAPED_KEY =
-  /^(pan|bin|iin|last4|lastFour|first6|value|rawValue|cvv|securityCode|expiryMonth|expiryYear|token|sdkAuthorization)$/;
+  /^(pan|iin|first6|value|rawValue|cvv|cvc|securityCode|token|sdkAuthorization)$/;
 
 /* A run of 12+ digits is a PAN however it got there. */
 const LOOKS_LIKE_A_PAN = /\d[\d ]{11,}/;
@@ -54,8 +43,8 @@ const emit = (label: string, payload: Record<string, unknown>) => {
 
 /*
  * Only the members that changed since the last snapshot are printed. The callbacks already
- * de-duplicate whole snapshots, but a form snapshot has fourteen members and reprinting all of them
- * on every keystroke buries the one that moved.
+ * de-duplicate whole snapshots, but reprinting every member on every keystroke buries the one
+ * that moved.
  */
 const lastByLabel = new Map<string, Record<string, unknown>>();
 
@@ -70,47 +59,49 @@ const changedOnly = (label: string, next: Record<string, unknown>) => {
   return delta;
 };
 
-/** Log one field's state. Pass the snapshot straight through from `onStateChange`. */
-export const logFieldState = (state: AnyFieldState) => {
+/** Log one field's `change`. Pass the event straight through from `onChange`. */
+export const logFieldChange = (e: VaultFieldChange) => {
   const flat: Record<string, unknown> = {
-    status: state.status,
-    valid: state.valid,
-    touched: state.touched,
-    focused: state.focused,
-    error: state.error ? `${state.error.code}: ${state.error.message}` : undefined,
+    empty: e.empty,
+    complete: e.complete,
+    valid: e.valid,
+    touched: e.touched,
+    brand: e.brand,
+    error: e.error ? `${e.errorCode}: ${e.error}` : undefined,
+    isCoBadged: e.isCoBadged,
   };
-  if (state.field === 'cardNumber') {
-    flat.brand = state.brand;
-    flat.isCoBadged = state.isCoBadged;
-  }
-  const delta = changedOnly(`field:${state.field}`, flat);
-  if (Object.keys(delta).length > 0) emit(`field ${state.field}`, delta);
+  const delta = changedOnly(`field:${e.elementType}`, flat);
+  if (Object.keys(delta).length > 0) emit(`change ${e.elementType}`, delta);
 };
 
-/** Log the whole-form state. Pass the snapshot straight through from `onFormStateChange`. */
-export const logFormState = (state: VaultFormState) => {
+/** Log a field's `ready` / `focus` / `blur`. */
+export const logFieldEvent = (name: 'ready' | 'focus' | 'blur') => (e: VaultFieldEvent) =>
+  emit(`${name} ${e.elementType}`, {});
+
+/** Log the form's `change`. Pass the event straight through from `onChange`. */
+export const logFormChange = (e: VaultCardFormChange) => {
   const flat: Record<string, unknown> = {
-    canSubmit: state.canSubmit,
-    valid: state.valid,
-    complete: state.complete,
-    fieldsReady: state.fieldsReady,
-    sessionStatus: state.sessionStatus,
-    submitting: state.submitting,
-    brand: state.brand,
-    isCoBadged: state.isCoBadged,
-    networkError: state.networkError
-      ? `${state.networkError.code}: ${state.networkError.message}`
-      : undefined,
+    canSubmit: e.canSubmit,
+    valid: e.valid,
+    complete: e.complete,
+    fieldsReady: e.fieldsReady,
+    sessionStatus: e.sessionStatus,
+    submitting: e.submitting,
+    isCoBadged: e.isCoBadged,
+    networkError: e.networkError ? `${e.networkError.code}: ${e.networkError.message}` : undefined,
+    payload: e.payload,
     fields: {
-      cardNumber: state.fields.cardNumber.status,
-      expiry: state.fields.expiry.status,
-      cvc: state.fields.cvc.status,
-      cardholderName: state.fields.cardholderName?.status,
+      cardNumber: e.fields.cardNumber.valid,
+      cardExpiry: e.fields.cardExpiry.valid,
+      cardCvc: e.fields.cardCvc.valid,
+      cardholderName: e.fields.cardholderName?.valid,
     },
   };
   const delta = changedOnly('form', flat);
-  if (Object.keys(delta).length > 0) emit('form', delta);
+  if (Object.keys(delta).length > 0) emit(`${e.eventName}`, delta);
 };
+
+export const logFormReady = (e: VaultCardFormEvent) => emit(`ready ${e.elementType}`, {});
 
 /** Reset between mounts so a remount logs a full snapshot again rather than an empty delta. */
 export const resetEventLog = () => lastByLabel.clear();

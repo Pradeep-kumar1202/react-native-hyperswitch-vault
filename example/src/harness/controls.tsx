@@ -7,8 +7,8 @@
 import React, {useCallback, useState} from 'react';
 import {ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View} from 'react-native';
 import type {
-  VaultFieldState,
-  VaultFormState,
+  VaultCardFormChange,
+  VaultFieldChange,
   VaultTokenizeResult,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 
@@ -226,17 +226,19 @@ export const useEventLog = (limit = 16) => {
   return {lines, append, clear};
 };
 
-export const formLine = (s: VaultFormState) =>
-  `form · session=${s.sessionStatus} fieldsReady=${s.fieldsReady} complete=${s.complete} valid=${s.valid}` +
-  ` submitting=${s.submitting} canSubmit=${s.canSubmit} brand=${s.brand}` +
-  (s.isCoBadged ? ' coBadged' : '') +
-  (s.networkError ? ` networkError=${s.networkError.code}` : '') +
-  (s.fields.cardholderName ? ' +name' : '');
+export const formLine = (e: VaultCardFormChange) =>
+  `${e.eventName} · session=${e.sessionStatus} fieldsReady=${e.fieldsReady} complete=${e.complete} valid=${e.valid}` +
+  ` submitting=${e.submitting} canSubmit=${e.canSubmit} brand=${e.payload.brand ?? '-'}` +
+  ` bin=${e.payload.bin ?? '-'} last4=${e.payload.last4 ?? '-'}` +
+  (e.isCoBadged ? ' coBadged' : '') +
+  (e.networkError ? ` networkError=${e.networkError.code}` : '') +
+  (e.fields.cardholderName ? ' +name' : '');
 
-export const fieldLine = (s: VaultFieldState) =>
-  `${s.field} · ${s.status} valid=${s.valid} touched=${s.touched} focused=${s.focused}` +
-  (s.field === 'cardNumber' ? ` brand=${s.brand}${s.isCoBadged ? ' coBadged' : ''}` : '') +
-  (s.error ? ` error=${s.error.code}: ${s.error.message}` : '');
+export const fieldLine = (e: VaultFieldChange) =>
+  `change ${e.elementType} · empty=${e.empty} complete=${e.complete} valid=${e.valid} touched=${e.touched}` +
+  (e.brand ? ` brand=${e.brand}` : '') +
+  (e.isCoBadged ? ' coBadged' : '') +
+  (e.error ? ` error=${e.errorCode}: ${e.error}` : '');
 
 export function LogBox({lines, onClear, title = 'Events (newest first) · also in Metro'}: {lines: string[]; onClear: () => void; title?: string}) {
   return (

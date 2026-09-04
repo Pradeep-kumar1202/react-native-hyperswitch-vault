@@ -13,8 +13,9 @@
  *
  * ── WHY EVERY DEFAULT IS ON ────────────────────────────────────────────────────────────────────
  *
- * The zero-configuration form renders a complete, usable field: placeholder, floating label, brand
- * mark, CVC glyph and inline errors. `unstyled` strips all of it back to a bare `TextInput`.
+ * The zero-configuration field renders a complete, usable input: placeholder, floating label, brand
+ * mark, CVC glyph, and the error tint (the ready-made form adds the message text). `unstyled`
+ * strips all of it back to a bare `TextInput`.
  *
  * This block used to argue the opposite, and the argument was coherent: the library owns the card
  * values, the merchant owns the checkout's appearance, so inheriting a presentation nobody asked
@@ -33,7 +34,11 @@
  */
 
 @genType
-type labelBehavior = [#none | #static | #floating]
+/*
+ * The SAME vocabulary as hyperswitch-web's `appearance.labels`: `above` sits over the box,
+ * `floating` lifts on focus, `never` draws no label. A field may override the form-wide value.
+ */
+type labelBehavior = [#above | #floating | #never]
 
 /*
  * THREE answers, because "show the error" is two independent decisions: tint the field, and print
@@ -64,14 +69,15 @@ type errorDisplay = [#none | #colorOnly | #inline]
  * An earlier revision of this reset added `brandIcon: 'none' | 'auto'` alongside the pre-existing
  * `appearance.brandIconMode`, which already had a `hidden` member. That gave two public controls
  * over the same element and two ways to spell "off" — `brandIcon: 'none'` and
- * `brandIconMode: 'hidden'` — with no defined answer when they disagreed. It is reused here
+ * `cardBrandIcon: 'hidden'` — with no defined answer when they disagreed. It is reused here
  * instead: `hidden` is the "off" it always was, and the field-level option is the same union.
  */
 @genType
 type brandIconMode = CardIcons.brandIconMode
 
 @genType
-type cvcIconDisplay = [#none | #default]
+/* hyperswitch-web's `cvcIcon` values. */
+type cvcIconDisplay = [#hidden | #default]
 
 /*
  * `testID` is spelled the React Native way, not `testId`: a merchant reaches for the name their
@@ -116,10 +122,11 @@ type cardNumberOptions = {
    */
   unstyled?: bool,
   /*
-   * Card number only — the expiry and CVC option types have no such member at all.
-   * Absent => fall back to `appearance.brandIconMode`, and then to `hidden`.
+   * Card number only — the expiry and CVC option types have no such member at all. Named as
+   * hyperswitch-web names it. Absent => fall back to `appearance.variables.cardBrandIcon`, then to
+   * `standard`.
    */
-  brandIconMode?: brandIconMode,
+  cardBrandIcon?: brandIconMode,
 }
 
 @genType
@@ -155,10 +162,39 @@ type cvcOptions = {
 @genType
 type formFieldOptions = {
   cardNumber?: cardNumberOptions,
-  expiry?: expiryOptions,
-  cvc?: cvcOptions,
+  cardExpiry?: expiryOptions,
+  cardCvc?: cvcOptions,
   cardholderName?: cardholderNameOptions,
 }
+
+/*
+ * ── A SAVED CARD, ON THE CVC FIELD ─────────────────────────────────────────────────────────────
+ *
+ * The SAME shape hyperswitch-web reads off `create('cardCvc', {savedCard})`: the token of the card
+ * `list-payment-methods` returned, and its network under `paymentMethodData.card.cardNetwork`. A
+ * CVC field mounted with this — and no card-number field beside it — turns `tokenize()` into the
+ * saved-card CVC update.
+ */
+@genType
+type savedCardData = {cardNetwork?: string}
+
+@genType
+type savedCardPaymentMethodData = {card?: savedCardData}
+
+@genType
+type savedCard = {
+  paymentToken?: string,
+  paymentMethodData?: savedCardPaymentMethodData,
+}
+
+let savedCardToken = (saved: savedCard) =>
+  saved.paymentToken->Option.map(String.trim)->Option.getOr("")
+
+let savedCardNetwork = (saved: savedCard) =>
+  saved.paymentMethodData
+  ->Option.flatMap(data => data.card)
+  ->Option.flatMap(card => card.cardNetwork)
+  ->Option.getOr("")
 
 /*
  * ── FORM LAYOUT ────────────────────────────────────────────────────────────────────────────────
@@ -267,6 +303,11 @@ let trimmed = (value: option<string>) =>
  * here makes the claim true and makes changing the library's default presentation a single,
  * reviewable edit to four lines rather than an archaeology exercise across four files.
  */
+/*
+ * The form-wide label default when the merchant set no `appearance.labels`. hyperswitch-web's own
+ * default is `above`; the library keeps `floating` because that is what its ready-made form has
+ * always drawn, and a merchant who wants the web look sets `appearance: {labels: 'above'}` once.
+ */
 let defaultLabelBehavior: labelBehavior = #floating
 /*
  * TWO error-display defaults, because there are two surfaces with opposite obligations.
@@ -275,7 +316,7 @@ let defaultLabelBehavior: labelBehavior = #floating
  *   ready-made  <HyperswitchVaultForm />            ->  #inline
  *
  * A merchant who composes fields is drawing their own chrome: they position each box, and they
- * read `error` off `onStateChange` to place the message where their design puts it. Rendering our
+ * read `error` off `onChange` to place the message where their design puts it. Rendering our
  * own line underneath means the customer sees the SAME failure twice, and there is no form-level
  * switch to turn ours off — it would have to be repeated on all four fields. So the composable
  * surface prints no message.
@@ -316,11 +357,13 @@ let resolveWith = (
   /* Already `provider prop ?? defaultUnstyled` by the time it reaches here. */
   ~formWideUnstyled: bool,
   /*
-   * The surface's error-display default, supplied by whoever built the context — `#none` for the
-   * composable fields, `#inline` for the ready-made form. Passed in rather than read off a module
-   * constant so the two surfaces cannot silently share one answer again.
+   * The surface's error-display default, supplied by whoever built the context — `#colorOnly` for
+   * the composable fields, `#inline` for the ready-made form. Passed in rather than read off a
+   * module constant so the two surfaces cannot silently share one answer again.
    */
   ~formWideErrorDisplay: errorDisplay,
+  /* `appearance.labels`, already defaulted, so one form-level setting reaches every field. */
+  ~formWideLabelBehavior: labelBehavior,
   /* This field's strings, from `localisation.labels` or the library's own. */
   ~defaultPlaceholder: string,
   ~defaultLabel: string,
@@ -356,7 +399,7 @@ let resolveWith = (
         | Off => None
         | Text(text) => Some(text)
         },
-    labelBehavior: chrome(labelBehavior, unstyled ? #none : defaultLabelBehavior),
+    labelBehavior: chrome(labelBehavior, unstyled ? #never : formWideLabelBehavior),
     errorDisplay: chrome(errorDisplay, unstyled ? #none : formWideErrorDisplay),
     accessibilityLabel: trimmed(accessibilityLabel)->Option.getOr(defaultAccessibilityLabel),
     accessibilityHint: trimmed(accessibilityHint),
@@ -371,6 +414,7 @@ let resolveField = (
   ~defaultTestID,
   ~formWideUnstyled,
   ~formWideErrorDisplay,
+  ~formWideLabelBehavior,
   ~defaultPlaceholder,
   ~defaultLabel,
 ) =>
@@ -387,6 +431,7 @@ let resolveField = (
     ~defaultTestID,
     ~formWideUnstyled,
     ~formWideErrorDisplay,
+    ~formWideLabelBehavior,
     ~defaultPlaceholder,
     ~defaultLabel,
   )
@@ -395,6 +440,7 @@ let resolveCardNumber = (
   options: option<cardNumberOptions>,
   ~formWideUnstyled,
   ~formWideErrorDisplay,
+  ~formWideLabelBehavior,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveWith(
@@ -410,6 +456,7 @@ let resolveCardNumber = (
     ~defaultTestID=CardTestIds.cardNumberInputTestId,
     ~formWideUnstyled,
     ~formWideErrorDisplay,
+    ~formWideLabelBehavior,
     ~defaultPlaceholder=labels.cardNumberPlaceholder,
     ~defaultLabel=labels.cardNumberFloatingLabel,
   )
@@ -418,6 +465,7 @@ let resolveExpiry = (
   options: option<expiryOptions>,
   ~formWideUnstyled,
   ~formWideErrorDisplay,
+  ~formWideLabelBehavior,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveField(
@@ -426,6 +474,7 @@ let resolveExpiry = (
     ~defaultTestID=CardTestIds.expiryInputTestId,
     ~formWideUnstyled,
     ~formWideErrorDisplay,
+    ~formWideLabelBehavior,
     ~defaultPlaceholder=labels.expiryPlaceholder,
     ~defaultLabel=labels.expiryFloatingLabel,
   )
@@ -434,6 +483,7 @@ let resolveCardholderName = (
   options: option<cardholderNameOptions>,
   ~formWideUnstyled,
   ~formWideErrorDisplay,
+  ~formWideLabelBehavior,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveField(
@@ -442,6 +492,7 @@ let resolveCardholderName = (
     ~defaultTestID=CardTestIds.cardholderNameInputTestId,
     ~formWideUnstyled,
     ~formWideErrorDisplay,
+    ~formWideLabelBehavior,
     ~defaultPlaceholder=labels.cardholderNamePlaceholder,
     ~defaultLabel=labels.cardholderNameFloatingLabel,
   )
@@ -450,6 +501,7 @@ let resolveCvc = (
   options: option<cvcOptions>,
   ~formWideUnstyled,
   ~formWideErrorDisplay,
+  ~formWideLabelBehavior,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveWith(
@@ -465,6 +517,7 @@ let resolveCvc = (
     ~defaultTestID=CardTestIds.cvcInputTestId,
     ~formWideUnstyled,
     ~formWideErrorDisplay,
+    ~formWideLabelBehavior,
     ~defaultPlaceholder=labels.cvcPlaceholder,
     ~defaultLabel=labels.cvcFloatingLabel,
   )
@@ -472,22 +525,21 @@ let resolveCvc = (
 /*
  * THE ONE RESOLUTION POINT, and the only place a brand-icon default lives:
  *
- *   field `brandIconMode`  →  form-wide `appearance.brandIconMode`  →  `#hidden`
+ *   field `cardBrandIcon`  →  form-wide `appearance.variables.cardBrandIcon`  →  `standard`
  *
- * `formWide` is already `appearance.brandIconMode ?? #hidden` when it reaches here (resolved once
- * in `VaultFormHost`), so this is a total function of two inputs with exactly one outcome per
- * pair — there is no combination of public props that leaves the result undefined or order-
- * dependent.
+ * `formWide` is already defaulted when it reaches here (resolved once in `VaultFormHost`), so this
+ * is a total function of two inputs with exactly one outcome per pair — there is no combination of
+ * public props that leaves the result undefined or order-dependent.
  */
 let resolveBrandIconMode = (
   options: option<cardNumberOptions>,
   ~formWide: brandIconMode,
   ~unstyled: bool,
 ): brandIconMode =>
-  unstyled ? #hidden : options->Option.flatMap(o => o.brandIconMode)->Option.getOr(formWide)
+  unstyled ? #hidden : options->Option.flatMap(o => o.cardBrandIcon)->Option.getOr(formWide)
 
 let cvcIconOf = (options: option<cvcOptions>, ~unstyled: bool) =>
-  unstyled ? #none : options->Option.flatMap(o => o.cvcIcon)->Option.getOr(defaultCvcIcon)
+  unstyled ? #hidden : options->Option.flatMap(o => o.cvcIcon)->Option.getOr(defaultCvcIcon)
 
 /* The field-then-form precedence for `unstyled` itself, so no caller re-derives it. */
 let unstyledFor = (fieldUnstyled: option<bool>, ~formWide: bool) =>
@@ -496,9 +548,9 @@ let unstyledFor = (fieldUnstyled: option<bool>, ~formWide: bool) =>
 let cardNumberOf = (options: option<formFieldOptions>) =>
   options->Option.flatMap(o => o.cardNumber)
 
-let expiryOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.expiry)
+let cardExpiryOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.cardExpiry)
 
-let cvcOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.cvc)
+let cardCvcOf = (options: option<formFieldOptions>) => options->Option.flatMap(o => o.cardCvc)
 
 let cardholderNameOf = (options: option<formFieldOptions>) =>
   options->Option.flatMap(o => o.cardholderName)

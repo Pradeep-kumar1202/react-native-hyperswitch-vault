@@ -5,12 +5,12 @@
  * session → fields → tokenize() flow and leaves this unmounted; uncomment the two marked lines
  * there to bring it back.
  *
- *   Custom layout    the provider plus the four field widgets placed by hand — every provider prop,
- *                    every field prop, mount / unmount / duplicate, the handle
+ *   Custom layout    the provider plus the four field components placed by hand — every provider
+ *                    prop, every field prop, every event, mount / unmount / duplicate, the handle
  *   Ready-made form  HyperswitchVaultForm — the same provider props plus layout, fieldArrangement,
  *                    fieldOptions and fieldStyles
- *   Saved card       HyperswitchVaultSavedCardForm (ADR-0008) — every prop, list-payment-methods,
- *                    the handle
+ *   Saved card       CardCVCField with `savedCard` — the web SDK's saved-card shape,
+ *                    list-payment-methods, the handle
  *
  * Every prop starts UNSET on every screen, so the first thing rendered is the library's own
  * default. Flip a chip or type in a field and the component re-resolves live.

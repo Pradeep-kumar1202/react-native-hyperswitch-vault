@@ -37,8 +37,8 @@ let inputColors = (
  * Inline error rendering is separate from the error EVENT, and the two surfaces default it
  * differently — see `CardFieldOptions.defaultErrorDisplayComposable`:
  *
- *   composable fields  #none    nothing is drawn
- *   ready-made forms   #inline  the message is drawn under the field
+ *   composable fields  #colorOnly  the box is tinted, no message is drawn
+ *   ready-made forms   #inline     the message is drawn under the field
  *
  * `#none` renders nothing at all — not an empty container, not reserved space — while the same
  * safe error still reaches the merchant through the field and form state callbacks, so a merchant

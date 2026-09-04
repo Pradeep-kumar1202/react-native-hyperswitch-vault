@@ -24,14 +24,14 @@ let make = (
   let errors = ctx.controller.visibleErrors
 
   let numberStyles = fieldStyles->CardFieldStyles.cardNumberOf
-  let expiryStyles = fieldStyles->CardFieldStyles.expiryOf
-  let cvcStyles = fieldStyles->CardFieldStyles.cvcOf
+  let expiryStyles = fieldStyles->CardFieldStyles.cardExpiryOf
+  let cvcStyles = fieldStyles->CardFieldStyles.cardCvcOf
 
   let cardholderStyles = fieldStyles->CardFieldStyles.cardholderNameOf
 
   let numberOptions = fieldOptions->CardFieldOptions.cardNumberOf
-  let expiryOptions = fieldOptions->CardFieldOptions.expiryOf
-  let cvcOptions = fieldOptions->CardFieldOptions.cvcOf
+  let expiryOptions = fieldOptions->CardFieldOptions.cardExpiryOf
+  let cvcOptions = fieldOptions->CardFieldOptions.cardCvcOf
   let cardholderOptions = fieldOptions->CardFieldOptions.cardholderNameOf
 
   /*
@@ -60,6 +60,7 @@ let make = (
     resolve(
       ~formWideUnstyled=ctx.unstyled,
       ~formWideErrorDisplay=ctx.defaultErrorDisplay,
+      ~formWideLabelBehavior=ctx.defaultLabelBehavior,
       ~labels,
     )->rendersInline
   let numberInline = resolveInline(CardFieldOptions.resolveCardNumber(numberOptions, ...))
@@ -101,10 +102,10 @@ let make = (
     switch claim(numberInline, errors.cardNumber) {
     | Some(error) => Some((numberStyles, error))
     | None =>
-      switch claim(expiryInline, errors.expiry) {
+      switch claim(expiryInline, errors.cardExpiry) {
       | Some(error) => Some((expiryStyles, error))
       | None =>
-        switch claim(cvcInline, errors.cvc) {
+        switch claim(cvcInline, errors.cardCvc) {
         | Some(error) => Some((cvcStyles, error))
         | None => claim(numberInline, formLevelError)->Option.map(error => (numberStyles, error))
         }

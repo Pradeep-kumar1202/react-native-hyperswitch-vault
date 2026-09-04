@@ -1,7 +1,7 @@
 /**
- * Screen 1 — the provider with the four field widgets placed by hand. Every provider prop and every
- * field prop is editable below the form; all of them start unset, so what renders first is the
- * library's three default fields and nothing else. Example code only.
+ * Screen 1 — the provider with the four field components placed by hand. Every provider prop and
+ * every field prop is editable below the form; all of them start unset, so what renders first is
+ * the library's three default fields and nothing else. Example code only.
  *
  * @format
  */
@@ -14,11 +14,12 @@ import {
   CardholderNameField,
   CardForm,
   type MerchantSession,
-  type VaultFieldState,
+  type VaultCardFormChange,
+  type VaultCardFormEvent,
+  type VaultFieldChange,
   type VaultFormHandle,
-  type VaultFormState,
 } from '@juspay-tech/react-native-hyperswitch-vault';
-import {logFieldState, logFormState} from '../eventLog';
+import {logFieldChange, logFieldEvent, logFormChange, logFormReady} from '../eventLog';
 import {Button, Hint, LogBox, ResultBox, Row, Section, Toggle, fieldLine, formLine, ui, useEventLog} from '../harness/controls';
 import {FIELD_STYLE_PRESETS} from '../harness/fixtures';
 import {
@@ -38,8 +39,8 @@ import {useFormActions} from '../harness/useFormActions';
 const TITLES: Record<FieldKind, string> = {
   cardholderName: 'CardholderNameField (optional)',
   cardNumber: 'CardNumberField',
-  expiry: 'CardExpiryField',
-  cvc: 'CardCVCField',
+  cardExpiry: 'CardExpiryField',
+  cardCvc: 'CardCVCField',
 };
 
 export function CustomLayoutScreen({session}: {session: MerchantSession}) {
@@ -50,24 +51,38 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
   const [fields, setFields] = useState<Record<FieldKind, FieldDraft>>({
     cardholderName: emptyFieldDraft('cardholderName'),
     cardNumber: emptyFieldDraft('cardNumber'),
-    expiry: emptyFieldDraft('expiry'),
-    cvc: emptyFieldDraft('cvc'),
+    cardExpiry: emptyFieldDraft('cardExpiry'),
+    cardCvc: emptyFieldDraft('cardCvc'),
   });
   const [inlineRow, setInlineRow] = useState(false);
-  const [formState, setFormState] = useState<VaultFormState | null>(null);
+  const [formState, setFormState] = useState<VaultCardFormChange | null>(null);
 
-  const onFormStateChange = useCallback(
-    (state: VaultFormState) => {
-      setFormState(state);
-      logFormState(state);
-      append(formLine(state));
+  const onFormChange = useCallback(
+    (e: VaultCardFormChange) => {
+      setFormState(e);
+      logFormChange(e);
+      append(formLine(e));
     },
     [append],
   );
-  const onFieldStateChange = useCallback(
-    (state: VaultFieldState) => {
-      logFieldState(state);
-      append(fieldLine(state));
+  const onFormReady = useCallback(
+    (e: VaultCardFormEvent) => {
+      logFormReady(e);
+      append(`ready ${e.elementType}`);
+    },
+    [append],
+  );
+  const onFieldChange = useCallback(
+    (e: VaultFieldChange) => {
+      logFieldChange(e);
+      append(fieldLine(e));
+    },
+    [append],
+  );
+  const fieldEvent = useCallback(
+    (name: 'ready' | 'focus' | 'blur') => (e: {elementType: string}) => {
+      logFieldEvent(name)(e as never);
+      append(`${name} ${e.elementType}`);
     },
     [append],
   );
@@ -75,20 +90,22 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
   const actions = useFormActions(formRef, append);
   const setField = (kind: FieldKind) => (next: FieldDraft) => setFields(previous => ({...previous, [kind]: next}));
 
-  /* One field widget, from its draft. Rendered twice when "mount twice" is on. */
+  /* One field component, from its draft. Rendered twice when "mount twice" is on. */
   const widget = (kind: FieldKind, copy: number) => {
     const d = fields[kind];
-    const listener = d.listen ? onFieldStateChange : undefined;
+    const events = d.listen
+      ? {onReady: fieldEvent('ready'), onFocus: fieldEvent('focus'), onBlur: fieldEvent('blur'), onChange: onFieldChange}
+      : {};
     const key = `${kind}-${copy}`;
     switch (kind) {
       case 'cardNumber':
-        return <CardNumberField key={key} {...cardNumberOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardNumber : undefined} onStateChange={listener} />;
-      case 'expiry':
-        return <CardExpiryField key={key} {...plainOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.expiry : undefined} onStateChange={listener} />;
-      case 'cvc':
-        return <CardCVCField key={key} {...cvcOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cvc : undefined} onStateChange={listener} />;
+        return <CardNumberField key={key} {...cardNumberOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardNumber : undefined} {...events} />;
+      case 'cardExpiry':
+        return <CardExpiryField key={key} {...plainOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardExpiry : undefined} {...events} />;
+      case 'cardCvc':
+        return <CardCVCField key={key} {...cvcOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardCvc : undefined} {...events} />;
       case 'cardholderName':
-        return <CardholderNameField key={key} {...plainOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardholderName : undefined} onStateChange={listener} />;
+        return <CardholderNameField key={key} {...plainOptionsOf(d)} styles={d.styled ? FIELD_STYLE_PRESETS.cardholderName : undefined} {...events} />;
     }
   };
   const copies = (kind: FieldKind) => (fields[kind].mounted ? (fields[kind].duplicate ? [0, 1] : [0]) : []);
@@ -99,21 +116,21 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
   return (
     <View style={s.screen}>
       <Text style={ui.title}>Custom layout</Text>
-      <Text style={ui.subtitle}>CardForm + the field widgets. Nothing is passed until you set it below.</Text>
+      <Text style={ui.subtitle}>CardForm + the field components. Nothing is passed until you set it below.</Text>
 
       {/* ── THE FORM ─────────────────────────────────────────────────────── */}
-      <CardForm ref={formRef} {...providerPropsOf(provider, session, onFormStateChange)}>
+      <CardForm ref={formRef} {...providerPropsOf(provider, session, onFormChange, onFormReady)}>
         {block('cardholderName')}
         {block('cardNumber')}
         {inlineRow ? (
           <View style={s.inline}>
-            <View style={s.inlineItem}>{block('expiry')}</View>
-            <View style={s.inlineItem}>{block('cvc')}</View>
+            <View style={s.inlineItem}>{block('cardExpiry')}</View>
+            <View style={s.inlineItem}>{block('cardCvc')}</View>
           </View>
         ) : (
           <>
-            {block('expiry')}
-            {block('cvc')}
+            {block('cardExpiry')}
+            {block('cardCvc')}
           </>
         )}
       </CardForm>
@@ -125,9 +142,9 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
         <Button label="reset()" onPress={actions.reset} />
       </Row>
       <Row>
-        <Button label="focus(number)" onPress={() => actions.focus('cardNumber')} />
-        <Button label="focus(expiry)" onPress={() => actions.focus('expiry')} />
-        <Button label="focus(cvc)" onPress={() => actions.focus('cvc')} />
+        <Button label="focus(cardNumber)" onPress={() => actions.focus('cardNumber')} />
+        <Button label="focus(cardExpiry)" onPress={() => actions.focus('cardExpiry')} />
+        <Button label="focus(cardCvc)" onPress={() => actions.focus('cardCvc')} />
         <Button label="focus(name)" onPress={() => actions.focus('cardholderName')} />
       </Row>
 
@@ -143,7 +160,9 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
               ['complete', formState.complete],
               ['valid', formState.valid],
               ['canSubmit', formState.canSubmit],
-              ['brand', formState.brand],
+              ['brand', formState.payload.brand ?? '-'],
+              ['bin', formState.payload.bin ?? '-'],
+              ['last4', formState.payload.last4 ?? '-'],
               ['coBadged', formState.isCoBadged],
               ['name field', formState.fields.cardholderName !== undefined],
             ] as Array<[string, string | boolean]>
@@ -156,7 +175,7 @@ export function CustomLayoutScreen({session}: {session: MerchantSession}) {
           ))}
         </View>
       ) : (
-        <Hint text="onFormStateChange is detached: no form state is reported. The button above is enabled blindly." />
+        <Hint text="onChange is detached: no form state is reported. The button above is enabled blindly." />
       )}
 
       {/* ── THE PROPS ────────────────────────────────────────────────────── */}

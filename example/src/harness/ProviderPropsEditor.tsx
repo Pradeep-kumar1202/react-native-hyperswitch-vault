@@ -8,14 +8,16 @@ import React from 'react';
 import type {
   CardFormProps,
   MerchantSession,
+  VaultCardFormChange,
+  VaultCardFormEvent,
   VaultCardholderNameMode,
   VaultEnvironment,
-  VaultFormState,
 } from '@juspay-tech/react-native-hyperswitch-vault';
 import {Chips, Field, Hint, Label, MultiChips, Row, Toggle, orUndefined, triBool, triValue, type Tri} from './controls';
 import {
   APPEARANCE_NAMES,
   APPEARANCE_PRESETS,
+  LOCALES,
   LOCALISATION_NAMES,
   LOCALISATION_PRESETS,
   SCHEMES,
@@ -30,6 +32,7 @@ export type ProviderDraft = {
   session: SessionChoice;
   environment: VaultEnvironment;
   appearance: Tri<AppearancePreset>;
+  locale: Tri<(typeof LOCALES)[number]>;
   localisation: Tri<LocalisationPreset>;
   disabled: boolean;
   accessible: Tri<'true' | 'false'>;
@@ -45,6 +48,7 @@ export const emptyProviderDraft = (): ProviderDraft => ({
   /* Matches the merchant server's HYPERSWITCH_ENVIRONMENT in this checkout. */
   environment: 'production',
   appearance: 'unset',
+  locale: 'unset',
   localisation: 'unset',
   disabled: false,
   accessible: 'unset',
@@ -61,11 +65,13 @@ export type ProviderProps = Omit<CardFormProps, 'children'>;
 export const providerPropsOf = (
   d: ProviderDraft,
   session: MerchantSession,
-  onFormStateChange: (s: VaultFormState) => void,
+  onChange: (e: VaultCardFormChange) => void,
+  onReady: (e: VaultCardFormEvent) => void,
 ): ProviderProps => ({
   session: sessionFor(d.session, session),
   environment: d.environment,
   appearance: d.appearance === 'unset' ? undefined : APPEARANCE_PRESETS[d.appearance],
+  locale: triValue(d.locale),
   localisation: d.localisation === 'unset' ? undefined : LOCALISATION_PRESETS[d.localisation],
   disabled: d.disabled ? true : undefined,
   accessible: triBool(d.accessible),
@@ -73,13 +79,15 @@ export const providerPropsOf = (
   vaultEndpoint: orUndefined(d.vaultBaseUrl) ? {baseUrl: d.vaultBaseUrl} : undefined,
   cardholderName: triValue(d.cardholderName),
   unstyled: triBool(d.unstyled),
-  onFormStateChange: d.listen ? onFormStateChange : undefined,
+  onChange: d.listen ? onChange : undefined,
+  onReady: d.listen ? onReady : undefined,
 });
 
 export const providerSetCount = (d: ProviderDraft) =>
   [
     d.session !== 'valid',
     d.appearance !== 'unset',
+    d.locale !== 'unset',
     d.localisation !== 'unset',
     d.disabled,
     d.accessible !== 'unset',
@@ -90,8 +98,9 @@ export const providerSetCount = (d: ProviderDraft) =>
     !d.listen,
   ].filter(Boolean).length;
 
-const ENVIRONMENTS: VaultEnvironment[] = ['sandbox', 'production', 'integration'];
+const ENVIRONMENTS: VaultEnvironment[] = ['sandbox', 'production', 'integ'];
 const APPEARANCES: Tri<AppearancePreset>[] = ['unset', ...APPEARANCE_NAMES];
+const LOCALE_CHOICES: Tri<(typeof LOCALES)[number]>[] = ['unset', ...LOCALES];
 const LOCALISATIONS: Tri<LocalisationPreset>[] = ['unset', ...LOCALISATION_NAMES];
 const NAME_MODES: Tri<VaultCardholderNameMode>[] = ['unset', 'collect', 'omit'];
 const BOOLS: Tri<'true' | 'false'>[] = ['unset', 'true', 'false'];
@@ -118,10 +127,14 @@ export function ProviderPropsEditor({
 
       <Label text="appearance" />
       <Chips options={APPEARANCES} value={draft.appearance} onChange={v => set('appearance', v)} />
+      <Hint text="webLabels sets appearance.labels='above', the web SDK's default label mode." />
 
-      <Label text="localisation" />
+      <Label text="locale" />
+      <Chips options={LOCALE_CHOICES} value={draft.locale} onChange={v => set('locale', v)} />
+      <Hint text="The sdk-utils string bundle, as on the web. ar and he flip direction." />
+
+      <Label text="localisation (overrides on top of locale)" />
       <Chips options={LOCALISATIONS} value={draft.localisation} onChange={v => set('localisation', v)} />
-      <Hint text="labelsOnly renames placeholders and labels; messagesOnly replaces validation text; rtl flips direction." />
 
       <Label text="enabledCardSchemes (none selected = prop not passed)" />
       <MultiChips
@@ -131,7 +144,7 @@ export function ProviderPropsEditor({
           set('schemes', draft.schemes.includes(scheme) ? draft.schemes.filter(s => s !== scheme) : [...draft.schemes, scheme])
         }
       />
-      <Hint text="A COMPLETED number outside the list fails with unsupportedCard and sets networkError; a co-badged card shows the chooser." />
+      <Hint text="Case and aliases are canonicalised ('visa', 'amex'); NotARealNetwork is ignored with a dev warning. A COMPLETED number outside the list sets networkError." />
 
       <Label text="cardholderName mode" />
       <Chips options={NAME_MODES} value={draft.cardholderName} onChange={v => set('cardholderName', v)} />
@@ -155,7 +168,7 @@ export function ProviderPropsEditor({
 
       <Row>
         <Toggle on={draft.disabled} label="disabled" onPress={() => set('disabled', !draft.disabled)} />
-        <Toggle on={draft.listen} label="onFormStateChange" onPress={() => set('listen', !draft.listen)} />
+        <Toggle on={draft.listen} label="onChange / onReady" onPress={() => set('listen', !draft.listen)} />
       </Row>
     </>
   );
