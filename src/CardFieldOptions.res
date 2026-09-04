@@ -35,8 +35,28 @@
 @genType
 type labelBehavior = [#none | #static | #floating]
 
+/*
+ * THREE answers, because "show the error" is two independent decisions: tint the field, and print
+ * the message.
+ *
+ *   #none       nothing. The field looks exactly like a valid one and no text is drawn. The
+ *               merchant hears about the problem through the state event and draws it however they
+ *               like — including not at all.
+ *   #colorOnly  the field carries its error STATE — border and text in the merchant's `errorColor`
+ *               — but no message is printed. The customer can see WHICH box is wrong; the merchant
+ *               owns the words.
+ *   #inline     the state AND the message, printed under the field. A complete UI.
+ *
+ * `#colorOnly` is the composable default, and it is what hyperswitch-web's separate card fields do.
+ * There the two decisions are separate props on the same input: `isErrorHidden=true` suppresses the
+ * message block, while `isValid` still drives the `Input--invalid` class that tints the box
+ * (`CommonCardFieldHooks.res` passes exactly that combination on all three fields). Collapsing
+ * those into a single on/off — which this union did until now — forced a merchant who wanted the
+ * web's behaviour to choose between a silent field with no visual cue and a field that prints a
+ * message they were already rendering themselves.
+ */
 @genType
-type errorDisplay = [#none | #inline]
+type errorDisplay = [#none | #colorOnly | #inline]
 
 /*
  * ONE brand-icon concept, not two.
@@ -248,7 +268,32 @@ let trimmed = (value: option<string>) =>
  * reviewable edit to four lines rather than an archaeology exercise across four files.
  */
 let defaultLabelBehavior: labelBehavior = #floating
-let defaultErrorDisplay: errorDisplay = #inline
+/*
+ * TWO error-display defaults, because there are two surfaces with opposite obligations.
+ *
+ *   composable  <CardForm> + <CardNumberField /> …  ->  #colorOnly
+ *   ready-made  <HyperswitchVaultForm />            ->  #inline
+ *
+ * A merchant who composes fields is drawing their own chrome: they position each box, and they
+ * read `error` off `onStateChange` to place the message where their design puts it. Rendering our
+ * own line underneath means the customer sees the SAME failure twice, and there is no form-level
+ * switch to turn ours off — it would have to be repeated on all four fields. So the composable
+ * surface prints no message.
+ *
+ * It does still TINT the field. Suppressing the message is not the same as pretending the field is
+ * fine: the customer needs to see which of four boxes to go back to, and that cue costs the
+ * merchant nothing to keep because it is drawn in the `errorColor` they already configured. This is
+ * exactly what the web SDK's separate card fields do — `isErrorHidden=true` alongside a live
+ * `isValid`.
+ *
+ * The ready-made form is the opposite contract: it is a complete UI, chosen precisely so the
+ * merchant does not have to render anything. Silently dropping its validation text would leave a
+ * zero-configuration form that never tells the customer what is wrong.
+ *
+ * Either default is overridable per field, in both directions, so neither surface is a dead end.
+ */
+let defaultErrorDisplayComposable: errorDisplay = #colorOnly
+let defaultErrorDisplayReadyMade: errorDisplay = #inline
 let defaultBrandIconMode: brandIconMode = #standard
 let defaultCvcIcon: cvcIconDisplay = #default
 let defaultUnstyled: bool = false
@@ -270,6 +315,12 @@ let resolveWith = (
   ~defaultTestID: string,
   /* Already `provider prop ?? defaultUnstyled` by the time it reaches here. */
   ~formWideUnstyled: bool,
+  /*
+   * The surface's error-display default, supplied by whoever built the context — `#none` for the
+   * composable fields, `#inline` for the ready-made form. Passed in rather than read off a module
+   * constant so the two surfaces cannot silently share one answer again.
+   */
+  ~formWideErrorDisplay: errorDisplay,
   /* This field's strings, from `localisation.labels` or the library's own. */
   ~defaultPlaceholder: string,
   ~defaultLabel: string,
@@ -306,7 +357,7 @@ let resolveWith = (
         | Text(text) => Some(text)
         },
     labelBehavior: chrome(labelBehavior, unstyled ? #none : defaultLabelBehavior),
-    errorDisplay: chrome(errorDisplay, unstyled ? #none : defaultErrorDisplay),
+    errorDisplay: chrome(errorDisplay, unstyled ? #none : formWideErrorDisplay),
     accessibilityLabel: trimmed(accessibilityLabel)->Option.getOr(defaultAccessibilityLabel),
     accessibilityHint: trimmed(accessibilityHint),
     testID: trimmed(testID)->Option.getOr(defaultTestID),
@@ -319,6 +370,7 @@ let resolveField = (
   ~defaultAccessibilityLabel,
   ~defaultTestID,
   ~formWideUnstyled,
+  ~formWideErrorDisplay,
   ~defaultPlaceholder,
   ~defaultLabel,
 ) =>
@@ -334,6 +386,7 @@ let resolveField = (
     ~defaultAccessibilityLabel,
     ~defaultTestID,
     ~formWideUnstyled,
+    ~formWideErrorDisplay,
     ~defaultPlaceholder,
     ~defaultLabel,
   )
@@ -341,6 +394,7 @@ let resolveField = (
 let resolveCardNumber = (
   options: option<cardNumberOptions>,
   ~formWideUnstyled,
+  ~formWideErrorDisplay,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveWith(
@@ -355,6 +409,7 @@ let resolveCardNumber = (
     ~defaultAccessibilityLabel="Card number",
     ~defaultTestID=CardTestIds.cardNumberInputTestId,
     ~formWideUnstyled,
+    ~formWideErrorDisplay,
     ~defaultPlaceholder=labels.cardNumberPlaceholder,
     ~defaultLabel=labels.cardNumberFloatingLabel,
   )
@@ -362,6 +417,7 @@ let resolveCardNumber = (
 let resolveExpiry = (
   options: option<expiryOptions>,
   ~formWideUnstyled,
+  ~formWideErrorDisplay,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveField(
@@ -369,6 +425,7 @@ let resolveExpiry = (
     ~defaultAccessibilityLabel="Expiration date",
     ~defaultTestID=CardTestIds.expiryInputTestId,
     ~formWideUnstyled,
+    ~formWideErrorDisplay,
     ~defaultPlaceholder=labels.expiryPlaceholder,
     ~defaultLabel=labels.expiryFloatingLabel,
   )
@@ -376,6 +433,7 @@ let resolveExpiry = (
 let resolveCardholderName = (
   options: option<cardholderNameOptions>,
   ~formWideUnstyled,
+  ~formWideErrorDisplay,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveField(
@@ -383,6 +441,7 @@ let resolveCardholderName = (
     ~defaultAccessibilityLabel="Cardholder name",
     ~defaultTestID=CardTestIds.cardholderNameInputTestId,
     ~formWideUnstyled,
+    ~formWideErrorDisplay,
     ~defaultPlaceholder=labels.cardholderNamePlaceholder,
     ~defaultLabel=labels.cardholderNameFloatingLabel,
   )
@@ -390,6 +449,7 @@ let resolveCardholderName = (
 let resolveCvc = (
   options: option<cvcOptions>,
   ~formWideUnstyled,
+  ~formWideErrorDisplay,
   ~labels: CardFormTypes.cardLabels,
 ) =>
   resolveWith(
@@ -404,6 +464,7 @@ let resolveCvc = (
     ~defaultAccessibilityLabel="Security code",
     ~defaultTestID=CardTestIds.cvcInputTestId,
     ~formWideUnstyled,
+    ~formWideErrorDisplay,
     ~defaultPlaceholder=labels.cvcPlaceholder,
     ~defaultLabel=labels.cvcFloatingLabel,
   )

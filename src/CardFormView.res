@@ -57,7 +57,11 @@ let make = (
    */
   let rendersInline = (resolved: CardFieldOptions.resolved) => resolved.errorDisplay === #inline
   let resolveInline = resolve =>
-    resolve(~formWideUnstyled=ctx.unstyled, ~labels)->rendersInline
+    resolve(
+      ~formWideUnstyled=ctx.unstyled,
+      ~formWideErrorDisplay=ctx.defaultErrorDisplay,
+      ~labels,
+    )->rendersInline
   let numberInline = resolveInline(CardFieldOptions.resolveCardNumber(numberOptions, ...))
   let expiryInline = resolveInline(CardFieldOptions.resolveExpiry(expiryOptions, ...))
   let cvcInline = resolveInline(CardFieldOptions.resolveCvc(cvcOptions, ...))

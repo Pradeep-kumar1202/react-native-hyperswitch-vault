@@ -122,6 +122,22 @@ let make = React.forwardRef((
   let resolved = CardFieldOptions.resolveCvc(
     cvcOptions,
     ~formWideUnstyled=CardFieldOptions.defaultUnstyled,
+    /*
+     * COMPOSABLE, not ready-made — despite this component rendering its own field.
+     *
+     * The distinction is not "does the library draw the input" but "who draws the chrome around
+     * it". `HyperswitchVaultForm` is a whole form: four fields, a layout, our labels, our error
+     * lines. This is ONE box the merchant drops into a saved-card row they built — the brand, the
+     * `•••• 4242` and the Pay button are all theirs. Printing a message under it puts our text
+     * inside their layout, and it made the SAME field behave differently depending only on which
+     * component wrapped it: silent in the new-card flow, talkative here.
+     *
+     * hyperswitch-web has no second path to disagree with itself about. `SecureCardCvcField` is its
+     * only CVC component; the saved-card case changes `~cardBrandOverride` — a validation input —
+     * and renders the same `RenderCardCvc`, with the same `isErrorHidden=true`. The render path
+     * does not know whether the card is saved.
+     */
+    ~formWideErrorDisplay=CardFieldOptions.defaultErrorDisplayComposable,
     ~labels,
   )
 

@@ -283,13 +283,18 @@ let make = (
             height: theme.inputHeight->dp,
             flexDirection: #row,
             /*
-             * The error BORDER is opt-in on the same switch as the error message. With
-             * `errorDisplay = #none` (the default) an invalid field is bordered exactly like a valid
-             * one — focused or not — and the merchant hears about the problem through the state
-             * event instead, to draw however they like. Only `#inline` paints, and it paints in the
-             * merchant's own `errorColor`.
+             * The error BORDER follows the error STATE, not the message.
+             *
+             * `#colorOnly` — the composable default — and `#inline` both paint it, in the
+             * merchant's own `errorColor`. Only `#none` leaves an invalid field bordered exactly
+             * like a valid one, focused or not, for a merchant who wants to draw every cue
+             * themselves off the state event.
+             *
+             * This is the same split hyperswitch-web's separate card fields make: the message block
+             * is suppressed with `isErrorHidden`, while `isValid` still drives the `Input--invalid`
+             * class that colours the box.
              */
-            borderColor: isValid || options.errorDisplay !== #inline
+            borderColor: isValid || options.errorDisplay === #none
               ? isFocused ? theme.primaryColor : theme.normalBorderColor
               : theme.errorBorderColor,
             width: 100.->pct,

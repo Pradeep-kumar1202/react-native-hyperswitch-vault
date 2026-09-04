@@ -132,6 +132,11 @@ let make = React.forwardRef((
     ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
     ~onFormStateChange=props["onFormStateChange"],
     ~unstyled=props["unstyled"]->Option.getOr(CardFieldOptions.defaultUnstyled),
+    /*
+     * A complete UI: the merchant renders nothing, so this form must show the customer what is
+     * wrong. Unchanged behaviour — the composable surface is the one that changed.
+     */
+    ~defaultErrorDisplay=CardFieldOptions.defaultErrorDisplayReadyMade,
   )
 
   React.useImperativeHandle0(ref, () => {

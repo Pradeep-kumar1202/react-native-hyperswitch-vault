@@ -7,7 +7,7 @@ import type {brandIconMode as CardIcons_brandIconMode} from './CardIcons.gen';
 
 export type labelBehavior = "none" | "static" | "floating";
 
-export type errorDisplay = "none" | "inline";
+export type errorDisplay = "none" | "colorOnly" | "inline";
 
 export type brandIconMode = CardIcons_brandIconMode;
 

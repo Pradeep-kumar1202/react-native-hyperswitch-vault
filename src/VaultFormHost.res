@@ -41,6 +41,11 @@ let useHost = (
   ~onFormStateChange: option<VaultPublicState.vaultFormState => unit>,
   /* Form-wide default for every field's `unstyled`. */
   ~unstyled: bool,
+  /*
+   * Form-wide default for every field's `errorDisplay`. The two callers disagree on purpose:
+   * `CardForm` passes the composable default, `HyperswitchVaultForm` the ready-made one.
+   */
+  ~defaultErrorDisplay: CardFieldOptions.errorDisplay,
 ): host => {
   /*
    * The component's session backs `tokenize()` ONLY. A confirmation reads its session from
@@ -258,6 +263,7 @@ let useHost = (
       isProcessing: machinery.isSubmitting || disabled,
       onAnalytics: _ => (),
       unstyled,
+      defaultErrorDisplay,
     },
     machinery,
     focusField: controller.focusField,

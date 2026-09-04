@@ -61,6 +61,12 @@ let make = React.forwardRef((
     ~cardholderNameMode=props["cardholderName"]->Option.getOr(#collect),
     ~onFormStateChange=props["onFormStateChange"],
     ~unstyled=props["unstyled"]->Option.getOr(CardFieldOptions.defaultUnstyled),
+    /*
+     * The merchant placed these fields and draws their own chrome, so the library emits the error
+     * on `onStateChange` and renders none itself. A field can still opt in with
+     * `errorDisplay="inline"`.
+     */
+    ~defaultErrorDisplay=CardFieldOptions.defaultErrorDisplayComposable,
   )
 
   React.useImperativeHandle0(ref, () => {
