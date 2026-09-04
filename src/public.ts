@@ -339,6 +339,30 @@ export const HyperswitchVaultSavedCardForm =
   >;
 
 /*
+ * ── The imperative spelling of <CardForm> ────────────────────────────────────
+ *
+ * A HANDLE, not a store. The card state stays inside the mounted component — which is what keeps
+ * it out of this object — so the fields must still be rendered inside `form.Form`, and `tokenize()`
+ * before that resolves to the library's own `not_ready` result rather than throwing.
+ */
+export type CardFormInstance = {
+  /** `<CardForm>` bound to the config this instance was built with. Props here override those. */
+  readonly Form: React.ComponentType<Partial<CardFormProps> & { children: React.ReactNode }>;
+  /** The only route to a token. `not_ready` while nothing is mounted. */
+  tokenize(): Promise<VaultTokenizeResult>;
+  reset(): void;
+  focus(field: VaultField): void;
+  /** The last card-free snapshot, or `null` before the form has mounted. */
+  getState(): VaultFormState | null;
+  /** Fires on every later snapshot; returns an unsubscribe. */
+  subscribe(listener: (state: VaultFormState) => void): () => void;
+};
+
+export declare const createCardForm: (
+  config?: Partial<Omit<CardFormProps, 'children'>>
+) => CardFormInstance;
+
+/*
  * ── Canonical field names (ADR-0002 §1) ──────────────────────────────────────
  *
  * Aliases of the bindings above, not fresh casts of the raw imports, so the declared type is

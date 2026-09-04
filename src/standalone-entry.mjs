@@ -22,6 +22,7 @@ import { make as CardExpiryWidgetImpl } from './CardExpiryWidget.bs.js';
 import { make as CardCVCWidgetImpl } from './CardCVCWidget.bs.js';
 import { make as CardholderNameWidgetImpl } from './CardholderNameWidget.bs.js';
 import { make as HyperswitchVaultSavedCardFormImpl } from './HyperswitchVaultSavedCardForm.bs.js';
+import { createCardForm as createCardFormImpl } from './createCardForm.mjs';
 
 /* Existing published names — unchanged, not deprecated. */
 export const HyperswitchVaultForm = HyperswitchVaultFormImpl;
@@ -42,6 +43,12 @@ export const CardholderNameField = CardholderNameWidgetImpl;
  * takes no children and renders its own field, so there is nothing to compose it with.
  */
 export const HyperswitchVaultSavedCardForm = HyperswitchVaultSavedCardFormImpl;
+
+/*
+ * The imperative spelling of <CardForm>, for callers who want to hold the form in a variable and
+ * drive it with method calls. See createCardForm.mjs for what it is and is not.
+ */
+export const createCardForm = createCardFormImpl;
 
 /* Convenience namespace (ADR-0002 §2). */
 export const HyperswitchVault = {
